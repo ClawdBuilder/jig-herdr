@@ -1,0 +1,272 @@
+{
+    "id": "root",
+    "type": "row",
+    "titlebar": "none",
+    "traffic_lights": [12, 16],
+    "theme": "jig-lime",
+    "background": "canvas",
+    "terminal_padding": [14, 12],
+    "divider": {
+        "width": 1,
+        "color": "border"
+    },
+    "preview": "layouts/jig.svg",
+    "children": [
+        {
+            "id": "sidebar",
+            "type": "column",
+            "size": {
+                "px": 280
+            },
+            "min": 44,
+            "max": 480,
+            "background": "chrome",
+            "resizable": false,
+            "children": [
+                {
+                    "id": "brand",
+                    "type": "block",
+                    "size": {
+                        "px": 46
+                    },
+                    "window_drag": true,
+                    "content": {
+                        "mod": "workspace-chrome"
+                    }
+                },
+                {
+                    "id": "sidebar-lists",
+                    "type": "column",
+                    "children": [
+                        {
+                            "id": "spaces",
+                            "type": "block",
+                            "size": {
+                                "weight": 1
+                            },
+                            "min": 90,
+                            "content": {
+                                "mod": "spaces"
+                            }
+                        },
+                        {
+                            "id": "agents",
+                            "type": "block",
+                            "size": {
+                                "weight": 1
+                            },
+                            "min": 90,
+                            "content": {
+                                "mod": "agents"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "id": "jig-theme",
+                    "type": "block",
+                    "size": {
+                        "px": 0
+                    },
+                    "content": {
+                        "mod": "jig-theme-sync"
+                    }
+                },
+                {
+                    "id": "sidebar-footer",
+                    "type": "block",
+                    "size": {
+                        "px": 69
+                    },
+                    "content": {
+                        "mod": "workspace-chrome",
+                        "props": {
+                            "footer": true
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "id": "work",
+            "type": "column",
+            "resizable": false,
+            "children": [
+                {
+                    "id": "tabs",
+                    "type": "block",
+                    "size": {
+                        "px": 42
+                    },
+                    "window_drag": true,
+                    "content": {
+                        "mod": "jig-tabs"
+                    }
+                },
+                {
+                    "id": "work-body",
+                    "type": "row",
+                    "padding": 8,
+                    "gap": 8,
+                    "children": [
+                        {
+                            "id": "main",
+                            "type": "block",
+                            "content": {
+                                "tab": "active",
+                                "pane": {
+                                    "gap": 8,
+                                    "radius": 10,
+                                    "background": "background",
+                                    "lone": true,
+                                    "border": {
+                                        "width": 1,
+                                        "color": "border"
+                                    },
+                                    "focus": {
+                                        "width": 1,
+                                        "color": "accent"
+                                    },
+                                    "header": {
+                                        "content": {
+                                            "mod": "pane"
+                                        },
+                                        "height": 30,
+                                        "position": "top",
+                                        "reveal": "always"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "id": "panel",
+                            "type": "row",
+                            "size": {
+                                "px": 420
+                            },
+                            "min": 300,
+                            "max": 900,
+                            "children": [
+                                {
+                                    "id": "panel-body",
+                                    "type": "stack",
+                                    "active": "jig-work",
+                                    "children": [
+                                        {
+                                            "id": "jig-work",
+                                            "type": "block",
+                                            "title": "Jig \u00b7 Work",
+                                            "content": {
+                                                "mod": "jig-work",
+                                                "props": {
+                                                    "activity": {
+                                                        "icon": "mods/jig-activity/icons/jig.svg",
+                                                        "divider": true
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "id": "changes",
+                                            "type": "block",
+                                            "title": "Changes",
+                                            "content": {
+                                                "mod": "repo-changes",
+                                                "props": {
+                                                    "activity": {
+                                                        "icon": "mods/workspace-chrome/git-compare.svg"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "id": "history",
+                                            "type": "block",
+                                            "title": "History",
+                                            "content": {
+                                                "mod": "triage-history",
+                                                "props": {
+                                                    "activity": {
+                                                        "icon": "mods/workspace-chrome/clock.svg"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "id": "pr",
+                                            "type": "block",
+                                            "title": "PR & CI",
+                                            "content": {
+                                                "mod": "triage-pr",
+                                                "props": {
+                                                    "activity": {
+                                                        "icon": "mods/jig-activity/icons/pr.svg"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "id": "worktrees",
+                                            "type": "block",
+                                            "title": "Worktrees",
+                                            "content": {
+                                                "mod": "triage-worktrees",
+                                                "props": {
+                                                    "activity": {
+                                                        "icon": "mods/jig-activity/icons/worktree.svg"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "id": "files",
+                                            "type": "block",
+                                            "title": "Files",
+                                            "content": {
+                                                "mod": "files",
+                                                "props": {
+                                                    "activity": {
+                                                        "icon": "mods/workspace-chrome/files.svg"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "id": "settings",
+                                            "type": "block",
+                                            "title": "Settings",
+                                            "content": {
+                                                "mod": "triage-launch",
+                                                "props": {
+                                                    "settings": true,
+                                                    "activity": {
+                                                        "icon": "mods/workspace-chrome/settings.svg",
+                                                        "end": true
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    ]
+                                },
+                                {
+                                    "id": "activity",
+                                    "type": "block",
+                                    "size": {
+                                        "px": 40
+                                    },
+                                    "resizable": false,
+                                    "content": {
+                                        "mod": "jig-activity",
+                                        "props": {
+                                            "stack": "panel-body"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
