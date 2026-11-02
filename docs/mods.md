@@ -36,6 +36,27 @@ when several run. Then four sections:
 - **Sets** `shared("file-view.tabs")`, the map of `<machine>|<path>` to the tab that shows it, so a second click selects it.
 - **Props:** none. Settings in `config.json`: `{ machine, stateDir, prOwners }`.
 
+## jig-context: the Context panel
+
+What fills the context of the Pi session in focus, like a coding agent's context view, from the same status files
+([how it is counted](../../plugins/jig-session/docs/context.md)). The session is chosen as in Work: the focused terminal's,
+else the one updated last.
+
+- **The bar:** `62% used · 124k / 200k`, one bar split by share of the window, and a legend with a coloured square, the
+  tokens and the percentage of each part: Messages, Tools, System prompt, Skills, Context files, Compaction buffer, Free
+  space. Counted parts carry `≈` (characters / 4).
+- **The lists,** folded until clicked, remembered in the mod's `localStorage`: `TOOLS N of M on` and `SKILLS N`, each row
+  with its size and a switch; `CONTEXT FILES N` with each file's size, read only. A skill Pi never lists says `command only`.
+- **Switches and Reload** write one request file next to the session's status file
+  ([the contract](../../plugins/jig-session/README.md#requests)), with one `sh` on the machine:
+  `printf %s "$2" > "$1.tmp" && mv "$1.tmp" "$1"`, the path and the JSON as arguments. A request carries every switch not
+  answered yet. The answer (`lastRequest`) shows under the legend; a switch is drawn dimmed until it comes.
+- **What it never does:** approve a call, change jig-core's rules, or write anything else. A tool switched on is declared to
+  the model; jig-core still decides each call.
+- **What it runs:** the Work panel's script every 2 seconds while the panel is on screen, on the Work panel's `machine`,
+  reading its `stateDir` (`mods/jig-work/config.json`).
+- **Props:** none. **Files:** `main.js`, `lib.js` (a copy of Work's session finding, the bar, the request).
+
 ## jig-tabs: the tab bar
 
 Herdr's shipped `tabs` mod (Apache-2.0; the file says so at its top), with the Files and Changes buttons replaced by two:
@@ -200,7 +221,7 @@ draw; the mod holds no list of panels.
 - **A badge** on a button comes from `shared("badge.<mod>")`, as `{ count, tone }` with `tone` a theme colour name.
 - **A missing mod** (no `mods/<name>/mod.json`, looked for every 30 seconds) has no button.
 
-The Jig icon (a carpenter's set square: a jig is a guide) and the icons of `PR & CI` and `Worktrees` are drawn in
+The Jig icon (a carpenter's set square: a jig is a guide), the Context gauge and the icons of `PR & CI` and `Worktrees` are drawn in
 `mods/jig-activity/icons/`; the others are Herdr's own, from `mods/workspace-chrome/`.
 
 ## jig-theme-sync: the palette follower
@@ -230,7 +251,8 @@ status bar: `jig-theme-sync` sits in a 0 px block at the bottom of the sidebar, 
 
 | Panel (stack child) | Mod | Icon |
 |---|---|---|
-| `jig-work` (open first, a line under its button) | `jig-work` | `jig.svg`, ours |
+| `jig-work` (open first) | `jig-work` | `jig.svg`, ours |
+| `jig-context` (a line under its button closes the Jig group) | `jig-context` | `context.svg`, a gauge, ours |
 | `changes` | `repo-changes` | `git-compare.svg`, Herdr's |
 | `history` | `repo-history` | `clock.svg`, Herdr's |
 | `pr` | `repo-prs` | `pr.svg`, ours |

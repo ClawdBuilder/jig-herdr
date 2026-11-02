@@ -3,7 +3,8 @@
 A black window with lime highlights for working with coding agents on several git repositories at once. Herdr's spaces and
 agents lists stand on the left, terminals are cards in the middle, and a side panel on the right shows, one at a time and
 switched by a narrow icon bar: the Work panel of the Pi session in focus (its ticket, workflow stages, pull requests, the
-files it changed and its recent tool calls), then the changes, commit history, pull requests and checks, worktrees and files
+files it changed and its recent tool calls), the Context panel of that session (what fills its context, and a switch for
+each tool and skill), then the changes, commit history, pull requests and checks, worktrees and files
 of every repository under the space's folder. There is no status bar: the agents list on the left shows their states. The
 window follows, unseen, the colour palette the Jig plugins give Pi.
 
@@ -25,8 +26,8 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
 - **Side panel, 420 px (300 to 900),** a row of a stack and a bar. The stack shows one panel: Jig · Work, Changes, History,
   PR & CI, Worktrees or Files. Work is the one shown first.
 - **Icon bar, 40 px,** background `chrome`, a 1 px `border` on its left. One 18 px icon for each panel, 40 px square, with a
-  2 px `accent` bar on the left of the active one and the `foreground` colour; the others are `dim`. The Jig icon is first,
-  with a 1 px `border` line under it. A round badge (15 px, `blocked` or `accent` colour, the count in the window's background colour, `99+` at most)
+  2 px `accent` bar on the left of the active one and the `foreground` colour; the others are `dim`. The Jig icon and the
+  Context gauge are first, with a 1 px `border` line under them. A round badge (15 px, `blocked` or `accent` colour, the count in the window's background colour, `99+` at most)
   sits at the top right of an icon that has a count.
 - **Work panel.** On `chrome`. A header: `π` in `accent`, the folder's name, `·`, the model in `muted`, the thinking level,
   and at the right a 7 px dot and `working` (`working`) or `idle` (`idle`, `dim`); a second line in `dim` with `context N% of
@@ -36,6 +37,12 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
   `#N`, the title, `open`/`draft`/`merged`, the review state, `✗N` in `ansi1`, `●N` in `working`, `✓N` in `ansi2`; failing
   check names below in `ansi1`), `OUTPUTS` (`A` in `ansi2` or `M` in `blocked`, the name, the folder dimmed, a diff button,
   the time) and `RECENT` (time, tool and action, the decision, the outcome coloured). Rows are 22 to 26 px.
+- **Context panel.** On `chrome`. The same header as Work with a `Reload` button at the right (outlined, 22 px). Then `62%
+  used · 124k / 200k` (15 px semibold), a 10 px bar split by share of the window, and a legend of 22 px rows: a 10 px square,
+  the part, the tokens (`≈` before counted ones) in `muted`, the percentage in `dim`. Colours: Messages `accent`, Tools
+  `ansi6`, System prompt `foreground`, Skills `ansi5`, Context files `ansi3`, Compaction buffer `dim`, Free space `raised`.
+  Under it the last answer (`✓` in `done`, `✗` in `blocked`), then folded sections `▸ TOOLS N of M on`, `▸ SKILLS N` and `▸
+  CONTEXT FILES N`: 24 px rows with the name, the size and a 28×16 switch (`accent` when on, a 10 px knob).
 - **Changes panel.** A 42 px header with the folder's name, `N repos · W worktrees · M changed` and a `Refresh` link; a
   filter box; then a row for each repository with changes (name, the folders above it dimmed, a branch chip with an icon, `↑`
   ahead in `foreground`, `↓` behind in `blocked`, a count in a small outlined box), and under it its linked worktrees as
@@ -59,6 +66,9 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
   the list, else the one updated last. A click on the ticket key or a pull request opens the browser; on an output, a file
   tab (`file-view`, selected again if open); on its diff button, the `Review` tab. Pull requests are read with `gh` at most
   every 5 minutes per ticket; `Refresh` reads them now. Nothing in the panel approves or changes anything.
+- **Context.** Read with Work's script every 2 seconds while shown. A switch or `Reload` writes the session's request file
+  through a temporary file and a rename, carrying every switch not answered yet, and shows dimmed until the session's
+  answer comes. A switch applies from the session's next turn; Reload waits until the agent is idle.
 - **Panel and Jig.** `Panel` shows or hides the side panel on its last section; `Jig` shows the Work section, and hides the
   panel when it already shows it. The panel's state is remembered per space.
 - **Changes.** The repositories under the space's folder (or the one repository, if the folder is inside one) are read by one
@@ -107,7 +117,8 @@ Each child of `panel-body` is a block with a `title` and a mod, and its `content
 
 | id | title | mod | icon |
 |---|---|---|---|
-| `jig-work` | Jig · Work | `jig-work` | `mods/jig-activity/icons/jig.svg`, `divider: true` |
+| `jig-work` | Jig · Work | `jig-work` | `mods/jig-activity/icons/jig.svg` |
+| `jig-context` | Jig · Context | `jig-context` | `mods/jig-activity/icons/context.svg` (a gauge), `divider: true` |
 | `changes` | Changes | `repo-changes` | `mods/workspace-chrome/git-compare.svg` |
 | `history` | History | `repo-history` | `mods/workspace-chrome/clock.svg` |
 | `pr` | PR & CI | `repo-prs` | `mods/jig-activity/icons/pr.svg` |
@@ -120,6 +131,10 @@ The mods, all in `mods/`, each with `mod.json` `{ "place": "none", "title": "...
   { on })` for the status files, `exec("sh", ...)` for git on the outputs, `exec("gh", ...)` for pull requests, `exec` of the
   browser opener here, `focused()`, `spaces()`, `panes()`, `layout()`, `run("tab.new" | "tab.select")`, `setShared` of
   `file-view.tabs` and `repo-review.open`, `notify`. Files: `main.js`, `lib.js` (the scripts, the parsing, which session).
+- **`jig-context`** (props: none; reads `mods/jig-work/config.json` for `machine` and `stateDir`). The same `exec("sh",
+  ["-c", SCRIPT, "sh", stateDir], { on })`, and for a switch or Reload one `exec("sh", ["-c", 'printf %s "$2" > "$1.tmp" &&
+  mv "$1.tmp" "$1"', "sh", requestFile, json], { on })`; `focused()`, `spaces()`, `layout()`, `localStorage` for the open
+  lists. Files: `main.js`, `lib.js` (a copy of Work's session finding, the bar, the request).
 - **`jig-tabs`** (props `{ panel, stack, jig }`). Herdr's `tabs` mod (Apache-2.0) with the two buttons; `run("layout.select" |
   "layout.show" | "layout.hide")`; icons `mods/jig-tabs/jig.svg`, `mods/workspace-chrome/panel-right.svg`, and Herdr's
   window buttons from `mods/tabs/`.
@@ -183,7 +198,8 @@ Work panel needs Jig's Pi plugin `jig-session` loaded in Pi: it writes the statu
   the way showing it) before reading.
 - **A block whose mod is missing** shows `<mod> did not load` and adds an error to `herdr-app status`; the rest still works.
   `jig-activity` leaves out that panel's button.
-- **Mods cannot import each other,** so `lib.js` of `repo-review` is a cut-down copy of `repo-changes`'s, and every panel
+- **Mods cannot import each other,** so `lib.js` of `repo-review` is a cut-down copy of `repo-changes`'s, `jig-context` copies
+  `jig-work`'s session finding, and every panel
   has its own check that its block is on screen.
 - **Every git write is a click, with git's own safety.** No `--force`, `-D`, `reset`, `--amend`, `--no-verify` or push;
   file names go with `--literal-pathspecs`; a discard and a branch switch read the checkout again right before.

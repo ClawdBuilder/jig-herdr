@@ -160,7 +160,20 @@
                                                 "mod": "jig-work",
                                                 "props": {
                                                     "activity": {
-                                                        "icon": "mods/jig-activity/icons/jig.svg",
+                                                        "icon": "mods/jig-activity/icons/jig.svg"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "id": "jig-context",
+                                            "type": "block",
+                                            "title": "Jig \u00b7 Context",
+                                            "content": {
+                                                "mod": "jig-context",
+                                                "props": {
+                                                    "activity": {
+                                                        "icon": "mods/jig-activity/icons/context.svg",
                                                         "divider": true
                                                     }
                                                 }

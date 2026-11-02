@@ -17,8 +17,8 @@ type Node = {
 const MODS = readdirSync(path.join(HERDR, "mods")).sort();
 /** Mods that Herdr ships, which the layout uses as they are. */
 const HERDR_OWN = ["workspace-chrome", "spaces", "agents", "pane"];
-/** The panels of the side panel, top to bottom: the Jig one, then the repository ones. */
-const PANELS = ["jig-work", "changes", "history", "pr", "worktrees", "files"];
+/** The panels of the side panel, top to bottom: the Jig ones, then the repository ones. */
+const PANELS = ["jig-work", "jig-context", "changes", "history", "pr", "worktrees", "files"];
 
 function walk(dir: string): string[] {
     return readdirSync(dir).flatMap((name) => {
@@ -29,10 +29,11 @@ function walk(dir: string): string[] {
 const nodes = (node: Node): Node[] => [node, ...(node.children ?? []).flatMap(nodes)];
 const layout = JSON.parse(readFileSync(path.join(HERDR, "layouts/jig.json"), "utf8")) as Node;
 
-test("the mods are the eleven this folder ships", () => {
+test("the mods are the twelve this folder ships", () => {
     assert.deepEqual(MODS, [
         "file-view",
         "jig-activity",
+        "jig-context",
         "jig-files",
         "jig-tabs",
         "jig-theme-sync",
@@ -75,6 +76,7 @@ test("the layout's side panel gives each child an icon that exists, and ids are 
         stack?.children?.map((c) => [c.id, c.content?.mod]),
         [
             ["jig-work", "jig-work"],
+            ["jig-context", "jig-context"],
             ["changes", "repo-changes"],
             ["history", "repo-history"],
             ["pr", "repo-prs"],
@@ -86,11 +88,14 @@ test("the layout's side panel gives each child an icon that exists, and ids are 
         stack?.children?.map((c) => c.id),
         PANELS,
     );
-    // The Jig section sits at the top, with a divider under its button, and shows first.
-    const first = stack?.children?.[0] as Node & { content?: { props?: { activity?: { divider?: boolean } } } };
+    // The Jig group sits at the top, Work then Context, with a divider under the group; Work shows first.
+    type Child = Node & { content?: { props?: { activity?: { divider?: boolean } } } };
+    const [first, second] = (stack?.children ?? []) as Child[];
     assert.equal(first?.id, "jig-work");
     assert.equal(first?.content?.mod, "jig-work");
-    assert.equal(first?.content?.props?.activity?.divider, true);
+    assert.equal(first?.content?.props?.activity?.divider, undefined);
+    assert.equal(second?.id, "jig-context");
+    assert.equal(second?.content?.props?.activity?.divider, true);
     assert.equal(stack?.active, "jig-work");
     for (const child of stack?.children ?? []) {
         const icon = child.content?.props?.activity?.icon;
@@ -240,8 +245,12 @@ test("jig-tabs credits Herdr's tabs mod and its licence, and has the Panel and J
     assert.ok(existsSync(path.join(HERDR, "mods/jig-tabs/jig.svg")));
 });
 
-test("the Jig icon is one monochrome glyph drawn in the text colour", () => {
-    for (const file of ["mods/jig-tabs/jig.svg", "mods/jig-activity/icons/jig.svg"]) {
+test("the Jig icons are monochrome glyphs drawn in the text colour", () => {
+    for (const file of [
+        "mods/jig-tabs/jig.svg",
+        "mods/jig-activity/icons/jig.svg",
+        "mods/jig-activity/icons/context.svg",
+    ]) {
         const text = readFileSync(path.join(HERDR, file), "utf8");
         assert.match(text, /stroke="currentColor"/);
         assert.doesNotMatch(text, /#[0-9a-fA-F]{3,8}/, `${file} has a colour of its own`);
