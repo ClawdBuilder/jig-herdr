@@ -6,7 +6,7 @@
 // click selects the tab instead of opening another, and so that this copy knows which tab is its own.
 
 import { View, div } from "gpui-kit";
-import { v_flex, h_flex, Editor, EditorState } from "gpui-base";
+import { v_flex, h_flex, Editor, EditorState, TextView } from "gpui-base";
 import { spaces, panes, readTextFile, theme, settings, shared, props as modProps } from "herdr";
 
 // Same extension mapping and limits as the shipped Files preview.
@@ -24,6 +24,8 @@ const LANG = {
 };
 const MAX = 400000,
     EVERY = 5000;
+// Markdown is shown rendered first; the header's Source button shows the text.
+const MARKDOWN = new Set(["md", "markdown", "mdx"]);
 
 export default class FileView extends View {
     init(_props, cx) {
@@ -39,6 +41,8 @@ export default class FileView extends View {
         this.last = 0;
         this.wasShown = false;
         this.seq = 0;
+        this.markdown = MARKDOWN.has((this.path.split(".").pop() ?? "").toLowerCase());
+        this.preview = this.markdown;
         this.load(cx);
         cx.timer.every(1000, (cx) => this.tick(cx));
     }
@@ -103,6 +107,7 @@ export default class FileView extends View {
                 this.code?.release();
                 this.code = state;
                 this.text = text;
+                this.shownText = shownText;
                 this.fileError = null;
                 this.lines = text === "" ? 0 : text.split("\n").length - (text.endsWith("\n") ? 1 : 0);
             } catch {
@@ -172,6 +177,14 @@ export default class FileView extends View {
                                 .child(`${this.lines.toLocaleString("en-US")} line${this.lines === 1 ? "" : "s"}`),
                         ),
                     )
+                    .when(this.markdown && Boolean(this.code), (el) =>
+                        el.child(
+                            this.button(t, "fv-mode", this.preview ? "Source" : "Preview", (_e, cx) => {
+                                this.preview = !this.preview;
+                                cx.notify();
+                            }),
+                        ),
+                    )
                     .child(
                         this.button(t, "fv-copy", this.copied ? "Copied" : "Copy path", (_e, cx) => {
                             cx.write_to_clipboard(this.path);
@@ -191,12 +204,21 @@ export default class FileView extends View {
                     ),
             )
             .child(
-                this.code
-                    ? Editor.new(this.code).flex_1().min_h(0)
-                    : div()
-                          .p(12)
-                          .text_color(t.dim)
-                          .child(this.fileError || (this.path ? "Loading file…" : "No file")),
+                this.code && this.preview
+                    ? div()
+                          .id("fv-md-scroll")
+                          .flex_1()
+                          .min_h(0)
+                          .overflow_y_scroll()
+                          .px(24)
+                          .py(16)
+                          .child(TextView.markdown("fv-md", this.shownText).w_full().selectable())
+                    : this.code
+                      ? Editor.new(this.code).flex_1().min_h(0)
+                      : div()
+                            .p(12)
+                            .text_color(t.dim)
+                            .child(this.fileError || (this.path ? "Loading file…" : "No file")),
             );
     }
 }

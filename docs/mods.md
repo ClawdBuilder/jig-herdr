@@ -75,6 +75,9 @@ A read-only view of one file with syntax colours, a line count, `Copy path` and 
 `{ on, path }`. It reads the file with `readTextFile` (`on` for another machine) when the tab comes into view and every 5
 seconds while shown; a binary or missing file says so.
 
+A Markdown file (`.md`, `.markdown`, `.mdx`) opens rendered: headings, lists, tables, code blocks and links. `Source` in
+the header shows its text with syntax colours, and `Preview` goes back.
+
 ## repo-changes: the Changes panel
 
 Every git checkout under the space's folder, changed ones first, then a `Clean (N)` group; a filter box matches checkout
