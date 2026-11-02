@@ -20,15 +20,18 @@ when several run. Then four sections:
 - **Pull requests:** the ones the workflow observed; with none, what `gh search prs <KEY>` finds in the `prOwners` of
   `config.json`, else among the pull requests that involve you (never all of GitHub). For up to four, `gh pr view`
   adds the review state and the checks. Failing ones first, with the names of their failing checks. A click opens it.
-- **Outputs:** the files the session created (`A`) or changed (`M`), newest first. A click opens a `file-view` tab, or selects
-  the one already open. A file with changes in a git repository has a diff button that opens it in the `Review` tab.
+- **Outputs:** the files the session created (`A`) or changed (`M`) outside any git repository, such as ticket notes, plans
+  and reports, newest first (`No ticket files yet` when none). A click opens a `file-view` tab, or selects the one already
+  open. Files inside repositories are not listed: under the list a dim line, `N files changed in repositories → Changes`,
+  shows the side panel on the Changes section. The status file's `repo` field says which is which; a session of an older
+  `jig-session` has none, so all its outputs are listed, with the diff button on those that have changes in a repository.
 - **Recent:** the last 15 tool calls: time, tool and action, jig-core's decision (`allowed`, `asked · allowed`, `denied`) and
   the outcome (`ok`, `error`, `blocked`, `running`).
 
 - **Which session:** the one whose terminal is focused (`focused().terminal`, `<machine>/t7` on another machine), or the agent
   shown; else the one picked; else the one updated last. A Pi whose process ended is never shown.
 - **What it runs:** on the machine (config `machine`, else the shown space's machine), one `sh` script every 2 seconds while the
-  panel is on screen, reading `<state folder>/sessions/*.json` and checking each `pid` with `kill -0`. For outputs, one
+  panel is on screen, reading `<state folder>/sessions/*.json` and checking each `pid` with `kill -0`. For listed outputs of an older status file, one
   `git rev-parse` and `git status` script when the list changes and every 30 seconds. For pull requests, `gh`, cached 5
   minutes per ticket in the mod's `localStorage`; `Refresh` asks again.
 - **Opens:** links with this computer's browser (`explorer.exe`, `open` or `xdg-open`); files with `tab.new` and `file-view`;

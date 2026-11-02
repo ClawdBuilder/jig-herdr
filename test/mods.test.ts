@@ -246,6 +246,8 @@ type Work = {
     prRows(prs: unknown, searched: unknown, details: unknown): any[];
     parseRepoInfo(stdout: string): Record<string, { repo: string | null; status: string }>;
     reviewTarget(file: string, info: unknown): { repo: string; name: string; file: string } | null;
+    splitOutputs(outputs: unknown): { files: { path: string }[]; inRepos: number };
+    reposLine(count: number): string;
     decisionText(r: unknown): string;
     isShown(root: unknown, mod: string): boolean;
     folderName(cwd: string, home: string | null): string;
@@ -414,6 +416,33 @@ test("jig-work finds which outputs are in a repository with changes, for the Rev
     } finally {
         rmSync(root, { recursive: true, force: true });
     }
+});
+
+test("jig-work lists only outputs outside repositories, and counts the rest for the Changes line", async () => {
+    const lib = await load<Work>("mods/jig-work/lib.js");
+    const at = "2026-01-02T10:00:00.000Z";
+    const out = (p: string, repo?: string | null) => ({
+        path: p,
+        action: "edited",
+        at,
+        ...(repo === undefined ? {} : { repo }),
+    });
+    const { files, inRepos } = lib.splitOutputs([
+        out("/t/PROJ-1/plan.md", null),
+        out("/r/src/a.ts", "/r"),
+        out("/r/src/b.ts", "/r"),
+        out("/old/session.md"), // an older status file: no repo field, still listed
+        { action: "edited" },
+    ]);
+    assert.deepEqual(
+        files.map((f) => f.path),
+        ["/t/PROJ-1/plan.md", "/old/session.md"],
+    );
+    assert.equal(inRepos, 2);
+    assert.deepEqual(lib.splitOutputs(undefined), { files: [], inRepos: 0 });
+    assert.equal(lib.reposLine(0), "");
+    assert.equal(lib.reposLine(1), "1 file changed in a repository → Changes");
+    assert.equal(lib.reposLine(12), "12 files changed in repositories → Changes");
 });
 
 test("jig-work reads its config, words decisions, and knows when it is on screen", async () => {

@@ -22,7 +22,7 @@ bar at its right switches to the other panels. There is no status bar.*
 | Where | What it shows |
 |---|---|
 | Tab bar | Tabs, `+`, then `Panel` (shows or hides the side panel) and `Jig` (shows it on the Work section) |
-| Side panel, `Jig · Work` | The focused Pi session: ticket, workflow stages, pull requests, outputs, recent tool calls |
+| Side panel, `Jig · Work` | The focused Pi session: ticket, workflow stages, pull requests, outputs (ticket files outside repositories), recent tool calls |
 | Side panel, `Jig · Context` | What fills that session's context, its tools and skills with a switch each, and Reload |
 | Side panel, `Changes` | Every checkout under the folder, worktrees nested under their repository; stage, commit, switch branch |
 | Side panel, `History` | A repository picker and the commit graph of the chosen one, with each commit's files |
@@ -34,8 +34,8 @@ bar at its right switches to the other panels. There is no status bar.*
 | A file tab | One file, read-only, opened from the Work panel's outputs or the Files panel |
 | Nowhere, on purpose | The palette follower: a block of 0 px; the window takes the colours of Pi's palette, black when dark |
 
-In **Work**, the ticket key and each pull request open in the browser, an output opens in a file tab, and the diff button on
-an output with changes opens it in the `Review` tab. In **Context**, a bar and a legend split the context into messages,
+In **Work**, the ticket key and each pull request open in the browser, an output opens in a file tab, and a line under the outputs
+shows the Changes section for the files changed in repositories. In **Context**, a bar and a legend split the context into messages,
 tools, system prompt, skills, context files, the compaction buffer and free space; a switch turns a tool or a skill off for
 that session from its next turn, and `Reload` reloads Pi once it is idle. There is no status bar: Herdr's agents list on the left shows which
 agents wait. `Ctrl+Shift+R` shows or hides the side panel, remembered for each space.

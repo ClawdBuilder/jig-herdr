@@ -224,6 +224,26 @@ export function parseRepoInfo(stdout) {
     return info;
 }
 
+// The status file's outputs split for the Outputs list: `files` are the ones outside any git repository (`repo` null), and
+// those of an older status file that has no `repo` field at all, which keep showing as before; `inRepos` counts the ones in a
+// repository, which belong to the Changes panel.
+export function splitOutputs(outputs) {
+    const files = [];
+    let inRepos = 0;
+    for (const o of Array.isArray(outputs) ? outputs : []) {
+        if (typeof o?.path !== "string") continue;
+        if (typeof o.repo === "string" && o.repo !== "") inRepos += 1;
+        else files.push(o);
+    }
+    return { files, inRepos };
+}
+
+// The dim line under the list: "3 files changed in repositories → Changes", or "" when none.
+export function reposLine(count) {
+    if (!(count > 0)) return "";
+    return `${count} ${count === 1 ? "file" : "files"} changed in ${count === 1 ? "a repository" : "repositories"} → Changes`;
+}
+
 // A file's place in its repository, for the Review tab: { repo, name, file } or null when it is not in one.
 export function reviewTarget(file, info) {
     const repo = info?.repo;

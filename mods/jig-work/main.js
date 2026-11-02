@@ -1,6 +1,6 @@
 // The Jig Work panel: what the Pi session in focus is doing, from the status file the jig-session Pi plugin writes for each
 // session (its format: ../../../plugins/jig-session/README.md). Its ticket and the workflow's stages, the ticket's pull requests, the files the
-// session created or changed, and its recent tool calls with jig-core's decision on each.
+// session created or changed outside any git repository (the Changes panel has the rest), and its recent tool calls with jig-core's decision on each.
 //
 // While the panel is on screen it reads the status files every 2 seconds with one `sh` on the machine where Pi runs
 // (config.json's `machine`, else the shown space's machine). The session shown is the one whose terminal is focused, else the
@@ -40,9 +40,11 @@ import {
     parseSessions,
     pickSession,
     prRows,
+    reposLine,
     reviewTarget,
     searchArgs,
     short,
+    splitOutputs,
     splitPath,
     stageLine,
 } from "./lib.js";
@@ -175,9 +177,10 @@ export default class JigWork extends View {
         });
     }
 
-    // Which outputs are in a git repository with changes: one script for all of them, when the list changes and every 30 s.
+    // Which listed outputs are in a git repository with changes: one script for all of them, when the list changes and every 30 s.
+    // Only outputs of an older status file (no `repo` field) can be both listed and in a repository.
     loadRepos(cx, status) {
-        const files = (status.outputs ?? []).map((o) => o.path).filter((p) => typeof p === "string");
+        const files = splitOutputs(status.outputs).files.map((o) => o.path);
         const key = JSON.stringify([this.machine(), files]);
         if (this.repoLoading || files.length === 0) return;
         if (key === this.repoKey && Date.now() - this.repoAt < REPO_MS) return;
@@ -637,12 +640,19 @@ export default class JigWork extends View {
             );
     }
 
+    // The same two calls as the activity bar's Changes button: select the section, then show the side panel.
+    showChanges() {
+        run("layout.select", { stack: "panel-body", child: "changes" });
+        run("layout.show", { id: "panel" });
+    }
+
     outputs(t, st) {
-        const list = st.outputs ?? [];
+        const { files: list, inRepos } = splitOutputs(st.outputs);
+        const line = reposLine(inRepos);
         return v_flex()
             .child(this.heading(t, "OUTPUTS", list.length || null))
             .when(list.length === 0, (el) =>
-                el.child(div().px(14).text_size(12).text_color(t.dim).child("No files created or changed yet.")),
+                el.child(div().px(14).text_size(12).text_color(t.dim).child("No ticket files yet")),
             )
             .children(
                 list.map((o, i) => {
@@ -694,6 +704,23 @@ export default class JigWork extends View {
                         )
                         .child(div().flex_none().text_size(11).text_color(t.dim).child(clock(o.at)));
                 }),
+            )
+            .when(line !== "", (el) =>
+                el.child(
+                    div()
+                        .id("jw-out-repos")
+                        .h(26)
+                        .px(14)
+                        .flex()
+                        .items_center()
+                        .text_size(11.5)
+                        .text_color(t.dim)
+                        .cursor_pointer()
+                        .hover((s) => s.bg(t.hover).text_color(t.accent))
+                        .tooltip("Show the Changes panel")
+                        .on_click(() => this.showChanges())
+                        .child(line),
+                ),
             );
     }
 
