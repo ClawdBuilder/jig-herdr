@@ -68,7 +68,7 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
   every 5 minutes per ticket; `Refresh` reads them now. Nothing in the panel approves or changes anything.
 - **Context.** Read with Work's script every 2 seconds while shown. A switch or `Reload` writes the session's request file
   through a temporary file and a rename, carrying every switch not answered yet, and shows dimmed until the session's
-  answer comes. A switch applies from the session's next turn; Reload waits until the agent is idle.
+  answer comes. A tool switch applies from the model's next request and a skill switch from the next prompt; Reload waits until the agent is idle.
 - **Panel and Jig.** `Panel` shows or hides the side panel on its last section; `Jig` shows the Work section, and hides the
   panel when it already shows it. The panel's state is remembered per space.
 - **Changes.** The repositories under the space's folder (or the one repository, if the folder is inside one) are read by one
@@ -209,7 +209,7 @@ Work panel needs Jig's Pi plugin `jig-session` loaded in Pi: it writes the statu
 
 ## Done when
 
-- `herdr-app check mods/<name>` passes for each of the eleven mods, and `herdr-app status` shows no `errors` after
+- `herdr-app check mods/<name>` passes for each of the twelve mods, and `herdr-app status` shows no `errors` after
   `layout.switch {"name":"jig"}`.
 - The sidebar shows Herdr's spaces and agents lists, the terminals are cards, and the right panel shows the icon bar with the
   Changes icon active and a badge equal to the number of checkouts with changes.

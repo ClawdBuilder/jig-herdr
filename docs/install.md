@@ -23,7 +23,7 @@ restart.
 ## What it copies
 
 - **`layouts/`:** `jig.json` and `jig.svg`, the picture the settings screen shows.
-- **`mods/`:** `jig-work`, `jig-tabs`, `jig-activity`, `jig-theme-sync`, `jig-files`, `file-view`, `repo-changes`, `repo-review`,
+- **`mods/`:** `jig-work`, `jig-context`, `jig-tabs`, `jig-activity`, `jig-theme-sync`, `jig-files`, `file-view`, `repo-changes`, `repo-review`,
   `repo-history`, `repo-prs` and `repo-worktrees`.
 - **`themes/`:** one theme for each Jig palette.
 - **`keys.json`:** merged, not copied: only the section `layout:jig` is added or changed.
@@ -61,6 +61,6 @@ status`. `jig-activity` leaves out the button of such a panel, so the note is on
 
 ## Take it out
 
-Delete the files the script listed: `layouts/jig.json`, `layouts/jig.svg`, the eleven `mods/` folders, the six
+Delete the files the script listed: `layouts/jig.json`, `layouts/jig.svg`, the twelve `mods/` folders, the six
 `themes/jig-*.json`, the `layout:jig` section of `keys.json` and `.jig-herdr-install.json`. Your other layouts and mods are
 not affected.

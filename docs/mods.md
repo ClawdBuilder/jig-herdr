@@ -1,7 +1,8 @@
 # Mods
 
 What each mod in `herdr/mods/` shows, what it reads and runs, and the props it takes, then how the `jig` layout is put
-together. Back to the [Herdr app overview](../README.md).
+together. Back to the [Herdr app overview](../README.md); [How it works](how-it-works.md) explains a mod and the link to
+the agent's machine first.
 
 All of them are trusted code that runs inside the Herdr app, so this page says what each reaches. `jig-work` and `repo-prs`
 reach the network through `gh`, and a new branch in `repo-changes` runs `git fetch`, on the machine where the folders are.
