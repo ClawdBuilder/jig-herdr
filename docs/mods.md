@@ -3,9 +3,11 @@
 What each mod in `herdr/mods/` shows, what it reads and runs, and the props it takes, then how the `jig` layout is put
 together. Back to the [Herdr app overview](../README.md).
 
-All of them are trusted code that runs inside the Herdr app, so this page says what each reaches. Only `jig-work` and
-`repo-prs` reach the network, through `gh` on the machine where the folders are. One mod writes: `repo-worktrees`, and only
-its `Remove`. Each is a `main.js` with the helper files named below; the pure parts are in `lib.js` files, which the tests load.
+All of them are trusted code that runs inside the Herdr app, so this page says what each reaches. `jig-work` and `repo-prs`
+reach the network through `gh`, and a new branch in `repo-changes` runs `git fetch`, on the machine where the folders are.
+Three mods write with git: `repo-changes` and `repo-review` with [the git actions](#the-git-actions), and `repo-worktrees`
+with its `Remove`. Each is a `main.js` with the helper files named below; the pure parts are in `lib.js` files, which the
+tests load.
 
 ## jig-work: the Work panel
 
@@ -51,15 +53,70 @@ seconds while shown; a binary or missing file says so.
 
 ## repo-changes: the Changes panel
 
-Every git repository under the space's folder, changed ones first, then a `Clean` group; a filter box matches repository
-names and file paths. A click on a file opens it in a `Review` tab. A button on a row opens a terminal in that repository.
+Every git checkout under the space's folder, changed ones first, then a `Clean (N)` group; a filter box matches checkout
+names and file paths. A click on a file opens it in a `Review` tab. The branch chip, the file checkboxes and the buttons that
+appear on hover run [the git actions](#the-git-actions).
 
-- **Where it looks:** the space's folder on the space's machine. Inside a repository, only that one is listed. Otherwise
-  folders with a `.git` up to three levels down, so `worktrees/PROJ-123/orders-api` is found; `node_modules` is skipped.
-- **What it runs:** one `sh -c` script on that machine (`exec` with `on`), reading each repository's `git status` with no
-  locks and no fsmonitor, 8 at a time, at most 200 files each.
-- **When:** every 5 seconds while the panel is on screen, when you open it, and when an agent or terminal changes state.
-- **Sets** `shared("badge.repo-changes")`: the number of repositories with changes, shown on its button.
+- **Worktrees nest.** Checkouts are grouped by their git common folder: a main checkout shows its linked worktrees under it
+  as `↳ <folder>` rows, each with its own branch, ahead and behind, and files. A worktree whose main checkout is not listed
+  stands as a row of its own. A main checkout that is clean, with every worktree clean, folds into `Clean (N)`.
+- **Where it looks:** the space's folder on the space's machine. Inside a repository, only that checkout, and its linked
+  worktrees when it is the main one. Otherwise folders with a `.git` up to three levels down, so
+  `worktrees/PROJ-123/orders-api` is found, plus the linked worktrees of every main checkout found; `node_modules` is skipped.
+- **What it runs:** one `sh -c` script on that machine (`exec` with `on`), reading each checkout's `git status` with no
+  locks and no fsmonitor, 8 at a time, at most 200 files each, and `git worktree list` of each main checkout.
+- **When:** every 5 seconds while the panel is on screen, when you open it, when an agent or terminal changes state, and at
+  once after an action.
+- **Sets** `shared("badge.repo-changes")`: the number of checkouts (main or worktree) with changes, each counted once; and
+  `shared("repo-changes.done")` after a branch switch, so the panel says so and reads again.
+- **Files:** `main.js` (the panel), `picker.js` (the branch picker), `lib.js` (the script, the parsing, the grouping and the
+  git actions), `layout.js`, `config.json`.
+
+### The git actions
+
+Each action is a function in `lib.js` that takes `exec(cmd, args, { cwd })` and returns `{ ok, message }`; the panel passes
+Herdr's `exec` with the space's machine. A result shows under its checkout for 12 seconds, and the list is read again at once.
+None of them uses `--force`, `-D`, `reset`, `--discard-changes`, `--amend`, `--no-verify` or `push`. File names are passed with
+`--literal-pathspecs`, so a file called `*.ts` means that file only.
+
+| Action | Where | Git command |
+|---|---|---|
+| Switch branch | The branch chip opens a picker | `git switch <branch>` |
+| Switch to a branch only origin has | Picker, under `ON ORIGIN ONLY` | `git switch --track origin/<branch>` |
+| New branch | Picker, `New branch…` | `git fetch origin <base>`, then `git switch --no-track -c <name> origin/<base>` |
+| Stage a file | Its checkbox | `git add -- <file>` |
+| Unstage a file | Its ticked checkbox | `git restore --staged -- <file>`; before the first commit `git rm --cached -- <file>` |
+| Stage all, unstage all | `+` and `−` on the checkout's row | `git add -A`; `git restore --staged -- .` (or `git rm -r --cached -- .`) |
+| Discard a tracked file | `↺` on the file, then `Discard` | `git restore --worktree --staged -- <file>` |
+| Delete an untracked file | `↺` on the file, then `Delete file` | `git clean -f -- <file>` |
+| Commit | Message box under a checkout with staged files | `git commit -m <message>` |
+
+A checkbox is ticked when the file is staged (`X` of porcelain's `XY`), shows `–` when only part of it is, and is empty
+otherwise. `--no-track` keeps a new branch from pushing to its base by mistake; it gets its own upstream on its first push.
+
+**The picker** is a popup of the same mod (`openOverlay` with `props.picker`). It has a search box, the local branches with
+the current one ticked, a branch checked out in another worktree greyed `in use by <folder>` and not pickable, then origin's
+branches that have no local branch. A refusal or git's error shows in the popup; a switch closes it.
+
+**Refusals.** Each is checked right before the command, and a refused action runs no git write:
+
+- **A switch or a new branch** is refused while an agent is `working` or `blocked` in a pane whose folder is inside that
+  checkout (a worktree nested inside it is its own), and while the checkout has uncommitted changes, naming how many files.
+  It is also refused for a branch another worktree has, the current branch, and a branch neither here nor on origin.
+- **A new branch** is refused for a name `git check-ref-format --branch` rejects, or one that starts with `-` or `+`, holds
+  `@{` or is `HEAD`; for a branch that exists already; when the fetch fails; and when origin has no such base.
+- **A discard** reads the file's status again first. It is refused for a folder, a path that is not one changed file, and
+  a file that changed since the confirm (the confirm says `DELETED` for an untracked or newly added file). There is no
+  "discard all".
+- **A commit** is refused with an empty message or nothing staged. It commits staged files only, runs the hooks, and says
+  the short hash or git's first line of error.
+
+**Settings** in `config.json` next to the mod, yours to edit (the install script never replaces it):
+
+| Field | Default | Meaning |
+|---|---|---|
+| `newBranchPrefix` | `"feature/"` | What the new branch's name box starts with |
+| `baseBranch` | `null`: origin's HEAD branch, else `main` or `master` on origin, else `main` | The branch a new branch starts from |
 
 ## repo-review: the Review tab
 
@@ -69,6 +126,10 @@ tinted and marked at the edge. The `j`, `k` and arrow keys step through files. I
 
 It runs `git status` and `git diff HEAD` in the repository, and reads an untracked file to show it whole. Re-listing is
 every 5 seconds while the tab is shown. A second click on a file of the same repository retargets the open tab.
+
+The diff's header has `Stage` or `Unstage` and `Discard…` for the shown file, with the same commands, confirm and refusals as
+[the git actions](#the-git-actions). Its `lib.js` holds a copy of those three functions, since mods cannot import each other;
+a test runs both copies.
 
 ## repo-history: the History panel
 

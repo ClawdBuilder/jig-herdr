@@ -1,3 +1,5 @@
+<img src="../docs/assets/jig.svg" width="48" alt="Jig logo: a set-square">
+
 # The Herdr app: a layout and mods that work with Jig
 
 **Status: built.** Tested with temporary folders (the install script, the layout, the mods' parsing and their scripts on real
@@ -21,13 +23,13 @@ bar at its right switches to the other panels. There is no status bar.*
 |---|---|
 | Tab bar | Tabs, `+`, then `Panel` (shows or hides the side panel) and `Jig` (shows it on the Work section) |
 | Side panel, `Jig · Work` | The focused Pi session: ticket, workflow stages, pull requests, outputs, recent tool calls |
-| Side panel, `Changes` | All repositories under the space's folder, changed ones first, with a filter |
+| Side panel, `Changes` | Every checkout under the folder, worktrees nested under their repository; stage, commit, switch branch |
 | Side panel, `History` | A repository picker and the commit graph of the chosen one, with each commit's files |
 | Side panel, `PR & CI` | The pull request and checks of every repository on a feature branch, and all of yours |
 | Side panel, `Worktrees` | Every repository's linked worktrees, marked ready to remove or in progress |
 | Side panel, `Files` | A file tree of the folder; a click opens the file in a tab |
 | Icon bar | One button per section, the Jig section at the top above a line; counts on `Changes`, `PR & CI`, `Worktrees` |
-| A `Review` tab | One repository's changed files, and the diff of the chosen one, in strong red and green |
+| A `Review` tab | One repository's changed files and the chosen one's diff; stage, unstage or discard it |
 | A file tab | One file, read-only, opened from the Work panel's outputs or the Files panel |
 | Nowhere, on purpose | The palette follower: a block of 0 px; the window takes the colours of Pi's palette, black when dark |
 
@@ -56,7 +58,7 @@ copies files, never links them, adds the keys to `keys.json` and leaves everythi
 
 ## Configure
 
-Two files in the Herdr folder. Every field is optional, and later installs never replace them.
+Three files in the Herdr folder. Every field is optional, and later installs never replace them.
 
 | File and field | Default | Meaning |
 |---|---|---|
@@ -66,6 +68,8 @@ Two files in the Herdr folder. Every field is optional, and later installs never
 | `mods/jig-theme-sync/config.json` `machine` | `null`, this computer | The machine where Pi runs |
 | `mods/jig-theme-sync/config.json` `agentDir` | `$PI_CODING_AGENT_DIR`, else `~/.pi/agent` | Pi's agent folder there |
 | `mods/jig-theme-sync/config.json` `themeFolders` | `[]` | More folders to look for a palette in |
+| `mods/repo-changes/config.json` `newBranchPrefix` | `"feature/"` | What a new branch's name starts with |
+| `mods/repo-changes/config.json` `baseBranch` | origin's HEAD branch, else `main` | The branch a new branch starts from |
 
 ```json
 { "machine": "dev-box", "stateDir": "~/.local/state/jig", "prOwners": ["acme"] }
@@ -87,11 +91,11 @@ lists the props each mod reads.
 
 ## Rules
 
-- **Read only, with one exception.** The mods read status files and repositories and write nothing on the machine where Pi
-  runs. The exception is `Remove` on a ready row of `Worktrees`: after a second click it runs `git worktree remove` and
-  `git branch -d`, never with `--force` or `-D`, and checks again right before.
+- **Git writes only when you click.** `Changes` and `Review` stage, unstage, discard (after a confirm), commit and switch
+  branch; `Worktrees` removes a ready worktree. Never `--force`, `-D`, `reset`, `--amend`, `--no-verify` or a push, and no
+  branch change while an agent works there or files are uncommitted ([each command](docs/mods.md#the-git-actions)).
 - **The panels approve nothing.** Approvals happen in Pi, inside the waiting call.
-- **Git without writes.** The mods run `git status`, `log`, `show` and `diff` with options that write nothing under `.git`.
+- **Reads write nothing.** The panels read with `git status`, `log`, `show` and `diff` options that write nothing under `.git`.
 - **Copied, not linked.** The Windows app cannot follow a link made in WSL.
 - **Yours stays yours.** The script replaces a file only if it wrote that file and you did not change it, unless `--force`.
 - **Polled while shown.** Work reads the status files every 2 seconds, Changes the repositories every 5 and Worktrees every

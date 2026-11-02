@@ -226,6 +226,8 @@ test("the shipped config.json files name no machine, folder or palette of anyone
     assert.deepEqual(config, { machine: null, agentDir: null, themeFolders: [] });
     const work = JSON.parse(readFileSync(path.join(HERDR, "mods/jig-work/config.json"), "utf8")) as unknown;
     assert.deepEqual(work, { machine: null, stateDir: null, prOwners: [] });
+    const changes = JSON.parse(readFileSync(path.join(HERDR, "mods/repo-changes/config.json"), "utf8")) as unknown;
+    assert.deepEqual(changes, { newBranchPrefix: "feature/", baseBranch: null });
 });
 
 test("jig-tabs credits Herdr's tabs mod and its licence, and has the Panel and Jig buttons in place of Files and Changes", () => {

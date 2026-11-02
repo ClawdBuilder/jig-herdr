@@ -36,13 +36,15 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
   `#N`, the title, `open`/`draft`/`merged`, the review state, `✗N` in `ansi1`, `●N` in `working`, `✓N` in `ansi2`; failing
   check names below in `ansi1`), `OUTPUTS` (`A` in `ansi2` or `M` in `blocked`, the name, the folder dimmed, a diff button,
   the time) and `RECENT` (time, tool and action, the decision, the outcome coloured). Rows are 22 to 26 px.
-- **Changes panel.** A 42 px header with the folder's name, `N repos · M changed` and a `Refresh` link; a filter box; then
-  a row for each repository with changes (name, the folders above it dimmed, branch with an icon, `↑` ahead in
-  `foreground`, `↓` behind in `blocked`, a count in a small outlined box). Under it the files, each with a letter
-  (`M` in `blocked`, `A` and `??` in `ansi2`, `D` and `U` in `ansi1`, `R` in `ansi5`) and the path with its folders dimmed.
-  Last, a `Clean (N)` group, folded.
+- **Changes panel.** A 42 px header with the folder's name, `N repos · W worktrees · M changed` and a `Refresh` link; a
+  filter box; then a row for each repository with changes (name, the folders above it dimmed, a branch chip with an icon, `↑`
+  ahead in `foreground`, `↓` behind in `blocked`, a count in a small outlined box), and under it its linked worktrees as
+  `↳ <folder>` rows, indented 18 px, each the same way. Under each, the files: a 14 px checkbox (ticked on `accent` when
+  staged, `–` when partly), a letter (`M` in `blocked`, `A` and `??` in `ansi2`, `D` and `U` in `ansi1`, `R` in `ansi5`) and the
+  path with its folders dimmed; then, when some are staged, a `Commit message` box and a `Commit N` button. Last, a
+  `Clean (N)` group, folded.
 - **Review tab.** A 280 px list of the repository's changed files on the left, and on the right a 32 px header (path,
-  `+added`, `−removed`, `‹` `›`) over the diff: 20 px rows, a hunk header row on `surface` in `ansi6`, a 3 px bar at the left
+  `+added`, `−removed`, `Stage` or `Unstage`, `Discard…`, `‹` `›`) over the diff: 20 px rows, a hunk header row on `surface` in `ansi6`, a 3 px bar at the left
   edge of each changed line, added lines tinted with `ansi2` at 16 % and removed lines with `ansi1` at 22 %.
 - **Colours.** The theme `jig-lime`, from the palette: window `#0A0A0A`, bars `#000000`, text `#E4E8DD`, accent `#C4F36B`.
   Fonts and sizes are Herdr's.
@@ -62,8 +64,12 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
 - **Changes.** The repositories under the space's folder (or the one repository, if the folder is inside one) are read by one
   `sh` script on the space's machine: every 5 seconds while the panel is shown, when it is opened, and at once when any
   terminal changes status. A click on a repository's row folds it; the filter keeps repositories whose name matches (with
-  all their files) or whose files match. Hovering a row shows a terminal button that opens a new tab in that repository. A
-  click on a file opens or retargets the tab `Review · <repository>`.
+  all their files) or whose files match. Hovering a row shows `+` (stage all), `−` (unstage all) and a terminal button;
+  hovering a file shows `↺`, which asks inline before discarding (`DELETED` for a new file). A checkbox stages or unstages
+  its file; the message box commits the staged files. A click on the branch chip opens a 360×440 popup: a search box, local
+  branches (current ticked, one in another worktree greyed `in use by <folder>`), origin-only branches, and `New branch…`
+  (name box prefilled from `config.json`). A switch is refused while an agent works in the checkout or files are
+  uncommitted. A click on a file opens or retargets the tab `Review · <repository>`.
 - **History.** A picker of the repositories (inside one repository, no picker), then the commit graph: 28 px rows with lanes
   14 px apart, a dot per commit (a ring for the checked-out one), the author's initials, branch and tag pills, the pull
   request number, the conventional-commit type, the subject and the age. A click opens the message and files under the
@@ -81,7 +87,7 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
   tab is on screen; an unchanged diff keeps its scroll position.
 - **Theme follower.** Every 5 seconds it reads Pi's `theme` setting, makes a Herdr theme from that palette and switches to
   it. Nothing shows it: a problem comes as a notification. Dark palettes keep the black window.
-- **Badges.** `repo-changes` sets `shared("badge.repo-changes")` to the number of repositories with changes. The icon bar
+- **Badges.** `repo-changes` sets `shared("badge.repo-changes")` to the number of checkouts with changes. The icon bar
   shows a badge for `shared("badge.<mod>")` on the button of that mod.
 
 ## Built from
@@ -119,12 +125,17 @@ The mods, all in `mods/`, each with `mod.json` `{ "place": "none", "title": "...
   window buttons from `mods/tabs/`.
 - **`file-view`** (props `{ on, path }` from `tab.new`). `readTextFile(path, { on })`, `EditorState` and `Editor` from
   `gpui-base`, read-only.
-- **`repo-changes`** (props: none). Reads `spaces()`, `panes()`, `focused()`, `terminals()`, `layout()`; runs `exec("sh",
-  ["-c", SCRIPT, "sh", root], { on })` with the space's machine; `run("tab.new", ...)` for the Review tab and terminals;
-  `setShared` for the badge. `InputState` and `Input` from `gpui-base` for the filter. Icons: `mods/workspace-chrome/` `branch`,
-  `chevron-down`, `chevron-right`, `terminal`. Files: `main.js`, `lib.js` (the script and the parsing), `layout.js`.
+- **`repo-changes`** (props: none, or `{ picker }` as its own popup; settings in `config.json`: `{ newBranchPrefix,
+  baseBranch }`). Reads `spaces()`, `panes()`, `focused()`, `terminals()`, `layout()`; runs `exec("sh", ["-c", SCRIPT, "sh",
+  root], { on })` with the space's machine, and `exec("git", ..., { cwd, on })` for the actions; `openOverlay({ mod:
+  "repo-changes", kind: "popup", props: { picker } })` for the branch picker; `run("tab.new", ...)` for the Review tab and
+  terminals; `setShared` for the badge and `repo-changes.done`. `InputState` and `Input` for the filter, the commit messages
+  (made in the timer, never in `render`) and the picker. Icons: `mods/workspace-chrome/` `branch`, `check`, `chevron-down`,
+  `chevron-right`, `minus`, `plus`, `terminal`. Files: `main.js`, `picker.js`, `lib.js` (the script, the parsing, the
+  grouping and the git actions, each taking `exec` and returning `{ ok, message }`), `layout.js`, `config.json`.
 - **`repo-review`** (props `{ on, repo, name, file? }` from `tab.new`; read them with `props()`). `exec("git", ...)` and
-  `readTextFile` with `{ on }`; `v_virtual_list` and `Scrollbar` from `gpui-base`.
+  `readTextFile` with `{ on }`; `v_virtual_list` and `Scrollbar` from `gpui-base`. Its `lib.js` copies the stage, unstage
+  and discard functions of `repo-changes`.
 - **`repo-history`** (props: none). `exec("sh", ["-c", SCRIPT, "sh", root], { on })` for the repositories, `exec("git", ...,
   { cwd, on })` for `log`, `status` and `show`, `run("terminal.open", ...)` for a diff. `InputState` and `Input` from
   `gpui-base` for the filter and the picker. Files: `main.js`, `lib.js`.
@@ -174,7 +185,10 @@ Work panel needs Jig's Pi plugin `jig-session` loaded in Pi: it writes the statu
   `jig-activity` leaves out that panel's button.
 - **Mods cannot import each other,** so `lib.js` of `repo-review` is a cut-down copy of `repo-changes`'s, and every panel
   has its own check that its block is on screen.
-- **No sign-in.** The mods run `git`, `sh` and `gh` and read files; they never fetch. `gh` is signed in by you, or the Work
+- **Every git write is a click, with git's own safety.** No `--force`, `-D`, `reset`, `--amend`, `--no-verify` or push;
+  file names go with `--literal-pathspecs`; a discard and a branch switch read the checkout again right before.
+- **No sign-in.** The mods run `git`, `sh` and `gh` and read files; the one fetch is `git fetch origin <base>` for a new
+  branch. `gh` is signed in by you, or the Work
   panel says it is not.
 
 ## Done when
@@ -182,9 +196,12 @@ Work panel needs Jig's Pi plugin `jig-session` loaded in Pi: it writes the statu
 - `herdr-app check mods/<name>` passes for each of the eleven mods, and `herdr-app status` shows no `errors` after
   `layout.switch {"name":"jig"}`.
 - The sidebar shows Herdr's spaces and agents lists, the terminals are cards, and the right panel shows the icon bar with the
-  Changes icon active and a badge equal to the number of repositories with changes.
+  Changes icon active and a badge equal to the number of checkouts with changes.
 - With a space whose folder holds several git repositories, the Changes panel lists all of them, changed ones first, with
   branch and counts; editing a file in one shows it within 5 seconds.
+- A linked worktree shows as a `↳` row under its repository. Ticking a file's checkbox stages it within a second, the
+  commit box commits it and says the short hash, and the branch chip's popup switches branch; with a file changed, the
+  switch is refused and says how many files.
 - Clicking a changed file opens a `Review · <repository>` tab with the file's diff, red and lime tinted rows; clicking another
   file of the same repository changes that tab instead of opening a second one.
 - The History, PR & CI, Worktrees and Files icons each open their panel: History shows the commit graph of the chosen

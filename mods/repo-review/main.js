@@ -1,13 +1,14 @@
 // A full-size review tab for one repo: its changed files on the left, the selected file's diff
 // on the right. repo-changes opens it (tab.new, or setShared("repo-review.open") on a tab that
-// already shows the repo). Read-only: no commit, stage or fetch here.
+// already shows the repo). The diff's header can stage or unstage the shown file, and discard it after
+// an inline confirm (lib.js); nothing else is written, and nothing is committed or fetched here.
 //
 // props: { on, repo: "<absolute repo path>", name: "<repo name>", file?: "<path to select first>" }
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, v_virtual_list } from "gpui-base";
 import { spaces, panes, exec, readTextFile, theme, settings, shared, props as modProps } from "herdr";
-import { parseStatus, splitPath, diffRows } from "./lib.js";
+import { parseStatus, splitPath, diffRows, stageFile, unstageFile, discardFile, discardKind } from "./lib.js";
 
 const EVERY = 5000; // re-list the files this often while the tab is shown
 const ICON = (name) => `mods/workspace-chrome/${name}.svg`;
@@ -38,6 +39,9 @@ export default class RepoReview extends View {
         this.loading = false;
         this.last = 0;
         this.handled = Number(shared("repo-review.open")?.at ?? 0); // older requests are not for us
+        this.confirming = null; // the file whose Discard waits for its second click
+        this.acting = false;
+        this.note = null; // { ok, message } of the last action
         this.handle = cx.focus_handle(); // so arrow keys reach this tab
         cx.timer.every(500, (cx) => this.tick(cx));
         this.refresh(cx);
@@ -65,7 +69,11 @@ export default class RepoReview extends View {
     }
 
     refresh(cx) {
-        if (this.loading || !this.repo) return;
+        if (!this.repo) return;
+        if (this.loading) {
+            this.again = true; // an action changed the files during this read: read again right after
+            return;
+        }
         this.loading = true;
         cx.spawn(async (cx) => {
             try {
@@ -92,7 +100,8 @@ export default class RepoReview extends View {
                 this.error = String(e?.message ?? e).split("\n")[0];
             } finally {
                 this.loading = false;
-                this.last = Date.now();
+                this.last = this.again ? 0 : Date.now();
+                this.again = false;
                 cx.notify();
             }
         });
@@ -156,7 +165,83 @@ export default class RepoReview extends View {
         this.diffWidth = Math.max(300, ...cut.map((l) => l.length * 7.5 + 60));
     }
 
+    /** Stage, unstage or discard the shown file (lib.js), then list the files again at once. */
+    act(cx, fn) {
+        if (this.acting) return;
+        this.acting = true;
+        this.confirming = null;
+        const on = this.on;
+        const git = (cmd, args, options) => exec(cmd, args, { ...options, on });
+        cx.spawn(async (cx) => {
+            try {
+                this.note = await fn(git);
+            } catch (e) {
+                this.note = { ok: false, message: String(e?.message ?? e).split("\n")[0] };
+            }
+            this.acting = false;
+            this.last = 0;
+            this.refresh(cx);
+        });
+        cx.notify();
+    }
+
+    /** Stage / Unstage and Discard for the shown file, or the discard confirm in their place. */
+    fileActions(t, file) {
+        const args = { checkout: this.repo, file: file.path };
+        const kind = discardKind(file.xy);
+        if (this.confirming === file.path)
+            return [
+                div()
+                    .flex_none()
+                    .text_size(11.5)
+                    .text_color(kind === "delete" ? t.blocked : t.muted)
+                    .child(kind === "delete" ? "Not in the last commit: DELETE the file?" : "Discard every change?"),
+                this.textButton(t, "review-discard-no", "Cancel", false, (_e, cx) => {
+                    this.confirming = null;
+                    cx.notify();
+                }),
+                this.textButton(
+                    t,
+                    "review-discard-yes",
+                    kind === "delete" ? "Delete file" : "Discard",
+                    true,
+                    (_e, cx) => this.act(cx, (git) => discardFile(git, { ...args, expect: kind })),
+                ),
+            ];
+        return [
+            this.textButton(t, "review-stage", file.staged ? "Unstage" : "Stage", false, (_e, cx) =>
+                this.act(cx, (git) => (file.staged ? unstageFile(git, args) : stageFile(git, args))),
+            ),
+            file.path.endsWith("/")
+                ? null
+                : this.textButton(t, "review-discard", "Discard…", false, (_e, cx) => {
+                      this.confirming = file.path;
+                      cx.notify();
+                  }),
+        ].filter(Boolean);
+    }
+
+    textButton(t, id, label, danger, onClick) {
+        return div()
+            .id(id)
+            .flex_none()
+            .h(22)
+            .px(8)
+            .flex()
+            .items_center()
+            .rounded(6)
+            .text_size(11.5)
+            .cursor_pointer()
+            .bg(danger ? t.blocked : t.raised)
+            .text_color(danger ? t.background : t.foreground)
+            .hover((s) => s.opacity(0.85))
+            .on_click(onClick)
+            .child(this.acting ? "…" : label);
+    }
+
     pick(path, cx) {
+        this.confirming = null;
+        this.note = null;
         this.sel = path;
         this.want = null;
         this.rows = [];
@@ -426,12 +511,25 @@ export default class RepoReview extends View {
                     )
                     .child(div().flex_none().text_size(11).text_color(t.ansi2).child(`+${add}`))
                     .child(div().flex_none().text_size(11).text_color(t.ansi1).child(`−${del}`))
+                    .children(this.fileActions(t, file))
                     .child(this.headerButton(t, "review-prev", "‹", i > 0, (_e, cx) => this.step(-1, cx)))
                     .child(
                         this.headerButton(t, "review-next", "›", i < this.files.length - 1, (_e, cx) =>
                             this.step(1, cx),
                         ),
                     ),
+            )
+            .when(Boolean(this.note), (el) =>
+                el.child(
+                    div()
+                        .flex_none()
+                        .px(12)
+                        .py(3)
+                        .truncate()
+                        .text_size(11)
+                        .text_color(this.note.ok ? t.done : t.blocked)
+                        .child(this.note.message),
+                ),
             )
             .child(
                 div()
