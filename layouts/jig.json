@@ -16,10 +16,10 @@
             "id": "sidebar",
             "type": "column",
             "size": {
-                "px": 280
+                "px": 300
             },
             "min": 44,
-            "max": 480,
+            "max": 520,
             "background": "chrome",
             "resizable": false,
             "children": [
@@ -184,7 +184,7 @@
                                             "type": "block",
                                             "title": "History",
                                             "content": {
-                                                "mod": "triage-history",
+                                                "mod": "repo-history",
                                                 "props": {
                                                     "activity": {
                                                         "icon": "mods/workspace-chrome/clock.svg"
@@ -197,7 +197,7 @@
                                             "type": "block",
                                             "title": "PR & CI",
                                             "content": {
-                                                "mod": "triage-pr",
+                                                "mod": "repo-prs",
                                                 "props": {
                                                     "activity": {
                                                         "icon": "mods/jig-activity/icons/pr.svg"
@@ -210,7 +210,7 @@
                                             "type": "block",
                                             "title": "Worktrees",
                                             "content": {
-                                                "mod": "triage-worktrees",
+                                                "mod": "repo-worktrees",
                                                 "props": {
                                                     "activity": {
                                                         "icon": "mods/jig-activity/icons/worktree.svg"
@@ -223,25 +223,10 @@
                                             "type": "block",
                                             "title": "Files",
                                             "content": {
-                                                "mod": "files",
+                                                "mod": "jig-files",
                                                 "props": {
                                                     "activity": {
                                                         "icon": "mods/workspace-chrome/files.svg"
-                                                    }
-                                                }
-                                            }
-                                        },
-                                        {
-                                            "id": "settings",
-                                            "type": "block",
-                                            "title": "Settings",
-                                            "content": {
-                                                "mod": "triage-launch",
-                                                "props": {
-                                                    "settings": true,
-                                                    "activity": {
-                                                        "icon": "mods/workspace-chrome/settings.svg",
-                                                        "end": true
                                                     }
                                                 }
                                             }

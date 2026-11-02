@@ -16,9 +16,9 @@ type Node = {
 
 const MODS = readdirSync(path.join(HERDR, "mods")).sort();
 /** Mods that Herdr ships, which the layout uses as they are. */
-const HERDR_OWN = ["workspace-chrome", "spaces", "agents", "tabs", "pane", "files"];
-/** Panels from the third-party Triage mods: not part of this plugin, named in the README. */
-const TRIAGE = ["triage-history", "triage-pr", "triage-worktrees", "triage-launch"];
+const HERDR_OWN = ["workspace-chrome", "spaces", "agents", "pane"];
+/** The panels of the side panel, top to bottom: the Jig one, then the repository ones. */
+const PANELS = ["jig-work", "changes", "history", "pr", "worktrees", "files"];
 
 function walk(dir: string): string[] {
     return readdirSync(dir).flatMap((name) => {
@@ -29,20 +29,20 @@ function walk(dir: string): string[] {
 const nodes = (node: Node): Node[] => [node, ...(node.children ?? []).flatMap(nodes)];
 const layout = JSON.parse(readFileSync(path.join(HERDR, "layouts/jig.json"), "utf8")) as Node;
 
-test("the mods are the seven this plugin ships, and none is one of Triage's", () => {
+test("the mods are the eleven this folder ships", () => {
     assert.deepEqual(MODS, [
         "file-view",
         "jig-activity",
+        "jig-files",
         "jig-tabs",
         "jig-theme-sync",
         "jig-work",
         "repo-changes",
+        "repo-history",
+        "repo-prs",
         "repo-review",
+        "repo-worktrees",
     ]);
-    assert.deepEqual(
-        walk(HERDR).filter((f) => /triage-/.test(f)),
-        [],
-    );
 });
 
 test("every mod has a mod.json that places it nowhere by itself, and a main.js with a default export", () => {
@@ -56,14 +56,14 @@ test("every mod has a mod.json that places it nowhere by itself, and a main.js w
     }
 });
 
-test("every mod the layout names is one of ours, one of Herdr's, or one of Triage's", () => {
+test("every mod the layout names is one of ours or one of Herdr's, and every mod of ours is in it or opens as a tab", () => {
     const named = new Set(nodes(layout).flatMap((n) => (n.content?.mod ? [n.content.mod] : [])));
-    for (const mod of named) assert.ok([...MODS, ...HERDR_OWN, ...TRIAGE].includes(mod), `${mod} is not known`);
+    for (const mod of named) assert.ok([...MODS, ...HERDR_OWN].includes(mod), `${mod} is not known`);
     // repo-review and file-view open as tabs, so no block of the layout names them.
     for (const mod of MODS)
         assert.ok(named.has(mod) || ["repo-review", "file-view"].includes(mod), `${mod} is in no block of the layout`);
-    assert.equal(named.has("triage-status") || named.has("triage-activity") || named.has("triage-reply"), false);
     assert.equal(named.has("tabs"), false, "the tab bar is jig-tabs, with the Panel and Jig buttons");
+    assert.equal(named.has("files"), false, "the Files panel is jig-files, which opens files as tabs");
 });
 
 test("the layout's side panel gives each child an icon that exists, and ids are unique", () => {
@@ -71,7 +71,21 @@ test("the layout's side panel gives each child an icon that exists, and ids are 
     assert.equal(new Set(all.map((n) => n.id)).size, all.length, "node ids are unique");
     const stack = all.find((n) => n.id === "panel-body");
     assert.equal(stack?.type, "stack");
-    assert.ok(stack?.children?.some((c) => c.id === "changes" && c.content?.mod === "repo-changes"));
+    assert.deepEqual(
+        stack?.children?.map((c) => [c.id, c.content?.mod]),
+        [
+            ["jig-work", "jig-work"],
+            ["changes", "repo-changes"],
+            ["history", "repo-history"],
+            ["pr", "repo-prs"],
+            ["worktrees", "repo-worktrees"],
+            ["files", "jig-files"],
+        ],
+    );
+    assert.deepEqual(
+        stack?.children?.map((c) => c.id),
+        PANELS,
+    );
     // The Jig section sits at the top, with a divider under its button, and shows first.
     const first = stack?.children?.[0] as Node & { content?: { props?: { activity?: { divider?: boolean } } } };
     assert.equal(first?.id, "jig-work");
@@ -82,6 +96,12 @@ test("the layout's side panel gives each child an icon that exists, and ids are 
         const icon = child.content?.props?.activity?.icon;
         assert.ok(icon, `${child.id} has an icon`);
         if (icon.startsWith("mods/jig-activity/")) assert.ok(existsSync(path.join(HERDR, icon)), icon);
+        else assert.match(icon, /^mods\/workspace-chrome\/[\w-]+\.svg$/, `${child.id}: an icon is ours or Herdr's own`);
+        assert.equal(
+            (child.content?.props?.activity as { end?: boolean } | undefined)?.end,
+            undefined,
+            "no panel sits apart at the bottom of the bar",
+        );
     }
     const bar = all.find((n) => n.content?.mod === "jig-activity");
     assert.deepEqual(bar?.content && "props" in bar.content ? bar.content.props : null, { stack: "panel-body" });
@@ -118,6 +138,52 @@ test("there is no status bar: the palette follower sits unseen, in a 0 px block 
     );
 });
 
+test("the layout has no status bar, no reply, no issues and no settings panel", () => {
+    const text = readFileSync(path.join(HERDR, "layouts/jig.json"), "utf8");
+    assert.doesNotMatch(text, /status|reply|issues|settings/i);
+    const top = layout.children?.find((n) => n.id === "work");
+    assert.deepEqual(
+        top?.children?.map((n) => n.id),
+        ["tabs", "work-body"],
+        "the tab bar and the body: nothing below them",
+    );
+});
+
+test("jig-files credits Herdr's files mod and its licence, and opens files as file-view tabs", () => {
+    const text = readFileSync(path.join(HERDR, "mods/jig-files/main.js"), "utf8");
+    assert.match(text.slice(0, 1200), /Derived from the `files` mod shipped with the Herdr app/);
+    assert.match(text.slice(0, 1200), /Apache License, Version 2\.0/);
+    assert.match(text, /mod: "file-view"/);
+    assert.match(text, /Copyright the Herdr authors/);
+});
+
+test("no mod ships the editor files the Herdr app writes into every mod folder", () => {
+    const found = walk(path.join(HERDR, "mods")).filter((f) => /gpui-kit\.d\.ts$|jsconfig\.json$/.test(f));
+    assert.deepEqual(found, []);
+});
+
+test("the new repository panels read with git and gh and never write", () => {
+    const run = (mod: string) =>
+        walk(path.join(HERDR, "mods", mod))
+            .filter((f) => f.endsWith(".js"))
+            .map((f) => readFileSync(f, "utf8"))
+            .join("\n");
+    for (const mod of ["repo-prs", "repo-history"]) {
+        const code = run(mod);
+        // History opens a terminal for a diff; no other command that changes anything is named.
+        assert.doesNotMatch(
+            code,
+            /"(?:push|commit|checkout|reset|merge|rebase|fetch|pull|clean|stash|add|rm|worktree)"/,
+            mod,
+        );
+    }
+    const worktrees = run("repo-worktrees");
+    assert.doesNotMatch(worktrees, /"--force"|"-D"|"-f"|"push"|"fetch"|"reset"/);
+    assert.match(worktrees, /\["worktree", "remove", tree\.path\]/);
+    assert.match(worktrees, /\["branch", "-d", tree\.branch\]/);
+    assert.doesNotMatch(run("repo-prs"), /"pr", "(?:merge|close|comment|review|edit|create)"/);
+});
+
 test("the sharing files are there: a recipe and a picture", () => {
     assert.ok(existsSync(path.join(HERDR, "RECIPE.md")));
     assert.ok(statSync(path.join(HERDR, "preview.png")).size > 10_000);
@@ -133,6 +199,8 @@ test("nothing personal or company-specific is in the plugin", () => {
         new RegExp(["github", "repos"].join("")),
         new RegExp(["vo", "nage"].join(""), "i"),
         new RegExp(["jig-", "agent\\b"].join("")),
+        new RegExp(["tri", "age"].join(""), "i"),
+        new RegExp(["pan", "ther|qa", "7|zuo", "ra|hd", "ap|bss", "eng|sw", "itchboard"].join(""), "i"),
     ];
     const files = [...walk(PLUGIN)].filter(
         (f) =>
@@ -140,8 +208,12 @@ test("nothing personal or company-specific is in the plugin", () => {
             !f.includes("node_modules") &&
             !f.includes(`${path.sep}test${path.sep}`),
     );
+    // The name of a Herdr machine is configuration, never code: the docs may say WSL as a product, the mods may not.
+    const machineName = new RegExp(["\\bw", "sl\\b"].join(""), "i");
     for (const file of files) {
         const text = readFileSync(file, "utf8");
+        if (/\.(js|json)$/.test(file) && !file.endsWith("herdr-files.test.ts"))
+            assert.equal(machineName.test(text), false, `${path.relative(PLUGIN, file)} names a machine`);
         for (const bad of forbidden) {
             if (file.endsWith("herdr-files.test.ts")) continue;
             assert.equal(bad.test(text), false, `${path.relative(PLUGIN, file)} matches ${bad}`);

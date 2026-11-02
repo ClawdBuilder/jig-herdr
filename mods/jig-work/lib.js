@@ -147,7 +147,7 @@ const SKIP = new Set(["NEUTRAL", "SKIPPED", "STALE", "CANCELLED"]);
 export function rollup(list) {
     const out = { pass: 0, fail: 0, pending: 0, total: 0, failing: [] };
     for (const c of list ?? []) {
-        const result = c.conclusion || c.state || "";
+        const result = c.conclusion || c.state || ""; // a check run has a conclusion, a commit status a state
         out.total++;
         if (FAIL.has(result)) {
             out.fail++;
@@ -270,23 +270,25 @@ export function short(n) {
     return String(Math.round(n));
 }
 
-// The nodes from the root down to the first one passing test, or null.
-function pathTo(node, test) {
+/** The chain of nodes from the layout's root down to the block that holds `mod`, or null when no block does. */
+function chainTo(node, mod) {
     if (!node) return null;
-    if (test(node)) return [node];
-    for (const c of node.children ?? []) {
-        const p = pathTo(c, test);
-        if (p) return [node, ...p];
+    if (node.content?.mod === mod) return [node];
+    for (const child of node.children ?? []) {
+        const rest = chainTo(child, mod);
+        if (rest) return [node, ...rest];
     }
     return null;
 }
 
-// Whether a mod's block is on screen: no hidden node on its way, every stack on it showing the right child. A mod with no
-// block in the layout (a pane or tab of its own) counts as shown.
+/** Whether a mod's block is on screen: nothing hidden on the way down, and every stack on the way showing the right child.
+ * A mod that has no block (it lives in a pane or tab of its own) counts as on screen. */
 export function isShown(root, mod) {
-    const path = pathTo(root, (n) => n.content?.mod === mod);
-    if (!path) return true;
-    return path.every(
-        (n, i) => !n.hidden && (n.type !== "stack" || (n.active ?? n.children?.[0]?.id) === path[i + 1]?.id),
-    );
+    const chain = chainTo(root, mod);
+    if (!chain) return true;
+    return chain.every((node, i) => {
+        if (node.hidden) return false;
+        if (node.type !== "stack") return true;
+        return (node.active ?? node.children?.[0]?.id) === chain[i + 1]?.id;
+    });
 }

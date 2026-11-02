@@ -1,19 +1,10 @@
 // The install script, run into temporary folders that stand for a Herdr config folder.
 import assert from "node:assert/strict";
-import {
-    existsSync,
-    mkdirSync,
-    mkdtempSync,
-    readdirSync,
-    readFileSync,
-    rmSync,
-    statSync,
-    writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { install, missingTriage } from "../scripts/install.ts";
+import { install } from "../scripts/install.ts";
 import { HERDR } from "./support.ts";
 
 function folder(t: { after(fn: () => void): void }): string {
@@ -40,6 +31,10 @@ test("a first install copies the layout, the mods and the themes, and adds the k
         "mods/file-view/main.js",
         "mods/repo-changes/main.js",
         "mods/repo-review/main.js",
+        "mods/repo-prs/main.js",
+        "mods/repo-worktrees/main.js",
+        "mods/repo-history/main.js",
+        "mods/jig-files/main.js",
         "themes/jig-lime.json",
     ]) {
         assert.equal(read(target, file), readFileSync(path.join(HERDR, file), "utf8"), file);
@@ -58,6 +53,10 @@ test("a mod's mod.json is written before its other files, so Herdr never docks a
         "file-view",
         "repo-changes",
         "repo-review",
+        "repo-prs",
+        "repo-worktrees",
+        "repo-history",
+        "jig-files",
     ]) {
         const mine = report.added.filter((f) => f.startsWith(`mods/${mod}/`));
         assert.equal(mine[0], `mods/${mod}/mod.json`);
@@ -161,8 +160,8 @@ test("a keys.json that is not JSON is not touched", (t) => {
 test("other layouts, mods, programs and settings are never touched", (t) => {
     const target = folder(t);
     const mine: Record<string, string> = {
-        "layouts/triage.json": "{}",
-        "mods/triage-status/main.js": "// third party",
+        "layouts/mine.json": "{}",
+        "mods/other-mod/main.js": "// not ours",
         "programs.json": '{ "programs": {} }',
         "settings.json": '{ "zoom": 1 }',
     };
@@ -214,12 +213,6 @@ test("a dry run writes nothing", (t) => {
     assert.deepEqual(readdirSync(target), []);
 });
 
-test("a folder that does not exist is an error, and Triage's missing panels are named", (t) => {
+test("a folder that does not exist is an error", (t) => {
     assert.throws(() => install(path.join(folder(t), "nope")), /not a folder/);
-    const target = folder(t);
-    assert.deepEqual(missingTriage(target), ["triage-history", "triage-pr", "triage-worktrees", "triage-launch"]);
-    mkdirSync(path.join(target, "mods/triage-pr"), { recursive: true });
-    writeFileSync(path.join(target, "mods/triage-pr/main.js"), "");
-    assert.equal(missingTriage(target).includes("triage-pr"), false);
-    assert.ok(statSync(target).isDirectory());
 });

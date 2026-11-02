@@ -1,22 +1,24 @@
-// Is a mod's block on screen in the shown layout? A block hidden, or behind another child of a
-// stack, is not. Kept in its own file so it can be tested outside Herdr; mods cannot import each other.
+// Whether a mod's block is on screen in the shown layout. A block that is hidden, or sits behind another child of a stack,
+// is not. It is in its own file so the tests can load it outside Herdr; mods cannot import each other.
 
-// The nodes from the root down to the first that passes test, or null.
-export function pathTo(node, test) {
+/** The chain of nodes from the layout's root down to the block that holds `mod`, or null when no block does. */
+function chainTo(node, mod) {
     if (!node) return null;
-    if (test(node)) return [node];
-    for (const c of node.children ?? []) {
-        const p = pathTo(c, test);
-        if (p) return [node, ...p];
+    if (node.content?.mod === mod) return [node];
+    for (const child of node.children ?? []) {
+        const rest = chainTo(child, mod);
+        if (rest) return [node, ...rest];
     }
     return null;
 }
 
-// A mod with no block in the layout is in a pane or tab of its own, so it counts as shown.
+/** A mod with no block in the layout lives in a pane or tab of its own, which counts as on screen. */
 export function shown(root, mod) {
-    const path = pathTo(root, (n) => n.content?.mod === mod);
-    return (
-        !path ||
-        path.every((n, i) => !n.hidden && (n.type !== "stack" || (n.active ?? n.children?.[0]?.id) === path[i + 1]?.id))
-    );
+    const chain = chainTo(root, mod);
+    if (!chain) return true;
+    return chain.every((node, i) => {
+        if (node.hidden) return false;
+        if (node.type !== "stack") return true;
+        return (node.active ?? node.children?.[0]?.id) === chain[i + 1]?.id;
+    });
 }

@@ -1,4 +1,4 @@
-// Pure helpers, kept apart from main.js so they can be tested outside Herdr.
+// Pure helpers of the Changes panel. They live apart from main.js so the tests can load them outside Herdr.
 
 // Most changed files listed per repo; the rest become "+N more".
 export const CAP = 200;

@@ -201,13 +201,6 @@ export function install(target: string, options: Options = {}): Report {
     return report;
 }
 
-/** Names Triage's panels that the jig layout uses, so the install can say which of them are missing. */
-export function missingTriage(target: string): string[] {
-    return ["triage-history", "triage-pr", "triage-worktrees", "triage-launch"].filter(
-        (mod) => !existsSync(path.join(target, "mods", mod, "main.js")),
-    );
-}
-
 function main(argv: string[]): number {
     const flags = argv.filter((a) => a.startsWith("--"));
     const names = argv.filter((a) => !a.startsWith("--"));
@@ -238,11 +231,6 @@ function main(argv: string[]): number {
     say("keys.json, kept as yours", report.keys.kept);
     for (const s of report.skipped) console.log(`LEFT ALONE ${s.file}: ${s.reason}`);
     if (report.keys.error) console.log(`keys.json NOT MERGED: ${report.keys.error}`);
-    const missing = missingTriage(target);
-    if (missing.length) {
-        console.log(`Not installed, so their panels stay empty (and have no icon on the bar): ${missing.join(", ")}.`);
-        console.log("They come from https://github.com/sgomez/herdr-triage (see herdr/README.md).");
-    }
     if (report.skipped.length)
         console.log("Some files were left alone: run again with --force to replace them with this version.");
     return report.skipped.length || report.keys.error ? 1 : 0;

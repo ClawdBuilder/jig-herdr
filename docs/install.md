@@ -23,7 +23,8 @@ restart.
 ## What it copies
 
 - **`layouts/`:** `jig.json` and `jig.svg`, the picture the settings screen shows.
-- **`mods/`:** `jig-work`, `jig-tabs`, `file-view`, `repo-changes`, `repo-review`, `jig-activity` and `jig-theme-sync`.
+- **`mods/`:** `jig-work`, `jig-tabs`, `jig-activity`, `jig-theme-sync`, `jig-files`, `file-view`, `repo-changes`, `repo-review`,
+  `repo-history`, `repo-prs` and `repo-worktrees`.
 - **`themes/`:** one theme for each Jig palette.
 - **`keys.json`:** merged, not copied: only the section `layout:jig` is added or changed.
 
@@ -49,18 +50,17 @@ A report line `LEFT ALONE` makes the script exit with 1: the install is not comp
 bound to something else is kept and listed, and `--force` takes it over. A `keys.json` that is not valid JSON is not touched.
 `--dry-run` prints what would happen and writes nothing, not even the record.
 
-## The Triage panels
+## What the layout needs from Herdr
 
-The layout names the panels `triage-history`, `triage-pr`, `triage-worktrees` and `triage-launch`. They are
-not in this plugin: they come from [herdr-triage](https://github.com/sgomez/herdr-triage), which is under the EUPL-1.2. The
-script says which of them are missing from the folder.
+The layout also names four mods that the Herdr app ships and keeps up to date: `workspace-chrome`, `spaces`, `agents` and
+`pane`. Nothing else is needed, so a fresh Herdr folder and this script are enough. A mod copied by hand into the folder
+earlier, with the same name as one of these, is left alone until you run with `--force`, which replaces it with this version.
 
 Herdr shows a block whose mod has no folder as a note, `<mod> did not load`, and lists it under `errors` in `herdr-app
-status`. The layout around it keeps working, and `jig-activity` leaves that panel's button out, so the note is only seen by
-a person who has switched to that panel. Installing the mods later needs no change here.
+status`. `jig-activity` leaves out the button of such a panel, so the note is only seen by a person who has switched to it.
 
 ## Take it out
 
-Delete the files the script listed: `layouts/jig.json`, `layouts/jig.svg`, the seven `mods/` folders, the six
+Delete the files the script listed: `layouts/jig.json`, `layouts/jig.svg`, the eleven `mods/` folders, the six
 `themes/jig-*.json`, the `layout:jig` section of `keys.json` and `.jig-herdr-install.json`. Your other layouts and mods are
 not affected.

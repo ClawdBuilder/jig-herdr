@@ -1,29 +1,34 @@
 # The Herdr app: a layout and mods that work with Jig
 
 **Status: built.** Tested with temporary folders (the install script, the layout, the mods' parsing and their scripts on real
-repositories and status files). Seen working in the Herdr app 0.1.11 on Windows, with Pi in WSL as a Herdr machine. Not
-tried: macOS, Linux, Triage's mods missing from a real Herdr folder.
+git repositories and status files). Seen working in the Herdr app 0.1.11 on Windows, with Pi in WSL as a Herdr machine. Not
+tried: macOS, Linux.
 
 This folder is not a Pi plugin: Pi never loads it. It is a set of files for the [Herdr](https://herdr.dev) desktop app, copied
-into the app's folder by a script. They give Herdr a `jig` layout whose Jig button opens the **Work** panel for the Pi session
-in focus, beside the changes of every git repository, a review tab and a colour theme that follows Pi's palette. The Work
-panel reads the status files of the [`jig-session`](../plugins/jig-session/README.md) Pi plugin.
+into the app's folder by a script. They give Herdr a `jig` layout for working on several git repositories at once: a side
+panel with the **Work** panel for the Pi session in focus, and the changes, history, pull requests, worktrees and files of
+every repository under the space's folder. The Work panel reads the status files of the
+[`jig-session`](../plugins/jig-session/README.md) Pi plugin. A colour theme follows Pi's palette.
 
 ![The jig layout: spaces and agents on the left, a terminal in the middle, the Changes panel with an icon bar on the right](preview.png)
 
-*The `jig` layout on a folder of five demo repositories, from before the Work panel. The Changes panel lists each one with
-its branch and files. The status bar in the picture has since gone, and the palette is no longer named on screen.*
+*The `jig` layout on a folder of five demo repositories and a linked worktree. The Changes panel lists each with its branch and files; the icon
+bar at its right switches to the other panels. There is no status bar.*
 
 ## What you see
 
 | Where | What it shows |
 |---|---|
 | Tab bar | Tabs, `+`, then `Panel` (shows or hides the side panel) and `Jig` (shows it on the Work section) |
-| Right panel, `Jig · Work` | The focused Pi session: ticket, workflow stages, pull requests, outputs, recent tool calls |
-| Right panel, `Changes` | All repositories under the space's folder, changed ones first, with a filter |
-| Right icon bar | One button per section, the Jig section at the top above a line; a count on `Changes` |
+| Side panel, `Jig · Work` | The focused Pi session: ticket, workflow stages, pull requests, outputs, recent tool calls |
+| Side panel, `Changes` | All repositories under the space's folder, changed ones first, with a filter |
+| Side panel, `History` | A repository picker and the commit graph of the chosen one, with each commit's files |
+| Side panel, `PR & CI` | The pull request and checks of every repository on a feature branch, and all of yours |
+| Side panel, `Worktrees` | Every repository's linked worktrees, marked ready to remove or in progress |
+| Side panel, `Files` | A file tree of the folder; a click opens the file in a tab |
+| Icon bar | One button per section, the Jig section at the top above a line; counts on `Changes`, `PR & CI`, `Worktrees` |
 | A `Review` tab | One repository's changed files, and the diff of the chosen one, in strong red and green |
-| A file tab | One file, read-only, opened from the Work panel's outputs |
+| A file tab | One file, read-only, opened from the Work panel's outputs or the Files panel |
 | Nowhere, on purpose | The palette follower: a block of 0 px; the window takes the colours of Pi's palette, black when dark |
 
 In **Work**, the ticket key and each pull request open in the browser, an output opens in a file tab, and the diff button on
@@ -34,12 +39,9 @@ agents wait. `Ctrl+Shift+R` shows or hides the side panel, remembered for each s
 
 - **The Herdr app and herdr-core.** Mods are written for the app's mod runtime; see [Mods](docs/mods.md) for what each one
   calls.
-- **`sh` and `git` on the machine that holds the folders.** `Changes` and `Work` run `sh` scripts there.
-- **For the Work panel:** `jig-session` among the Pi plugins Pi loads, as every Jig plugin is.
-- **For pull requests in Work:** `gh`, signed in by you, on the machine where Pi runs. Without it the panel says so.
-- **For the `History`, `PR & CI`, `Worktrees` and `Settings` panels:** the [Triage](https://github.com/sgomez/herdr-triage)
-  mods (EUPL-1.2), installed separately. Jig does not copy them. Without them the layout still works: the icon bar leaves
-  their buttons out.
+- **`sh` and `git` on the machine that holds the folders.** The repository panels run `sh` scripts and `git` there.
+- **`gh`, signed in by you, on that machine,** for `PR & CI` and for the pull requests in Work. Without it the panel says so.
+- **`jig-session`** among the Pi plugins Pi loads, for the Work panel, as every Jig plugin is.
 
 ## Install
 
@@ -85,13 +87,15 @@ lists the props each mod reads.
 
 ## Rules
 
-- **Read only.** The mods read status files and repositories; they write nothing on the machine where Pi runs.
+- **Read only, with one exception.** The mods read status files and repositories and write nothing on the machine where Pi
+  runs. The exception is `Remove` on a ready row of `Worktrees`: after a second click it runs `git worktree remove` and
+  `git branch -d`, never with `--force` or `-D`, and checks again right before.
 - **The panels approve nothing.** Approvals happen in Pi, inside the waiting call.
-- **Git without writes.** The mods run `git status` and `git diff` with options that write nothing under `.git`.
+- **Git without writes.** The mods run `git status`, `log`, `show` and `diff` with options that write nothing under `.git`.
 - **Copied, not linked.** The Windows app cannot follow a link made in WSL.
 - **Yours stays yours.** The script replaces a file only if it wrote that file and you did not change it, unless `--force`.
-- **Polled while shown.** Work reads the status files every 2 seconds and Changes the repositories every 5, only while on
-  screen; pull requests are asked of `gh` at most every 5 minutes per ticket.
+- **Polled while shown.** Work reads the status files every 2 seconds, Changes the repositories every 5 and Worktrees every
+  30; pull requests are asked of `gh` at most every 5 minutes. Nothing runs while a panel is hidden.
 
 ## Company part
 
@@ -102,7 +106,8 @@ None. Nothing here is specific to a company.
 ```text
 herdr/
   layouts/    jig.json and the picture the settings screen shows (copied, with mods/ and themes/)
-  mods/       jig-work, jig-tabs, file-view, repo-changes, repo-review, jig-activity, jig-theme-sync
+  mods/       jig-work, jig-tabs, jig-activity, jig-theme-sync, jig-files, file-view, repo-changes, repo-review,
+              repo-history, repo-prs, repo-worktrees
   themes/     one Herdr theme for each Jig palette, made by scripts/build-themes.ts
   keys.json   merged into the Herdr folder's keys.json
   RECIPE.md, preview.png   for sharing the layout

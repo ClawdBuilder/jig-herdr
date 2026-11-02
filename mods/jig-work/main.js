@@ -63,7 +63,7 @@ const readCache = () => {
     }
 };
 
-// The app may run on Windows with Pi on WSL: a link opens on this computer, so no `on`.
+// The app may run on Windows with Pi in a Linux subsystem: a link opens on this computer, so no `on`.
 function openUrl(url) {
     if (!url) return;
     const platform = window()?.platform;

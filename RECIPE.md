@@ -1,11 +1,11 @@
 # Jig
 
 A black window with lime highlights for working with coding agents on several git repositories at once. Herdr's spaces and
-agents lists stand on the left, terminals are cards in the middle, and a side panel on the right lists every repository
-under the space's folder with its changed files, or, behind the tab bar's Jig button, the Work panel of the Pi session in
-focus: its ticket, workflow stages, pull requests, the files it changed and its recent tool calls. A narrow icon bar switches
-that panel. There is no status bar: the agents list on the left shows their states. The window follows, unseen, the colour
-palette the Jig plugins give Pi.
+agents lists stand on the left, terminals are cards in the middle, and a side panel on the right shows, one at a time and
+switched by a narrow icon bar: the Work panel of the Pi session in focus (its ticket, workflow stages, pull requests, the
+files it changed and its recent tool calls), then the changes, commit history, pull requests and checks, worktrees and files
+of every repository under the space's folder. There is no status bar: the agents list on the left shows their states. The
+window follows, unseen, the colour palette the Jig plugins give Pi.
 
 ![Jig](preview.png)
 
@@ -13,7 +13,7 @@ palette the Jig plugins give Pi.
 
 Left to right, top to bottom, in a window with no system title bar (`titlebar: none`, `traffic_lights: [12, 16]`):
 
-- **Sidebar, 280 px, background `chrome`,** not resizable. A 46 px brand row (`workspace-chrome`, drags the window), then
+- **Sidebar, 300 px (44 to 520), background `chrome`,** not resizable. A 46 px brand row (`workspace-chrome`, drags the window), then
   Herdr's `spaces` and `agents` lists sharing the height equally (each at least 90 px), a 0 px block for `jig-theme-sync`
   (it draws nothing), then a 69 px footer
   (`workspace-chrome` with `footer: true`).
@@ -23,10 +23,10 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
 - **Terminals** as cards: radius 10, 8 px gap, 1 px `border`, a 1 px `accent` border on the focused one, and a 30 px header
   (`pane`) always shown. A single terminal is framed too (`lone: true`).
 - **Side panel, 420 px (300 to 900),** a row of a stack and a bar. The stack shows one panel: Jig · Work, Changes, History,
-  PR & CI, Worktrees, Files or Settings. Work is the one shown first.
+  PR & CI, Worktrees or Files. Work is the one shown first.
 - **Icon bar, 40 px,** background `chrome`, a 1 px `border` on its left. One 18 px icon for each panel, 40 px square, with a
   2 px `accent` bar on the left of the active one and the `foreground` colour; the others are `dim`. The Jig icon is first,
-  with a 1 px `border` line under it; Settings sits at the bottom, apart from the others. A round badge (15 px, `blocked` or `accent` colour, the count in the window's background colour, `99+` at most)
+  with a 1 px `border` line under it. A round badge (15 px, `blocked` or `accent` colour, the count in the window's background colour, `99+` at most)
   sits at the top right of an icon that has a count.
 - **Work panel.** On `chrome`. A header: `π` in `accent`, the folder's name, `·`, the model in `muted`, the thinking level,
   and at the right a 7 px dot and `working` (`working`) or `idle` (`idle`, `dim`); a second line in `dim` with `context N% of
@@ -64,6 +64,19 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
   terminal changes status. A click on a repository's row folds it; the filter keeps repositories whose name matches (with
   all their files) or whose files match. Hovering a row shows a terminal button that opens a new tab in that repository. A
   click on a file opens or retargets the tab `Review · <repository>`.
+- **History.** A picker of the repositories (inside one repository, no picker), then the commit graph: 28 px rows with lanes
+  14 px apart, a dot per commit (a ring for the checked-out one), the author's initials, branch and tag pills, the pull
+  request number, the conventional-commit type, the subject and the age. A click opens the message and files under the
+  row; a file or `Open diff` opens `git show` in a terminal beside. `Branch` or `All` chooses the scope; `Load more` adds 100.
+- **PR & CI.** The `Workspace` tab: each repository on a feature branch with its pull request, its checks (`×` failed, `•`
+  pending, `✓` passed, `–` skipped; a cancelled run is skipped) and review state; repositories on a default branch fold
+  into a group. The `Mine` tab: your open pull requests by repository. A click opens the pull request or check in the browser.
+- **Worktrees.** Linked worktrees of every repository, grouped, newest first, each `Ready to remove` or `In progress`. Ready
+  needs: nobody working there, not locked, no uncommitted change, **no commit on no remote (unpushed commits are never ready)**,
+  and the work in the base or the remote branch deleted. `Remove` asks twice and runs `git worktree remove` (no `--force`)
+  and `git branch -d` (never `-D`).
+- **Files.** A tree of the folder, lazily read; folders open in place, a letter marks files with changes, a click opens the
+  file in a `file-view` tab (a second click selects it).
 - **Review.** Arrow keys and `j` and `k` move between files; `‹` `›` too. The list is read again every 5 seconds while the
   tab is on screen; an unchanged diff keeps its scroll position.
 - **Theme follower.** Every 5 seconds it reads Pi's `theme` setting, makes a Herdr theme from that palette and switches to
@@ -77,7 +90,7 @@ The layout is `layouts/jig.json`, rewritten from Herdr's shipped `main` layout. 
 
 - `root` (row; theme `jig-lime`, `background: canvas`, `terminal_padding: [14, 12]`, 1 px `border` dividers, `preview:
   layouts/jig.svg`)
-  - `sidebar` (column, 280 px, min 44, max 480) with `brand`, `sidebar-lists` (`spaces`, `agents`), `jig-theme` (0 px,
+  - `sidebar` (column, 300 px, min 44, max 520) with `brand`, `sidebar-lists` (`spaces`, `agents`), `jig-theme` (0 px,
     mod `jig-theme-sync`) and `sidebar-footer`
   - `work` (column) with `tabs` (mod `jig-tabs`) and `work-body`
     - `work-body` (row, padding 8, gap 8): `main` (`{ tab: "active", pane: {...} }`) and `panel` (row, 420 px)
@@ -90,11 +103,10 @@ Each child of `panel-body` is a block with a `title` and a mod, and its `content
 |---|---|---|---|
 | `jig-work` | Jig · Work | `jig-work` | `mods/jig-activity/icons/jig.svg`, `divider: true` |
 | `changes` | Changes | `repo-changes` | `mods/workspace-chrome/git-compare.svg` |
-| `history` | History | `triage-history` | `mods/workspace-chrome/clock.svg` |
-| `pr` | PR & CI | `triage-pr` | `mods/jig-activity/icons/pr.svg` |
-| `worktrees` | Worktrees | `triage-worktrees` | `mods/jig-activity/icons/worktree.svg` |
-| `files` | Files | `files` | `mods/workspace-chrome/files.svg` |
-| `settings` | Settings | `triage-launch`, props `{ settings: true }` | `mods/workspace-chrome/settings.svg`, `end: true` |
+| `history` | History | `repo-history` | `mods/workspace-chrome/clock.svg` |
+| `pr` | PR & CI | `repo-prs` | `mods/jig-activity/icons/pr.svg` |
+| `worktrees` | Worktrees | `repo-worktrees` | `mods/jig-activity/icons/worktree.svg` |
+| `files` | Files | `jig-files` | `mods/workspace-chrome/files.svg` |
 
 The mods, all in `mods/`, each with `mod.json` `{ "place": "none", "title": "..." }`:
 
@@ -113,6 +125,17 @@ The mods, all in `mods/`, each with `mod.json` `{ "place": "none", "title": "...
   `chevron-down`, `chevron-right`, `terminal`. Files: `main.js`, `lib.js` (the script and the parsing), `layout.js`.
 - **`repo-review`** (props `{ on, repo, name, file? }` from `tab.new`; read them with `props()`). `exec("git", ...)` and
   `readTextFile` with `{ on }`; `v_virtual_list` and `Scrollbar` from `gpui-base`.
+- **`repo-history`** (props: none). `exec("sh", ["-c", SCRIPT, "sh", root], { on })` for the repositories, `exec("git", ...,
+  { cwd, on })` for `log`, `status` and `show`, `run("terminal.open", ...)` for a diff. `InputState` and `Input` from
+  `gpui-base` for the filter and the picker. Files: `main.js`, `lib.js`.
+- **`repo-prs`** (props: none). `exec("sh", ...)` for the repositories, `exec("gh", ...)` for `pr view`, `pr list` and `search
+  prs` (four at a time, cached 5 minutes in `localStorage`), `exec` of the browser opener here, `setShared` for the badge.
+  Files: `main.js`, `lib.js`.
+- **`repo-worktrees`** (props: none). `exec("sh", ...)` for the worktrees, `spaces()`, `panes()` for who is at a checkout,
+  `run("space.select" | "tab.new")`, and for Remove only `exec("git", ["worktree", "remove", path])` and `exec("git",
+  ["branch", "-d", branch])`. `setShared` for the badge. Files: `main.js`, `lib.js`.
+- **`jig-files`** (props: none). Herdr's `files` mod (Apache-2.0, header kept) with `run("tab.new", { mod: "file-view" })`
+  instead of an in-panel preview; icons from `mods/workspace-chrome/`. File: `main.js`.
 - **`jig-activity`** (props `{ stack }`; a child's `activity` may have `divider: true`). `layout()`, `shared()`, `readTextFile` of `mods/<mod>/mod.json` to see which mods exist,
   `run("layout.select", { stack, child })`. Icons in `mods/jig-activity/icons/`: 24 px viewBox, stroke `currentColor`, 1.5.
 - **`jig-theme-sync`** (props: none; settings in `config.json`: `{ machine, agentDir, themeFolders }`). `exec("sh", ...)`
@@ -123,10 +146,8 @@ The mods, all in `mods/`, each with `mod.json` `{ "place": "none", "title": "...
 `chrome` `#000000`, `surface` and `popover` `#111111`, `border` `#262626`; the terminal colours and `accent`, `selected`,
 `working`, `blocked`, `done`, `idle` from the palette. `keys.json` adds the section `layout:jig` with the three keys above.
 
-The layout uses mods that are not here: the shipped `workspace-chrome`, `spaces`, `agents`, `pane` and `files`, and four
-panels of [herdr-triage](https://github.com/sgomez/herdr-triage) (EUPL-1.2): `triage-history`, `triage-pr`,
-`triage-worktrees` and `triage-launch`. Install that first for those panels. The Work panel needs Jig's Pi plugin
-`jig-session` loaded in Pi: it writes the status files.
+The layout uses four mods that are not here, the ones Herdr ships: `workspace-chrome`, `spaces`, `agents` and `pane`. The
+Work panel needs Jig's Pi plugin `jig-session` loaded in Pi: it writes the status files.
 
 ## Watch out
 
@@ -151,15 +172,14 @@ panels of [herdr-triage](https://github.com/sgomez/herdr-triage) (EUPL-1.2): `tr
   the way showing it) before reading.
 - **A block whose mod is missing** shows `<mod> did not load` and adds an error to `herdr-app status`; the rest still works.
   `jig-activity` leaves out that panel's button.
-- **Mods cannot import each other,** so `lib.js` of `repo-review` is a cut-down copy of `repo-changes`'s, and `jig-work` has
-  its own `isShown`.
-- **The side panel's `Settings` child** is Triage's `triage-launch` with `{ settings: true }`; without Triage it is empty.
+- **Mods cannot import each other,** so `lib.js` of `repo-review` is a cut-down copy of `repo-changes`'s, and every panel
+  has its own check that its block is on screen.
 - **No sign-in.** The mods run `git`, `sh` and `gh` and read files; they never fetch. `gh` is signed in by you, or the Work
   panel says it is not.
 
 ## Done when
 
-- `herdr-app check mods/<name>` passes for each of the seven mods, and `herdr-app status` shows no `errors` after
+- `herdr-app check mods/<name>` passes for each of the eleven mods, and `herdr-app status` shows no `errors` after
   `layout.switch {"name":"jig"}`.
 - The sidebar shows Herdr's spaces and agents lists, the terminals are cards, and the right panel shows the icon bar with the
   Changes icon active and a badge equal to the number of repositories with changes.
@@ -167,6 +187,9 @@ panels of [herdr-triage](https://github.com/sgomez/herdr-triage) (EUPL-1.2): `tr
   branch and counts; editing a file in one shows it within 5 seconds.
 - Clicking a changed file opens a `Review · <repository>` tab with the file's diff, red and lime tinted rows; clicking another
   file of the same repository changes that tab instead of opening a second one.
+- The History, PR & CI, Worktrees and Files icons each open their panel: History shows the commit graph of the chosen
+  repository, PR & CI lists the pull requests of repositories on a feature branch, Worktrees marks a clean, merged worktree
+  `Ready to remove` (and a worktree with an unpushed commit `In progress`), and Files opens a file in a tab.
 - Setting `theme` to `jig-signal` in Pi's `settings.json` makes the window take the cyan palette within 5 seconds.
 - `Ctrl+Shift+R` hides and shows the side panel, and switching to another layout and back keeps everything working.
 - With Pi and the Jig plugins running in a terminal of the window, `/ticket PROJ-123` and a file written by the agent: the
