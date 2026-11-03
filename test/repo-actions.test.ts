@@ -2,7 +2,16 @@
 // repo-review/lib.js), run on real git repositories in temporary folders, with a bare repository as their origin.
 import assert from "node:assert/strict";
 import { execFile, execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readdirSync,
+    readFileSync,
+    realpathSync,
+    rmSync,
+    writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -419,4 +428,206 @@ test("the Changes panel's config.json has its defaults, and a wrong field is rep
     });
     assert.equal(parseConfig('{ "newBranchPrefix": 3, "baseBranch": "" }').problems.length, 2);
     assert.match(parseConfig("{").problems[0], /not valid JSON/);
+});
+
+// ---- Branch review: the base branch, the commits ahead of it, and the branch's files ----
+
+const gitc = (cwd: string, ...args: string[]) =>
+    git(cwd, "-c", "user.name=Test", "-c", "user.email=t@example.com", ...args);
+const commitIn = (dir: string, file: string, text = "x\n") => {
+    writeFileSync(path.join(dir, file), text);
+    gitc(dir, "add", "-A");
+    gitc(dir, "commit", "-qm", `add ${file}`);
+};
+const scanRoot = (script: string, root: string) => execFileSync("sh", ["-c", script, "sh", root], { encoding: "utf8" });
+
+/** A repository with no remote, one commit on `first` and the other branches made from it. */
+function plain(root: string, name: string, first: string, ...others: string[]): string {
+    const dir = path.join(root, name);
+    mkdirSync(dir, { recursive: true });
+    gitc(dir, "init", "-q", "-b", first);
+    commitIn(dir, "README.md");
+    for (const b of others) gitc(dir, "branch", b);
+    return dir;
+}
+
+/** The base both ways: the Changes panel's scan script and the Review tab's findBase must agree. */
+async function bases(root: string, dirs: string[]) {
+    const { SCRIPT, parseRepos } = await load<Lib>("mods/repo-changes/lib.js");
+    const { findBase } = await load<Lib>("mods/repo-review/lib.js");
+    const scanned = parseRepos(scanRoot(SCRIPT, root), root);
+    return Promise.all(
+        dirs.map(async (dir) => {
+            const viaScript = scanned.find((r: Lib) => r.path === dir)?.base ?? null;
+            const viaReview = await findBase(exec, dir);
+            assert.equal(viaScript?.ref ?? null, viaReview?.ref ?? null, dir);
+            assert.equal(viaScript?.count ?? 0, viaReview?.count ?? 0, dir);
+            return viaReview as Lib | null;
+        }),
+    );
+}
+
+test("the base branch is the closest; on a tie origin/develop, then origin's HEAD, main or master, else a local one", async (t) => {
+    const root = realpathSync(scratch(t));
+    const work = path.join(root, "work");
+    mkdirSync(work);
+    const { origin } = cloned(root);
+    gitc(path.join(root, "seed"), "push", "-q", "origin", "main:develop");
+    const clone = (name: string) => {
+        git(root, "clone", "-q", origin, path.join(work, name));
+        return path.join(work, name);
+    };
+
+    // origin/HEAD is main and origin/develop is the same commit: on the tie develop wins (gitflow work starts there).
+    const viaHead = clone("via-head");
+    gitc(viaHead, "switch", "-q", "-c", "feature/a");
+    commitIn(viaHead, "one.ts");
+    commitIn(viaHead, "two.ts");
+    // Without origin/HEAD the first of origin/develop, origin/main, origin/master.
+    const noHead = clone("no-head");
+    git(noHead, "remote", "set-head", "origin", "-d");
+    gitc(noHead, "switch", "-q", "-c", "feature/b");
+    commitIn(noHead, "one.ts");
+    // No remote: local develop beats main, and master is found alone.
+    const local = plain(work, "local", "main", "develop");
+    gitc(local, "switch", "-q", "-c", "feature/c");
+    commitIn(local, "one.ts");
+    const master = plain(work, "master-only", "master");
+    gitc(master, "switch", "-q", "-c", "feature/d");
+    commitIn(master, "one.ts");
+    // No base branch at all, a checkout on its base, and nothing ahead.
+    const none = plain(work, "none", "trunk");
+    gitc(none, "switch", "-q", "-c", "feature/e");
+    commitIn(none, "one.ts");
+    const onBase = clone("on-base");
+    const behind = plain(work, "no-commits", "main", "feature/f");
+    gitc(behind, "switch", "-q", "feature/f");
+    // Commits that landed on the base after the branch was made do not count.
+    const moved = plain(work, "moved", "main");
+    gitc(moved, "switch", "-q", "-c", "feature/g");
+    commitIn(moved, "mine.ts");
+    gitc(moved, "switch", "-q", "main");
+    commitIn(moved, "later1.ts");
+    commitIn(moved, "later2.ts");
+    gitc(moved, "switch", "-q", "feature/g");
+
+    const found = await bases(work, [viaHead, noHead, local, master, none, onBase, behind, moved]);
+    const summary = found.map((b) => (b ? `${b.ref} ${b.count}` : null));
+    assert.deepEqual(summary, [
+        "origin/develop 2",
+        "origin/develop 1",
+        "develop 1",
+        "master 1",
+        null,
+        null,
+        null,
+        "main 1",
+    ]);
+    assert.equal(found[0]?.name, "develop");
+    assert.deepEqual(found[0]?.commits.length, 2);
+    assert.match(found[0]?.commits[0], /add two\.ts$/);
+    assert.equal(found[7]?.mergeBase, git(moved, "merge-base", "main", "HEAD"));
+});
+
+test("the closest candidate is the base, and a checkout on a base branch has none", async (t) => {
+    const root = realpathSync(scratch(t));
+    // origin/HEAD is master, but develop is ahead of it and the work branches start from develop.
+    const seed = plain(root, "seed2", "master");
+    gitc(seed, "switch", "-q", "-c", "develop");
+    commitIn(seed, "d1.ts");
+    commitIn(seed, "d2.ts");
+    gitc(seed, "switch", "-q", "master");
+    const origin = path.join(root, "origin2.git");
+    git(root, "clone", "-q", "--bare", seed, origin);
+    const work = path.join(root, "work");
+    mkdirSync(work);
+    git(root, "clone", "-q", origin, path.join(work, "orders-api"));
+    const repo = path.join(work, "orders-api");
+    gitc(repo, "switch", "-q", "-c", "feature/PROJ-1", "origin/develop");
+    commitIn(repo, "mine.ts");
+    // A tracking develop checkout: it is a base itself.
+    git(root, "clone", "-q", "-b", "develop", origin, path.join(work, "on-develop"));
+    const onDevelop = path.join(work, "on-develop");
+    commitIn(onDevelop, "unpushed.ts");
+    // A local develop equal to origin/develop is the same base, not a second one.
+    gitc(repo, "branch", "develop", "origin/develop");
+
+    const [ticket, onDev] = await bases(work, [repo, onDevelop]);
+    assert.equal(git(repo, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"), "origin/master");
+    assert.equal(ticket?.ref, "origin/develop");
+    assert.equal(ticket?.count, 1);
+    assert.equal(onDev, null);
+});
+
+test("the Changes panel's chip counts commits over the base; a clean checkout with commits is not clean", async (t) => {
+    const { SCRIPT, parseRepos, groupRepos, isClean, aheadChip } = await load<Lib>("mods/repo-changes/lib.js");
+    const root = realpathSync(scratch(t));
+    const ticket = plain(root, "orders-api", "main");
+    gitc(ticket, "switch", "-q", "-c", "feature/PROJ-123");
+    commitIn(ticket, "a.ts");
+    const idle = plain(root, "billing", "main");
+    const repos = parseRepos(scanRoot(SCRIPT, root), root);
+    const byName = (n: string) => repos.find((r: Lib) => r.name === n);
+    assert.equal(aheadChip(byName("orders-api")), "1 commit vs main");
+    assert.equal(aheadChip(byName("billing")), null);
+    assert.equal(byName("orders-api").files.length, 0);
+    const groups = groupRepos(repos);
+    assert.deepEqual(
+        groups.map((g: Lib) => [g.main.name, isClean(g)]),
+        [
+            ["billing", true],
+            ["orders-api", false],
+        ],
+    );
+    commitIn(ticket, "b.ts");
+    assert.equal(
+        aheadChip(parseRepos(scanRoot(SCRIPT, root), root).find((r: Lib) => r.name === "orders-api")),
+        "2 commits vs main",
+    );
+    assert.ok(idle);
+});
+
+test("the branch view lists the committed files and the uncommitted ones against the merge base, and writes nothing", async (t) => {
+    const { findBase, parseNameStatus, branchFiles, canWrite, openMode, effectiveMode, parseStatus } =
+        await load<Lib>("mods/repo-review/lib.js");
+    const root = realpathSync(scratch(t));
+    const repo = plain(root, "orders-api", "main");
+    commitIn(repo, "old.ts", "old\n");
+    commitIn(repo, "gone.ts", "gone\n");
+    gitc(repo, "switch", "-q", "-c", "feature/PROJ-123");
+    commitIn(repo, "added.ts", "new\n");
+    writeFileSync(path.join(repo, "old.ts"), "changed\n");
+    git(repo, "rm", "-q", "gone.ts");
+    writeFileSync(path.join(repo, "loose.ts"), "untracked\n");
+
+    const base = await findBase(exec, repo);
+    assert.equal(base?.count, 1);
+    const diff = await exec("git", ["diff", "--name-status", "--no-renames", base.mergeBase], { cwd: repo });
+    const committed = parseNameStatus(diff.stdout);
+    assert.deepEqual(committed.map((f: Lib) => `${f.status} ${f.path}`).sort(), [
+        "A added.ts",
+        "D gone.ts",
+        "M old.ts",
+    ]);
+    const status = parseStatus(git(repo, "status", "--porcelain=v1", "-b", "--no-renames"));
+    const files = branchFiles(committed, status.files);
+    assert.deepEqual(
+        files.map((f: Lib) => `${f.status} ${f.path}`),
+        ["A added.ts", "D gone.ts", "M old.ts", "?? loose.ts"],
+    );
+    // The working view still shows only the uncommitted ones.
+    assert.deepEqual(status.files.map((f: Lib) => f.path).sort(), ["gone.ts", "loose.ts", "old.ts"]);
+    const patch = git(repo, "diff", base.mergeBase, "--", "added.ts");
+    assert.match(patch, /\+new/);
+
+    // Branch mode is read-only; the mode comes from the request, and an older request without one means working changes.
+    assert.equal(canWrite("branch"), false);
+    assert.equal(canWrite("working"), true);
+    assert.equal(openMode({ repo, file: "a.ts", at: 1 }), "working");
+    assert.equal(openMode({ repo, file: null, mode: "branch", at: 1 }), "branch");
+    assert.equal(openMode(undefined), "working");
+    assert.equal(effectiveMode("branch", true, true), "branch");
+    assert.equal(effectiveMode("branch", true, false), "working");
+    assert.equal(effectiveMode("working", false, true), "branch");
+    assert.equal(effectiveMode("working", true, true), "working");
 });

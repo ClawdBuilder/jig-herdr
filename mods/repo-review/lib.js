@@ -41,7 +41,13 @@ function parseFile(line) {
               : xy.includes("A")
                 ? "A"
                 : "M";
-    return { status, fresh, xy, staged: !fresh && xy[0] !== " ", path: unquote(line.slice(3)) };
+    return {
+        status,
+        fresh,
+        xy,
+        staged: !fresh && xy[0] !== " ",
+        path: unquote(line.slice(3)),
+    };
 }
 
 // `git status --porcelain=v1 -b` output as { branch, ahead, behind, unborn, files, total }.
@@ -49,7 +55,11 @@ export function parseStatus(stdout) {
     const lines = stdout.split("\n").filter(Boolean);
     if (!lines.length || !lines[0].startsWith("## ")) throw new Error(lines[0] || "git status failed");
     const files = lines.slice(1).map(parseFile);
-    return { ...parseBranch(lines[0]), files: files.slice(0, CAP), total: files.length };
+    return {
+        ...parseBranch(lines[0]),
+        files: files.slice(0, CAP),
+        total: files.length,
+    };
 }
 
 // A file path as its folders (dimmed) and its name.
@@ -113,22 +123,119 @@ export const discardKind = (xy) => (xy === "??" || xy[0] === "A" ? "delete" : "r
 /** Tracked: `git restore --worktree --staged -- <file>`; untracked: `git clean -f -- <file>`. Never a folder. */
 export async function discardFile(exec, { checkout, file, expect }) {
     if (!file || file.endsWith("/"))
-        return { ok: false, message: `${file || "That"} is a folder; discard its files one by one.` };
+        return {
+            ok: false,
+            message: `${file || "That"} is a folder; discard its files one by one.`,
+        };
     const run = git(exec, checkout);
     const st = await run([...READ, LITERAL, "status", "--porcelain=v1", "-z", "--no-renames", "-uall", "--", file]);
     if (st.code !== 0) return { ok: false, message: firstLine(st) };
     const entries = st.stdout.split("\0").filter(Boolean);
     const entry = entries.find((e) => e.slice(3) === file);
     if (!entry || entries.length !== 1)
-        return { ok: false, message: entries.length ? `${file} is not a single file.` : `${file} has no changes.` };
+        return {
+            ok: false,
+            message: entries.length ? `${file} is not a single file.` : `${file} has no changes.`,
+        };
     const kind = discardKind(entry.slice(0, 2));
     if (expect && kind !== expect)
-        return { ok: false, message: `${file} changed since; look again before discarding.` };
+        return {
+            ok: false,
+            message: `${file} changed since; look again before discarding.`,
+        };
     if (entry.startsWith("??")) {
         const r = await run([LITERAL, "clean", "-f", "--", file]);
         return r.code === 0 ? { ok: true, message: `Deleted ${file}.` } : { ok: false, message: firstLine(r) };
     }
     const r = await run([LITERAL, "restore", "--worktree", "--staged", "--", file]);
     if (r.code !== 0) return { ok: false, message: firstLine(r) };
-    return { ok: true, message: kind === "delete" ? `Deleted ${file}.` : `Discarded the changes to ${file}.` };
+    return {
+        ok: true,
+        message: kind === "delete" ? `Deleted ${file}.` : `Discarded the changes to ${file}.`,
+    };
+}
+
+// ---- Branch mode: the whole branch against its base ----
+// The tab shows either the working changes (`git diff HEAD`) or the branch (`git diff <merge base>`: the commits ahead of
+// the base branch plus whatever is uncommitted). Branch mode never writes.
+
+const BASES = ["origin/develop", "origin/main", "origin/master", "develop", "main", "master"];
+
+/** What a request to open the tab means for its mode: only "branch" is branch mode; an older request has no mode. */
+export const openMode = (request) => (request?.mode === "branch" ? "branch" : "working");
+
+/** The mode to draw: the wanted one when it has anything to show, else the other. */
+export function effectiveMode(wanted, hasWorking, hasBranch) {
+    if (wanted === "branch") return hasBranch ? "branch" : "working";
+    return hasWorking || !hasBranch ? "working" : "branch";
+}
+
+/** Stage, unstage and discard only make sense for working changes. */
+export const canWrite = (mode) => mode !== "branch";
+
+/** The base branch a checkout is compared with, as in repo-changes' scan script: the closest of the candidates that exist
+ * (origin/develop, origin's HEAD branch, origin/main, origin/master, develop, main, master), meaning the one whose merge
+ * base with HEAD leaves the fewest commits, the earlier one on a tie; a local branch whose origin/ twin is the same commit
+ * is skipped. Null when none exists, when the checkout is on develop, main, master or origin's HEAD branch, or when
+ * nothing is ahead. Otherwise { ref, name, mergeBase, count, commits, more } (commits: the short `git log --oneline`
+ * lines, newest first, at most `limit`; more: how many were left out). No fetch, no network. */
+export async function findBase(exec, cwd, limit = 8) {
+    const run = git(exec, cwd);
+    const cur = await run(["symbolic-ref", "-q", "--short", "HEAD"]);
+    const current = cur.code === 0 ? cur.stdout.trim() : "";
+    const head = await run(["symbolic-ref", "-q", "--short", "refs/remotes/origin/HEAD"]);
+    const headRef = head.code === 0 ? head.stdout.trim() : "";
+    if (current && (["develop", "main", "master"].includes(current) || current === headRef.replace(/^origin\//, "")))
+        return null;
+    let best = null;
+    for (const ref of [...new Set([BASES[0], headRef, ...BASES.slice(1)])].filter(Boolean)) {
+        const sha = await run(["rev-parse", "--verify", "-q", `${ref}^{commit}`]);
+        if (sha.code !== 0) continue;
+        if (!ref.startsWith("origin/")) {
+            const twin = await run(["rev-parse", "--verify", "-q", `origin/${ref}^{commit}`]);
+            if (twin.code === 0 && twin.stdout === sha.stdout) continue;
+        }
+        const mb = await run(["merge-base", ref, "HEAD"]);
+        if (mb.code !== 0) continue;
+        const mergeBase = mb.stdout.trim();
+        const n = await run(["rev-list", "--count", `${mergeBase}..HEAD`]);
+        if (n.code !== 0) continue;
+        const count = Number(n.stdout.trim()) || 0;
+        if (!best || count < best.count) best = { ref, mergeBase, count };
+    }
+    if (!best || !best.count) return null;
+    const log = await run(["log", "--oneline", "--no-decorate", `--max-count=${limit}`, `${best.mergeBase}..HEAD`]);
+    const commits = log.stdout.split("\n").filter(Boolean);
+    return {
+        ...best,
+        name: best.ref.replace(/^origin\//, ""),
+        commits,
+        more: Math.max(0, best.count - commits.length),
+    };
+}
+
+/** `git diff --name-status --no-renames <merge base>` as files like the working list's: { status, fresh, xy, staged, path }.
+ * A type change counts as a modification. */
+export function parseNameStatus(stdout) {
+    return stdout
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => {
+            const [code, ...rest] = line.split("\t");
+            const letter = code[0];
+            const status = "AMD".includes(letter) ? letter : letter === "U" ? "U" : "M";
+            return {
+                status,
+                fresh: false,
+                xy: "  ",
+                staged: false,
+                path: unquote(rest.join("\t")),
+            };
+        });
+}
+
+/** The branch's file list: what differs from the merge base, then untracked files (which `git diff` does not list). */
+export function branchFiles(committed, working) {
+    const seen = new Set(committed.map((f) => f.path));
+    return [...committed, ...working.filter((f) => f.fresh && !seen.has(f.path))].slice(0, CAP);
 }

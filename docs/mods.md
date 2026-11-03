@@ -82,12 +82,19 @@ the header shows its text with syntax colours, and `Preview` goes back.
 ## repo-changes: the Changes panel
 
 Every git checkout under the space's folder, changed ones first, then a `Clean (N)` group; a filter box matches checkout
-names and file paths. A click on a file opens it in a `Review` tab. The branch chip, the file checkboxes and the buttons that
+names and file paths. A click on a file opens it in a `Review` tab. A checkout with commits its base branch lacks, such as a
+ticket branch with its work committed, shows a `3 commits vs develop` chip; a click on the chip, or on the row of a checkout
+with no uncommitted file, opens `Review` on the whole branch. The branch chip, the file checkboxes and the buttons that
 appear on hover run [the git actions](#the-git-actions).
 
 - **Worktrees nest.** Checkouts are grouped by their git common folder: a main checkout shows its linked worktrees under it
   as `↳ <folder>` rows, each with its own branch, ahead and behind, and files. A worktree whose main checkout is not listed
   stands as a row of its own. A main checkout that is clean, with every worktree clean, folds into `Clean (N)`.
+- **The base branch:** the closest of `origin/develop`, origin's HEAD branch, `origin/main`, `origin/master`, `develop`,
+  `main` and `master` that exist: the one with the fewest commits after `git merge-base <base> HEAD` (`develop` first, then the order above, on a
+  tie), so work that landed on the base later is not counted and a branch cut from `develop` is not measured against an older
+  `master`. A local branch equal to its `origin/` twin counts once. A checkout on `develop`, `main`, `master` or origin's HEAD
+  branch has no chip. No fetch: it uses the refs the clone has.
 - **Where it looks:** the space's folder on the space's machine. Inside a repository, only that checkout, and its linked
   worktrees when it is the main one. Otherwise folders with a `.git` up to three levels down, so
   `worktrees/PROJ-123/orders-api` is found, plus the linked worktrees of every main checkout found; `node_modules` is skipped.
@@ -150,10 +157,18 @@ branches that have no local branch. A refusal or git's error shows in the popup;
 
 One repository's changed files on the left and the diff of the chosen file on the right, with added and removed lines
 tinted and marked at the edge. The `j`, `k` and arrow keys step through files. It opens as a tab, so its props come from
-`tab.new`: `{ on, repo, name, file? }` (the machine, the absolute path, a title and the file to show first).
+`tab.new`: `{ on, repo, name, file?, mode? }` (the machine, the absolute path, a title, the file to show first and `"working"`
+or `"branch"`, working by default).
 
 It runs `git status` and `git diff HEAD` in the repository, and reads an untracked file to show it whole. Re-listing is
-every 5 seconds while the tab is shown. A second click on a file of the same repository retargets the open tab.
+every 5 seconds while the tab is shown. A second click on a file of the same repository retargets the open tab; its
+shared message `repo-review.open` is `{ repo, file, mode?, at }`, and one without `mode` means working changes.
+
+In **branch mode** the tab shows `git diff <merge base>`: the commits ahead of the base branch plus anything uncommitted, with
+untracked files added. The sidebar says `<branch> vs <base>`, the commit count and the latest commits, and the files carry
+`A`, `M` or `D` from `git diff --name-status`. It is read-only: no stage, unstage or discard. When a checkout has both working
+changes and commits, a switch at the top of the sidebar, `Working changes` and `Branch vs <base>`, changes between them; the
+one that was clicked shows first.
 
 The diff's header has `Stage` or `Unstage` and `Discard…` for the shown file, with the same commands, confirm and refusals as
 [the git actions](#the-git-actions). Its `lib.js` holds a copy of those three functions, since mods cannot import each other;
@@ -164,6 +179,8 @@ a test runs both copies.
 A picker of the repositories under the space's folder and the commit graph of the chosen one, with lanes, branch and tag
 labels, the author's initials and the age. A click on a commit opens its message and files; a file, or `Open diff`, shows the
 diff in a terminal beside (`terminal.open` with `git show`). A filter box matches message, author, hash and branch names.
+When it matches no commit and the space has several repositories, the empty list also offers `Look in another repo`: the
+repositories and worktrees whose folder name or branch holds the typed text, such as a ticket number. A click shows that one.
 
 - **Where it looks:** the space's folder on the space's machine; inside a repository, only that one. Otherwise folders with a
   `.git` up to three levels down, skipping `node_modules`. The picker lists them with their branch and a dot for uncommitted

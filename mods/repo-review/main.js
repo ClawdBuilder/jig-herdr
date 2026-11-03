@@ -2,15 +2,34 @@
 // on the right. repo-changes opens it (tab.new, or setShared("repo-review.open") on a tab that
 // already shows the repo). The diff's header can stage or unstage the shown file, and discard it after
 // an inline confirm (lib.js); nothing else is written, and nothing is committed or fetched here.
+// Two modes: "working" (uncommitted changes, `git diff HEAD`) and "branch" (the branch against its base branch,
+// `git diff <merge base>`: committed work plus uncommitted). Branch mode is read-only. A switch in the sidebar
+// changes between them when both have something to show.
 //
-// props: { on, repo: "<absolute repo path>", name: "<repo name>", file?: "<path to select first>" }
+// props: { on, repo: "<absolute repo path>", name: "<repo name>", file?: "<path to select first>",
+//          mode?: "working" | "branch" (default working) }
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, v_virtual_list } from "gpui-base";
 import { spaces, panes, exec, readTextFile, theme, settings, shared, props as modProps } from "herdr";
-import { parseStatus, splitPath, diffRows, stageFile, unstageFile, discardFile, discardKind } from "./lib.js";
+import {
+    parseStatus,
+    splitPath,
+    diffRows,
+    stageFile,
+    unstageFile,
+    discardFile,
+    discardKind,
+    openMode,
+    effectiveMode,
+    canWrite,
+    findBase,
+    parseNameStatus,
+    branchFiles,
+} from "./lib.js";
 
 const EVERY = 5000; // re-list the files this often while the tab is shown
+const BASE_EVERY = 60000; // find the base branch again this often even when HEAD stays (origin may have been fetched)
 const ICON = (name) => `mods/workspace-chrome/${name}.svg`;
 // Reads write nothing under .git (same flags as repo-changes).
 const READ = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "diff.autoRefreshIndex=false"];
@@ -25,8 +44,14 @@ export default class RepoReview extends View {
         this.ahead = 0;
         this.behind = 0;
         this.unborn = false;
-        this.files = [];
+        this.files = []; // the list shown: the working one or the branch one, by this.view
         this.total = 0;
+        this.mode = openMode(props); // the mode asked for (by the click that opened the tab, or the switch)
+        this.view = this.mode; // the mode drawn: this.mode, unless it has nothing to show
+        this.workFiles = [];
+        this.workTotal = 0;
+        this.branchList = [];
+        this.base = null; // { ref, name, mergeBase, count, commits, more } while the branch is ahead of its base
         this.sel = null;
         this.want = props.file ?? null; // want: a file to select as soon as the list has it
         this.rows = [];
@@ -53,9 +78,17 @@ export default class RepoReview extends View {
         const open = shared("repo-review.open");
         if (open && open.repo === this.repo && open.at > this.handled) {
             this.handled = open.at;
-            this.want = open.file;
-            if (this.files.some((f) => f.path === open.file)) this.pick(open.file, cx);
-            else this.last = 0; // maybe a new file: re-list now
+            this.want = open.file ?? null;
+            const mode = openMode(open);
+            if (mode !== this.mode) {
+                this.mode = mode; // an older request has no mode: working changes
+                this.applyMode();
+                this.resetSelection();
+            }
+            if (open.file && this.files.some((f) => f.path === open.file)) this.pick(open.file, cx);
+            else if (open.file)
+                this.last = 0; // maybe a new file: re-list now
+            else this.switchTo(this.mode, cx);
         }
         if (this.shown() && Date.now() - this.last >= EVERY) this.refresh(cx);
     }
@@ -84,14 +117,43 @@ export default class RepoReview extends View {
                 );
                 if (r.code !== 0) throw new Error((r.stderr || `exit ${r.code}`).trim().split("\n")[0]);
                 const s = parseStatus(r.stdout);
+                // The base costs a dozen git calls: find it again only when HEAD moves, or after a minute (a fetch).
+                const head = s.unborn
+                    ? null
+                    : await exec("git", [...READ, "rev-parse", "HEAD"], { cwd: this.repo, on: this.on });
+                const key = head?.code === 0 ? head.stdout.trim() : null;
+                if (!key) this.baseFor = null;
+                else if (key !== this.baseFor?.key || Date.now() - this.baseFor.at >= BASE_EVERY)
+                    this.baseFor = { key, at: Date.now(), base: await findBase(this.git(), this.repo) };
+                const base = this.baseFor?.base ?? null;
+                let committed = [];
+                if (base) {
+                    const d = await exec(
+                        "git",
+                        [
+                            ...READ,
+                            "-c",
+                            "core.quotePath=false",
+                            "diff",
+                            "--name-status",
+                            "--no-renames",
+                            base.mergeBase,
+                        ],
+                        { cwd: this.repo, on: this.on },
+                    );
+                    if (d.code === 0) committed = parseNameStatus(d.stdout);
+                }
                 Object.assign(this, {
                     branch: s.branch,
                     ahead: s.ahead,
                     behind: s.behind,
                     unborn: s.unborn,
-                    files: s.files,
-                    total: s.total,
+                    workFiles: s.files,
+                    workTotal: s.total,
+                    base,
+                    branchList: base ? branchFiles(committed, s.files) : [],
                 });
+                this.applyMode();
                 this.error = null;
                 this.loaded = true;
                 this.fixSelection();
@@ -104,6 +166,41 @@ export default class RepoReview extends View {
                 this.again = false;
                 cx.notify();
             }
+        });
+        cx.notify();
+    }
+
+    /** Herdr's exec on the tab's machine, as lib.js takes it. */
+    git() {
+        return (cmd, args, options) => exec(cmd, args, { ...options, on: this.on });
+    }
+
+    // Which list to draw: the asked-for mode if it has anything, else the other.
+    applyMode() {
+        this.view = effectiveMode(this.mode, this.workFiles.length > 0, Boolean(this.base));
+        const branch = this.view === "branch";
+        this.files = branch ? this.branchList : this.workFiles;
+        this.total = branch ? this.branchList.length : this.workTotal;
+    }
+
+    resetSelection() {
+        this.confirming = null;
+        this.note = null;
+        this.sel = null;
+        this.fixSelection();
+        this.rows = [];
+        this.sig = "";
+        this.listId += 1;
+    }
+
+    /** The switch in the sidebar (or a request for the other mode): draw that list, first file selected. */
+    switchTo(mode, cx) {
+        this.mode = mode;
+        this.applyMode();
+        this.resetSelection();
+        cx.spawn(async (cx) => {
+            await this.loadDiff();
+            cx.notify();
         });
         cx.notify();
     }
@@ -122,9 +219,10 @@ export default class RepoReview extends View {
     // The diff as the shipped changes mod gets it: a new file is shown whole, the rest from `git diff HEAD`.
     async diffLines(file) {
         if (!(file.fresh || this.unborn)) {
+            const from = this.view === "branch" && this.base ? this.base.mergeBase : "HEAD";
             const r = await exec(
                 "git",
-                [...READ, "diff", "HEAD", "--no-ext-diff", "--no-textconv", "--no-color", "--", file.path],
+                [...READ, "diff", from, "--no-ext-diff", "--no-textconv", "--no-color", "--", file.path],
                 { cwd: this.repo, on: this.on },
             );
             if (r.code !== 0) throw new Error(r.stderr);
@@ -133,7 +231,9 @@ export default class RepoReview extends View {
             return first < 0 ? ["No text diff available"] : all.slice(first);
         }
         if (file.path.endsWith("/")) return ["Untracked folder · open a terminal there to see its files"];
-        const text = await readTextFile(`${this.repo}/${file.path}`, { on: this.on }).catch(() => null);
+        const text = await readTextFile(`${this.repo}/${file.path}`, {
+            on: this.on,
+        }).catch(() => null);
         if (text === null) return ["Cannot preview this file (binary, too large, or unreadable)"];
         if (text.includes("\0")) return ["Binary file · no text diff"];
         const all = text.slice(0, 400000).replace(/\n$/, "").split("\n");
@@ -176,7 +276,10 @@ export default class RepoReview extends View {
             try {
                 this.note = await fn(git);
             } catch (e) {
-                this.note = { ok: false, message: String(e?.message ?? e).split("\n")[0] };
+                this.note = {
+                    ok: false,
+                    message: String(e?.message ?? e).split("\n")[0],
+                };
             }
             this.acting = false;
             this.last = 0;
@@ -187,6 +290,7 @@ export default class RepoReview extends View {
 
     /** Stage / Unstage and Discard for the shown file, or the discard confirm in their place. */
     fileActions(t, file) {
+        if (!canWrite(this.view)) return [];
         const args = { checkout: this.repo, file: file.path };
         const kind = discardKind(file.xy);
         if (this.confirming === file.path)
@@ -313,6 +417,65 @@ export default class RepoReview extends View {
             );
     }
 
+    // "Working changes" and "Branch vs <base>", side by side, when both have something to show. The shown one is filled.
+    modeSwitch(t) {
+        if (!this.base || !this.workFiles.length) return [];
+        const seg = (id, label, mode) =>
+            div()
+                .id(id)
+                .flex_1()
+                .min_w(0)
+                .h(24)
+                .px(6)
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(6)
+                .truncate()
+                .text_size(11.5)
+                .cursor_pointer()
+                .when(this.view === mode, (el) => el.bg(t.selected).text_color(t.foreground).font_semibold())
+                .when(this.view !== mode, (el) =>
+                    el.text_color(t.muted).hover((s) => s.bg(t.hover).text_color(t.foreground)),
+                )
+                .on_click((_e, cx) => this.switchTo(mode, cx))
+                .child(label);
+        return [
+            h_flex()
+                .flex_none()
+                .p(6)
+                .gap(4)
+                .border_b(1)
+                .border_color(t.border)
+                .child(seg("review-mode-working", "Working changes", "working"))
+                .child(seg("review-mode-branch", `Branch vs ${this.base.name}`, "branch")),
+        ];
+    }
+
+    // Branch mode: "<branch> vs <base> · N commits", then the commits (short, newest first).
+    branchHeader(t) {
+        if (this.view !== "branch" || !this.base) return [];
+        const { name, count, commits, more } = this.base;
+        return [
+            v_flex()
+                .flex_none()
+                .px(12)
+                .py(6)
+                .gap(2)
+                .border_b(1)
+                .border_color(t.border)
+                .text_size(11)
+                .child(
+                    div()
+                        .truncate()
+                        .text_color(t.foreground)
+                        .child(`${this.branch} vs ${name} · ${count} commit${count === 1 ? "" : "s"} · read-only`),
+                )
+                .children(commits.map((c) => div().truncate().text_color(t.muted).child(c)))
+                .when(more > 0, (el) => el.child(div().text_color(t.dim).child(`+${more} older`))),
+        ];
+    }
+
     // Left column: repo name + Refresh, branch + file count, then the changed files.
     sidebar(t) {
         const more = this.total - this.files.length;
@@ -368,6 +531,8 @@ export default class RepoReview extends View {
                             .child(`${this.total} file${this.total === 1 ? "" : "s"}`),
                     ),
             )
+            .children(this.modeSwitch(t))
+            .children(this.branchHeader(t))
             .when(Boolean(this.error), (el) =>
                 el.child(
                     div().flex_none().px(12).py(3).truncate().text_size(11).text_color(t.blocked).child(this.error),

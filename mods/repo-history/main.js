@@ -13,6 +13,7 @@ import {
     initialsOf,
     isOnScreen,
     layoutGraph,
+    matchRepos,
     parseCommitDetail,
     parseLog,
     parseRepos,
@@ -569,12 +570,7 @@ export default class RepoHistory extends View {
     /** While the chooser is open this list takes the place of the graph: a long list and a long graph together are too much to draw. */
     repoList(t, hue) {
         const needle = this.pickBox.value().trim().toLowerCase();
-        const shown = (this.repos ?? []).filter(
-            (r) =>
-                !needle ||
-                relName(r.path, this.where.root).toLowerCase().includes(needle) ||
-                r.branch.toLowerCase().includes(needle),
-        );
+        const shown = matchRepos(this.repos ?? [], this.where.root, needle);
         const row = (repo) => {
             const current = repo.path === this.repo;
             return h_flex()
@@ -695,6 +691,27 @@ export default class RepoHistory extends View {
             );
     }
 
+    /** A repo found by the commit filter's text: a click shows its graph and clears the filter. */
+    otherRepo(t, repo) {
+        return h_flex()
+            .id(`other-${repo.path}`)
+            .flex_none()
+            .h(26)
+            .px(8)
+            .gap(8)
+            .items_center()
+            .rounded(6)
+            .cursor_pointer()
+            .hover((s) => s.bg(t.hover))
+            .on_click((_e, cx) => {
+                this.show(repo.path, true);
+                this.filterBox.set_value("");
+                cx.notify();
+            })
+            .child(div().flex_1().min_w(0).truncate().child(relName(repo.path, this.where.root)))
+            .child(div().flex_none().max_w(130).truncate().text_size(10.5).text_color(t.dim).child(repo.branch));
+    }
+
     /** The commits (or why there are none), then "Load more" while a full page came back. */
     commitList(t, ctx, query) {
         const { flat } = ctx;
@@ -705,6 +722,11 @@ export default class RepoHistory extends View {
         let waitingText = "Loading…";
         if (!this.where.root) waitingText = "No folder.";
         else if (this.repos && !this.repo) waitingText = "No git repository found here.";
+        // The filter matched no commit: repos and worktrees whose folder or branch has the text (a ticket number).
+        const other =
+            this.single || !query.trim() || (this.repos?.length ?? 0) < 2
+                ? []
+                : matchRepos(this.repos, this.where.root, query).filter((r) => r.path !== this.repo);
         const message = (text) => div().p(8).text_color(t.dim).child(text);
         const emptyText = flat
             ? `No commit matches “${query.trim()}” in the last ${this.commits?.length}.`
@@ -721,6 +743,11 @@ export default class RepoHistory extends View {
             .when(Boolean(this.commits), (el) =>
                 el
                     .when(shown.length === 0, (list) => list.child(message(emptyText)))
+                    .when(shown.length === 0 && other.length > 0, (list) =>
+                        list
+                            .child(div().px(8).pt(4).text_size(11).text_color(t.muted).child("Look in another repo"))
+                            .children(other.map((repo) => this.otherRepo(t, repo))),
+                    )
                     .children(
                         shown.flatMap(([commit, row]) => [
                             this.commitRow(t, commit, row, ctx),

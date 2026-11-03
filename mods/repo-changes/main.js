@@ -28,6 +28,7 @@ import {
     groupRepos,
     filterGroups,
     isClean,
+    aheadChip,
     splitPath,
     stageFile,
     unstageFile,
@@ -269,9 +270,9 @@ export default class RepoChanges extends View {
         });
     }
 
-    // A click on a file: show it in the repo's Review tab, which is made on the first click and
-    // retargeted (shared state, then selected) on the next ones.
-    review(repo, file) {
+    // A click on a file (working mode) or on a commits chip (branch mode, no file): show it in the repo's Review tab,
+    // which is made on the first click and retargeted (shared state, then selected) on the next ones.
+    review(repo, file, mode = "working") {
         const { space, on } = this.loc,
             name = `Review · ${repo.name}`;
         const tab = spaces()
@@ -282,9 +283,9 @@ export default class RepoChanges extends View {
                 space,
                 name,
                 mod: "repo-review",
-                props: { on, repo: repo.path, name: repo.name, file: file.path },
+                props: { on, repo: repo.path, name: repo.name, file: file?.path, mode },
             });
-        setShared("repo-review.open", { repo: repo.path, file: file.path, at: Date.now() });
+        setShared("repo-review.open", { repo: repo.path, file: file?.path ?? null, mode, at: Date.now() });
         run("tab.select", { id: tab.id });
     }
 
@@ -330,7 +331,7 @@ export default class RepoChanges extends View {
             .when(nested, (el) => el.child(div().flex_none().text_color(t.dim).child("↳")))
             .child(
                 div()
-                    .flex_none()
+                    .min_w(40)
                     .max_w(200)
                     .truncate()
                     .when(!nested, (el) => el.font_semibold())
@@ -345,7 +346,7 @@ export default class RepoChanges extends View {
             h_flex()
                 .id(`branch-${repo.path}`)
                 .flex_none()
-                .max_w(140)
+                .max_w(repo.base ? 110 : 140)
                 .h(20)
                 .px(4)
                 .gap(4)
@@ -363,9 +364,39 @@ export default class RepoChanges extends View {
                 })
                 .child(svg(ICON("branch")).size(11).flex_none())
                 .child(div().min_w(0).truncate().child(repo.branch)),
+            this.commitsChip(t, repo),
             repo.ahead ? div().flex_none().text_size(11).text_color(t.foreground).child(`↑${repo.ahead}`) : null,
             repo.behind ? div().flex_none().text_size(11).text_color(t.blocked).child(`↓${repo.behind}`) : null,
         ].filter(Boolean);
+    }
+
+    // "3 commits vs develop": the checkout is ahead of its base branch. A click reviews the branch.
+    commitsChip(t, repo) {
+        const label = aheadChip(repo);
+        if (!label) return null;
+        return div()
+            .id(`commits-${repo.path}`)
+            .flex_none()
+            .max_w(170)
+            .h(18)
+            .px(6)
+            .flex()
+            .items_center()
+            .rounded(9)
+            .border_1()
+            .border_color(t.accent)
+            .truncate()
+            .text_size(10.5)
+            .text_color(t.accent)
+            .cursor_pointer()
+            .hover((s) => s.bg(t.raised))
+            .tooltip(`Review this branch's ${repo.base.count} commits against ${repo.base.name}`)
+            .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+            .on_click((_e, cx) => {
+                cx.stop_propagation();
+                this.review(repo, null, "branch");
+            })
+            .child(label);
     }
 
     // The buttons that appear while the pointer is on a checkout's row.
@@ -408,7 +439,11 @@ export default class RepoChanges extends View {
             .rounded(7)
             .hover((s) => s.bg(t.hover))
             .on_hover(this.hovering(repo.path))
-            .when(has, (el) => el.cursor_pointer().on_click((_e, cx) => this.fold(repo.path, cx)))
+            .when(has || repo.base, (el) =>
+                el
+                    .cursor_pointer()
+                    .on_click((_e, cx) => (has ? this.fold(repo.path, cx) : this.review(repo, null, "branch"))),
+            )
             .child(
                 div()
                     .w(12)

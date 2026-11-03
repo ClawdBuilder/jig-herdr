@@ -62,6 +62,15 @@ export function relName(path, root) {
     return prefix !== "/" && path.startsWith(prefix) ? path.slice(prefix.length) : path.split("/").pop();
 }
 
+/** The repositories whose folder name (below root) or branch holds the text, in the list's order. No text matches all. */
+export function matchRepos(repos, root, text) {
+    const needle = (text ?? "").trim().toLowerCase();
+    if (!needle) return repos;
+    return repos.filter(
+        (r) => relName(r.path, root).toLowerCase().includes(needle) || r.branch.toLowerCase().includes(needle),
+    );
+}
+
 /** The repository that holds a path: the deepest one whose path is the path itself or a parent of it. */
 export function repoOf(repos, path) {
     if (!path) return null;

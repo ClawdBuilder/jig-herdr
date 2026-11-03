@@ -8,9 +8,11 @@ export const CAP = 200;
 // Output: "@@root <root as a physical path>", then per checkout a line "@@repo <absolute path>", a line
 // "@@git <common git dir><tab><own git dir>" (the same for a main checkout, different for a linked worktree), then
 // `git status --porcelain=v1 -b` (branch line, then one line per changed file, at most CAP), then "=<changed file count>".
-// If root is inside a git repo, only that checkout is listed. Otherwise the checkouts are the folders with a .git (a folder
-// for a clone, a file for a worktree) up to three levels down, so worktrees/<ticket>/<repo> is found too. Looking stops at
-// a repo and skips node_modules. A main checkout's linked worktrees are added wherever they are, each checkout once.
+// A checkout with commits its base branch lacks also has "@@base <base ref><tab><merge base><tab><commit count>" after
+// its "@@git" line. The base is the closest of the candidates that exist (origin/develop, origin's HEAD branch,
+// origin/main, origin/master, develop, main, master): the one whose merge base with HEAD leaves the fewest commits, the
+// earlier one on a tie; a local branch is skipped when its origin/ twin is the same commit. Nothing is printed for a
+// checkout on develop, main, master or origin's HEAD branch, or with no commit ahead.
 // No fetch and no network: each checkout is read from its own disk, up to 8 at a time.
 // (No dollar-brace in here except escaped ones: this is a JS template string.)
 export const SCRIPT = `root=$(cd "$1" 2>/dev/null && pwd -P) || root=$1
@@ -38,8 +40,27 @@ with_worktrees() {
     git -C "$repo" worktree list --porcelain 2>/dev/null | awk '/^worktree / { if (n++) print substr($0, 10) }'
   done
 }
+branch_base() {
+  cur=$(git -C "$1" symbolic-ref -q --short HEAD 2>/dev/null)
+  hd=$(git -C "$1" symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null)
+  hb=$(printf %s "$hd" | sed 's|^origin/||')
+  case $cur in develop|main|master) return 0;; esac
+  [ -n "$hb" ] && [ "$cur" = "$hb" ] && return 0
+  bn=
+  for c in origin/develop "$hd" origin/main origin/master develop main master; do
+    [ -n "$c" ] || continue
+    sha=$(git -C "$1" rev-parse --verify -q "$c^{commit}" 2>/dev/null) || continue
+    case $c in origin/*) ;; *) tw=$(git -C "$1" rev-parse --verify -q "origin/$c^{commit}" 2>/dev/null) && [ "$tw" = "$sha" ] && continue;; esac
+    mb=$(git -C "$1" merge-base "$c" HEAD 2>/dev/null) || continue
+    n=$(git -C "$1" rev-list --count "$mb..HEAD" 2>/dev/null) || continue
+    if [ -z "$bn" ] || [ "$n" -lt "$bn" ]; then best=$c; bmb=$mb; bn=$n; fi
+  done
+  [ -n "$bn" ] && [ "$bn" -gt 0 ] && printf '@@base %s\\t%s\\t%s\\n' "$best" "$bmb" "$bn"
+  return 0
+}
 scan() {
   printf '@@git %s\\n' "$(git -C "$1" rev-parse --path-format=absolute --git-common-dir --absolute-git-dir 2>/dev/null | tr '\\n' '\\t')"
+  branch_base "$1"
   git -C "$1" --no-optional-locks -c core.fsmonitor=false -c core.quotePath=false status --porcelain=v1 -b --no-renames 2>&1 \\
     | awk -v cap=${CAP} 'NR <= cap + 1 { print } END { print "=" (NR > 0 ? NR - 1 : 0) }'
 }
@@ -111,7 +132,7 @@ function parseFile(line) {
 }
 
 // The script's output as checkouts: { path, name, folder, common, linked, branch, ahead, behind, unborn, files, total,
-// staged, error }. `name` is the path below root (the folder name when it is root or outside it).
+// staged, base, error }. `base` is null, or { ref, name, mergeBase, count }: the commits this checkout has over its base branch. `name` is the path below root (the folder name when it is root or outside it).
 export function parseRepos(stdout, root) {
     const [head, ...blocks] = stdout.split("@@repo ");
     const said = /^@@root (.*)$/m.exec(head ?? "")?.[1];
@@ -123,7 +144,9 @@ export function parseRepos(stdout, root) {
         const name = base && path.startsWith(`${base}/`) ? path.slice(base.length + 1) : folder;
         const gitLine = rest.find((l) => l.startsWith("@@git "));
         const [common = null, own = null] = (gitLine?.slice(6) ?? "").split("\t").filter(Boolean);
-        const lines = rest.filter((l) => !l.startsWith("@@git "));
+        const baseLine = rest.find((l) => l.startsWith("@@base "));
+        const [ref, mergeBase, count] = (baseLine?.slice(7) ?? "").split("\t");
+        const lines = rest.filter((l) => !l.startsWith("@@git ") && !l.startsWith("@@base "));
         const repo = {
             path,
             name,
@@ -137,6 +160,15 @@ export function parseRepos(stdout, root) {
             files: [],
             total: 0,
             staged: 0,
+            base:
+                ref && mergeBase && Number(count) > 0
+                    ? {
+                          ref,
+                          name: ref.replace(/^origin\//, ""),
+                          mergeBase,
+                          count: Number(count),
+                      }
+                    : null,
             error: null,
         };
         const counted = lines.filter((l) => l.startsWith("=")).pop();
@@ -175,8 +207,12 @@ export function groupRepos(repos) {
 /** The checkouts of a group, main first. */
 export const checkoutsOf = (group) => [group.main, ...group.worktrees];
 
-/** A group is clean when its main checkout and every worktree has no change and no error. */
-export const isClean = (group) => checkoutsOf(group).every((r) => !r.error && !r.files.length);
+/** A group is clean when its main checkout and every worktree has no change, no error and no commit over its base branch. */
+export const isClean = (group) => checkoutsOf(group).every((r) => !r.error && !r.files.length && !r.base);
+
+/** The chip beside a checkout's branch: "3 commits vs develop", or null when it has no commit over its base. */
+export const aheadChip = (repo) =>
+    repo.base ? `${repo.base.count} commit${repo.base.count === 1 ? "" : "s"} vs ${repo.base.name}` : null;
 
 // Repos that match a filter by name or by one of their files; a repo matched by name keeps all its files.
 export function filterRepos(repos, text) {
@@ -312,7 +348,12 @@ export async function listBranches(exec, checkout) {
         if (ref.startsWith("refs/heads/")) {
             const name = ref.slice(11);
             const elsewhere = worktree && worktree !== here ? worktree.split("/").pop() : null;
-            local.push({ name, remote: false, current: name === current, inUse: elsewhere });
+            local.push({
+                name,
+                remote: false,
+                current: name === current,
+                inUse: elsewhere,
+            });
         } else {
             const name = ref.slice("refs/remotes/origin/".length);
             if (name !== "HEAD") remote.push(name);
@@ -349,11 +390,17 @@ export async function switchBranch(exec, { checkout, branch, busy = [] }) {
     if (!target) return { ok: false, message: `No branch ${branch} here or on origin.` };
     if (target.current) return { ok: false, message: `Already on ${branch}.` };
     if (target.inUse)
-        return { ok: false, message: `${branch} is checked out in ${target.inUse}; switch there instead.` };
+        return {
+            ok: false,
+            message: `${branch} is checked out in ${target.inUse}; switch there instead.`,
+        };
     const args = target.remote ? ["switch", "--track", `origin/${branch}`] : ["switch", branch];
     const r = await git(exec, checkout)(args);
     if (r.code !== 0) return { ok: false, message: firstLine(r) };
-    return { ok: true, message: `Switched to ${branch}${target.remote ? `, tracking origin/${branch}` : ""}.` };
+    return {
+        ok: true,
+        message: `Switched to ${branch}${target.remote ? `, tracking origin/${branch}` : ""}.`,
+    };
 }
 
 /** The base for a new branch: config `baseBranch`, else origin's HEAD branch, else origin's main or master, else main. */
@@ -380,14 +427,24 @@ export async function newBranch(exec, { checkout, name, base, busy = [] }) {
     if (await invalidBranchName(exec, checkout, from)) return { ok: false, message: `"${base}" is not a valid base.` };
     const run = git(exec, checkout);
     if ((await run(["show-ref", "--verify", "-q", `refs/heads/${name}`])).code === 0)
-        return { ok: false, message: `A branch ${name} exists already; pick it from the list.` };
+        return {
+            ok: false,
+            message: `A branch ${name} exists already; pick it from the list.`,
+        };
     const fetched = await run(["fetch", "origin", from]);
-    if (fetched.code !== 0) return { ok: false, message: `git fetch origin ${from} failed: ${firstLine(fetched)}` };
+    if (fetched.code !== 0)
+        return {
+            ok: false,
+            message: `git fetch origin ${from} failed: ${firstLine(fetched)}`,
+        };
     if ((await run(["show-ref", "--verify", "-q", `refs/remotes/origin/${from}`])).code !== 0)
         return { ok: false, message: `origin has no branch ${from}.` };
     const r = await run(["switch", "--no-track", "-c", name, `origin/${from}`]);
     if (r.code !== 0) return { ok: false, message: firstLine(r) };
-    return { ok: true, message: `Created ${name} from origin/${from} and switched to it.` };
+    return {
+        ok: true,
+        message: `Created ${name} from origin/${from} and switched to it.`,
+    };
 }
 
 const unborn = async (run) => (await run(["rev-parse", "--verify", "-q", "HEAD"])).code !== 0;
@@ -434,24 +491,36 @@ export const discardKind = (xy) => (xy === "??" || xy[0] === "A" ? "delete" : "r
  * and when the file is no longer what the confirm said (`expect`: "delete" or "restore"). There is no "discard all". */
 export async function discardFile(exec, { checkout, file, expect }) {
     if (!file || file.endsWith("/"))
-        return { ok: false, message: `${file || "That"} is a folder; discard its files one by one.` };
+        return {
+            ok: false,
+            message: `${file || "That"} is a folder; discard its files one by one.`,
+        };
     const run = git(exec, checkout);
     const st = await run([...READ, LITERAL, "status", "--porcelain=v1", "-z", "--no-renames", "-uall", "--", file]);
     if (st.code !== 0) return { ok: false, message: firstLine(st) };
     const entries = st.stdout.split("\0").filter(Boolean);
     const entry = entries.find((e) => e.slice(3) === file);
     if (!entry || entries.length !== 1)
-        return { ok: false, message: entries.length ? `${file} is not a single file.` : `${file} has no changes.` };
+        return {
+            ok: false,
+            message: entries.length ? `${file} is not a single file.` : `${file} has no changes.`,
+        };
     const kind = discardKind(entry.slice(0, 2));
     if (expect && kind !== expect)
-        return { ok: false, message: `${file} changed since; look again before discarding.` };
+        return {
+            ok: false,
+            message: `${file} changed since; look again before discarding.`,
+        };
     if (entry.startsWith("??")) {
         const r = await run([LITERAL, "clean", "-f", "--", file]);
         return r.code === 0 ? { ok: true, message: `Deleted ${file}.` } : { ok: false, message: firstLine(r) };
     }
     const r = await run([LITERAL, "restore", "--worktree", "--staged", "--", file]);
     if (r.code !== 0) return { ok: false, message: firstLine(r) };
-    return { ok: true, message: kind === "delete" ? `Deleted ${file}.` : `Discarded the changes to ${file}.` };
+    return {
+        ok: true,
+        message: kind === "delete" ? `Deleted ${file}.` : `Discarded the changes to ${file}.`,
+    };
 }
 
 /** `git commit -m <message>`: the staged files only, with the hooks. Refused with an empty message or nothing staged.
@@ -460,9 +529,16 @@ export async function commit(exec, { checkout, message }) {
     if (!message?.trim()) return { ok: false, message: "Write a commit message first." };
     const run = git(exec, checkout);
     if ((await run(["diff", "--cached", "--quiet"])).code === 0)
-        return { ok: false, message: "Nothing is staged: tick the files to commit first." };
+        return {
+            ok: false,
+            message: "Nothing is staged: tick the files to commit first.",
+        };
     const r = await run(["commit", "-m", message]);
     if (r.code !== 0) return { ok: false, message: firstLine(r) };
     const hash = await run(["rev-parse", "--short", "HEAD"]);
-    return { ok: true, message: `Committed ${hash.stdout.trim()}.`, hash: hash.stdout.trim() };
+    return {
+        ok: true,
+        message: `Committed ${hash.stdout.trim()}.`,
+        hash: hash.stdout.trim(),
+    };
 }

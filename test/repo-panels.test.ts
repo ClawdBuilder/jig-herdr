@@ -618,3 +618,22 @@ test("repo-history filters commits by message, author, hash or branch name", asy
         assert.equal(commitMatches(commit, query), true, query);
     assert.equal(commitMatches(commit, "billing"), false);
 });
+
+test("repo-history finds repos and worktrees by folder name or branch, for a filter that matched no commit", async () => {
+    const { matchRepos } = await load<Lib>("mods/repo-history/lib.js");
+    const repos = [
+        { path: "/w/orders-api", linked: false, branch: "main", dirty: false },
+        { path: "/w/tickets/PROJ-123/orders-api", linked: true, branch: "feature/PROJ-123", dirty: true },
+        { path: "/w/billing", linked: false, branch: "feature/PROJ-9", dirty: false },
+    ];
+    assert.deepEqual(
+        matchRepos(repos, "/w", " proj-123 ").map((r: Lib) => r.path),
+        ["/w/tickets/PROJ-123/orders-api"],
+    );
+    assert.deepEqual(
+        matchRepos(repos, "/w", "billing").map((r: Lib) => r.path),
+        ["/w/billing"],
+    );
+    assert.equal(matchRepos(repos, "/w", "").length, 3);
+    assert.equal(matchRepos(repos, "/w", "nothing").length, 0);
+});
