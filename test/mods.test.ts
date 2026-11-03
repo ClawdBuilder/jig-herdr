@@ -151,6 +151,43 @@ test("repo-review numbers the lines of a diff and reads a status", async () => {
     assert.throws(() => lib.parseStatus("fatal: no"), /fatal: no/);
 });
 
+test("repo-review selects diff lines and copies their code", async () => {
+    const lib = await load<{
+        diffRows(lines: string[]): { kind: string; raw?: string }[];
+        selectLine(
+            rows: unknown[],
+            sel: unknown,
+            index: number,
+            extend: boolean,
+        ): { anchor: number; end: number } | null;
+        inSelection(sel: unknown, index: number): boolean;
+        selectionCopy(rows: unknown[], sel: unknown): { text: string; lines: number } | null;
+    }>("mods/repo-review/lib.js");
+    // rows: 0 header, 1 context, 2 deleted, 3 added, 4 added blank, 5 context
+    const rows = lib.diffRows(["@@ -1,3 +1,4 @@", " keep", "-gone", "+  new", "+", " end"]);
+    const one = lib.selectLine(rows, null, 3, false);
+    assert.deepEqual(one, { anchor: 3, end: 3 });
+    assert.equal(lib.selectLine(rows, one, 3, false), null, "a second click on the only selected line clears it");
+    assert.deepEqual(
+        lib.selectLine(rows, one, 1, true),
+        { anchor: 3, end: 1 },
+        "shift extends from the anchor, either way",
+    );
+    assert.deepEqual(lib.selectLine(rows, null, 1, true), { anchor: 1, end: 1 }, "shift with nothing selected selects");
+    assert.equal(lib.selectLine(rows, one, 0, false), one, "a header row changes nothing");
+    assert.deepEqual(
+        [1, 2, 3, 4].map((i) => lib.inSelection({ anchor: 3, end: 1 }, i)),
+        [true, true, true, false],
+    );
+    assert.equal(lib.inSelection(null, 1), false);
+    // New side: context and added lines, no deleted one, no markers, an empty line stays empty.
+    assert.deepEqual(lib.selectionCopy(rows, { anchor: 0, end: 5 }), { text: "keep\n  new\n\nend", lines: 4 });
+    // Only deleted lines: those are copied.
+    assert.deepEqual(lib.selectionCopy(rows, { anchor: 2, end: 2 }), { text: "gone", lines: 1 });
+    assert.equal(lib.selectionCopy(rows, { anchor: 0, end: 0 }), null);
+    assert.equal(lib.selectionCopy(rows, null), null);
+});
+
 test("jig-activity lists the stack's buttons from the layout, leaves out missing mods and puts 'end' last", async () => {
     const lib = await load<{
         buttons(

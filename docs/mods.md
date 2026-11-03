@@ -170,6 +170,20 @@ untracked files added. The sidebar says `<branch> vs <base>`, the commit count a
 changes and commits, a switch at the top of the sidebar, `Working changes` and `Branch vs <base>`, changes between them; the
 one that was clicked shows first.
 
+**Width.** The divider between the file list and the diff drags (160 to 720 px, 280 by default). The width is kept in the
+mod's `localStorage`, so a new Review tab and a restart open at it.
+
+**Copying code.** The diff is not text you can select with the mouse, so lines are picked by clicking:
+
+- **Select:** click a code line to select it, shift-click another to extend the range, click the only selected line again or
+  press `Escape` to clear. Hunk headers cannot be selected. The selection is tinted blue (the theme's ANSI blue), so it never reads as an added or deleted line.
+- **Copy:** `Ctrl+C`, or `Copy N lines` in the header while a selection exists. The text is the code alone, with no `+` or `-`
+  marker and no line number, joined by newlines. Context and added lines are the new side of the file, so a range that mixes
+  them with deleted lines leaves the deleted ones out; a range of only deleted lines copies those.
+- **Copy file:** the file's whole current text from disk, in branch mode too; a deleted file copies its last version
+  (`git show HEAD:<path>`, or from the merge base in branch mode). A binary or very large file is refused.
+- **Copy path:** the repository-relative path. Each copy shows `Copied ...` under the header for two seconds.
+
 The diff's header has `Stage` or `Unstage` and `Discard…` for the shown file, with the same commands, confirm and refusals as
 [the git actions](#the-git-actions). Its `lib.js` holds a copy of those three functions, since mods cannot import each other;
 a test runs both copies.

@@ -2,6 +2,8 @@
 // on the right. repo-changes opens it (tab.new, or setShared("repo-review.open") on a tab that
 // already shows the repo). The diff's header can stage or unstage the shown file, and discard it after
 // an inline confirm (lib.js); nothing else is written, and nothing is committed or fetched here.
+// The file list's width is a draggable divider, remembered in the mod's localStorage. Code is copied by clicking a line
+// (shift-click extends, Escape clears) and pressing Ctrl+C or "Copy N lines"; "Copy file" and "Copy path" are in the header.
 // Two modes: "working" (uncommitted changes, `git diff HEAD`) and "branch" (the branch against its base branch,
 // `git diff <merge base>`: committed work plus uncommitted). Branch mode is read-only. A switch in the sidebar
 // changes between them when both have something to show.
@@ -10,7 +12,7 @@
 //          mode?: "working" | "branch" (default working) }
 
 import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex, Scrollbar, v_virtual_list } from "gpui-base";
+import { v_flex, h_flex, Scrollbar, v_virtual_list, h_resizable, resizable_panel } from "gpui-base";
 import { spaces, panes, exec, readTextFile, theme, settings, shared, props as modProps } from "herdr";
 import {
     parseStatus,
@@ -26,13 +28,37 @@ import {
     findBase,
     parseNameStatus,
     branchFiles,
+    selectLine,
+    inSelection,
+    selectionCopy,
 } from "./lib.js";
 
 const EVERY = 5000; // re-list the files this often while the tab is shown
 const BASE_EVERY = 60000; // find the base branch again this often even when HEAD stays (origin may have been fetched)
+const SIDE_DEFAULT = 280; // the file list's width until the user drags it
+const SIDE_MIN = 160;
+const SIDE_MAX = 720;
 const ICON = (name) => `mods/workspace-chrome/${name}.svg`;
 // Reads write nothing under .git (same flags as repo-changes).
 const READ = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "diff.autoRefreshIndex=false"];
+
+// The file list's width, remembered in the mod's own storage (every Review tab shares it, and a restart keeps it).
+function readSideWidth() {
+    try {
+        const n = Number(localStorage.getItem("sideWidth"));
+        return n >= SIDE_MIN && n <= SIDE_MAX ? n : SIDE_DEFAULT;
+    } catch {
+        return SIDE_DEFAULT;
+    }
+}
+
+function saveSideWidth(n) {
+    try {
+        localStorage.setItem("sideWidth", String(Math.round(n)));
+    } catch {
+        // storage full or unavailable: the width resets next time
+    }
+}
 
 export default class RepoReview extends View {
     init(_props, cx) {
@@ -67,6 +93,9 @@ export default class RepoReview extends View {
         this.confirming = null; // the file whose Discard waits for its second click
         this.acting = false;
         this.note = null; // { ok, message } of the last action
+        this.sideWidth = readSideWidth();
+        this.range = null; // the selected diff lines: { anchor, end } (lib.js), or null
+        this.shift = false; // is Shift held? (a row click does not report it, so the root and the list track it)
         this.handle = cx.focus_handle(); // so arrow keys reach this tab
         cx.timer.every(500, (cx) => this.tick(cx));
         this.refresh(cx);
@@ -184,6 +213,7 @@ export default class RepoReview extends View {
     }
 
     resetSelection() {
+        this.range = null;
         this.confirming = null;
         this.note = null;
         this.sel = null;
@@ -260,6 +290,7 @@ export default class RepoReview extends View {
         const sig = `${file.path}\n${lines.join("\n")}`;
         if (sig === this.sig) return;
         this.sig = sig;
+        this.range = null; // the rows are new: a selection would point at other lines
         const cut = lines.slice(0, 1500).map((l) => (l.length > 4000 ? `${l.slice(0, 4000)}… (line truncated)` : l));
         this.rows = diffRows(cut);
         this.diffWidth = Math.max(300, ...cut.map((l) => l.length * 7.5 + 60));
@@ -325,7 +356,7 @@ export default class RepoReview extends View {
         ].filter(Boolean);
     }
 
-    textButton(t, id, label, danger, onClick) {
+    textButton(t, id, label, danger, onClick, plain = false) {
         return div()
             .id(id)
             .flex_none()
@@ -340,10 +371,11 @@ export default class RepoReview extends View {
             .text_color(danger ? t.background : t.foreground)
             .hover((s) => s.opacity(0.85))
             .on_click(onClick)
-            .child(this.acting ? "…" : label);
+            .child(this.acting && !plain ? "…" : label);
     }
 
     pick(path, cx) {
+        this.range = null;
         this.confirming = null;
         this.note = null;
         this.sel = path;
@@ -365,7 +397,60 @@ export default class RepoReview extends View {
         if (next) this.pick(next.path, cx);
     }
 
+    /** A message under the header for two seconds ("Copied 3 lines"), or until another replaces it. */
+    flash(cx, ok, message) {
+        const note = { ok, message };
+        this.note = note;
+        cx.notify();
+        cx.timer.after(2000, (cx) => {
+            if (this.note !== note) return;
+            this.note = null;
+            cx.notify();
+        });
+    }
+
+    /** Copies the selected lines (lib.js: the code only; the new side unless every selected line was deleted). */
+    copyLines(cx) {
+        const copy = selectionCopy(this.rows, this.range);
+        if (!copy) return;
+        cx.write_to_clipboard(copy.text);
+        this.flash(cx, true, `Copied ${copy.lines} line${copy.lines === 1 ? "" : "s"}`);
+    }
+
+    /** The file's current text: the one on disk, or for a deleted file its last version (the base in branch mode). */
+    copyFile(cx, file) {
+        if (file.path.endsWith("/")) return this.flash(cx, false, "That is a folder; there is no file to copy.");
+        cx.spawn(async (cx) => {
+            try {
+                let text;
+                if (file.status === "D") {
+                    const from = this.view === "branch" && this.base ? this.base.mergeBase : "HEAD";
+                    const r = await exec("git", [...READ, "show", `${from}:${file.path}`], {
+                        cwd: this.repo,
+                        on: this.on,
+                    });
+                    if (r.code !== 0) throw new Error(r.stderr);
+                    text = r.stdout;
+                } else text = await readTextFile(`${this.repo}/${file.path}`, { on: this.on });
+                cx.write_to_clipboard(text);
+                this.flash(cx, true, `Copied ${file.path}`);
+            } catch {
+                this.flash(cx, false, "Cannot copy this file (binary, too large, or unreadable)");
+            }
+        });
+    }
+
     key(e, cx) {
+        if (e.keystroke === "ctrl-c" || e.keystroke === "cmd-c") {
+            if (!selectionCopy(this.rows, this.range)) return;
+            cx.stop_propagation();
+            return this.copyLines(cx);
+        }
+        if (e.keystroke === "escape" && this.range) {
+            cx.stop_propagation();
+            this.range = null;
+            return cx.notify();
+        }
         const down = e.keystroke === "down" || e.keystroke === "j",
             up = e.keystroke === "up" || e.keystroke === "k";
         if (!down && !up) return;
@@ -480,9 +565,7 @@ export default class RepoReview extends View {
     sidebar(t) {
         const more = this.total - this.files.length;
         return v_flex()
-            .w(280)
-            .flex_none()
-            .h_full()
+            .size_full()
             .border_r(1)
             .border_color(t.border)
             .child(
@@ -566,7 +649,7 @@ export default class RepoReview extends View {
     // Added / removed rows: a tint behind the row, a full-strength bar at the left edge, and the line
     // number and marker in the same full-strength color. Text stays foreground so it reads over the tint.
     // (Colors take #rrggbbaa; the fallbacks are the dark theme's ansi1 / ansi2 in case a theme lacks them.)
-    diffRow(t, { kind, number, text }) {
+    diffRow(t, { kind, number, text }, selected) {
         if (kind === "@")
             return div()
                 .w_full()
@@ -582,37 +665,42 @@ export default class RepoReview extends View {
             changed = add || del;
         const strong = add ? (t.ansi2 ?? "#C4F36B") : (t.ansi1 ?? "#FF8095");
         const tint = add ? `${t.ansi2 ?? "#C4F36B"}2A` : `${t.ansi1 ?? "#FF8095"}38`;
-        return h_flex()
-            .w_full()
-            .h(20)
-            .flex_none()
-            .items_center()
-            .when(changed, (e) => e.bg(tint))
-            .child(
-                div()
-                    .w(3)
-                    .h_full()
-                    .flex_none()
-                    .when(changed, (e) => e.bg(strong)),
-            )
-            .child(
-                div()
-                    .w(44)
-                    .flex_none()
-                    .px(4)
-                    .text_right()
-                    .text_color(changed ? strong : t.dim)
-                    .child(number === undefined ? "" : String(number)),
-            )
-            .child(
-                div()
-                    .w(16)
-                    .flex_none()
-                    .text_center()
-                    .text_color(strong)
-                    .child(add ? "+" : del ? "−" : ""),
-            )
-            .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(text));
+        return (
+            h_flex()
+                .w_full()
+                .h(20)
+                .flex_none()
+                .items_center()
+                .when(changed, (e) => e.bg(tint))
+                // Selected lines in blue, so a selection never reads as an added (lime) or deleted (red) line.
+                .when(selected, (e) => e.bg(`${t.ansi4 ?? "#6BA8FF"}55`))
+                .child(
+                    div()
+                        .w(3)
+                        .h_full()
+                        .flex_none()
+                        .when(changed, (e) => e.bg(strong))
+                        .when(selected, (e) => e.bg(t.ansi4 ?? "#6BA8FF")),
+                )
+                .child(
+                    div()
+                        .w(44)
+                        .flex_none()
+                        .px(4)
+                        .text_right()
+                        .text_color(changed ? strong : t.dim)
+                        .child(number === undefined ? "" : String(number)),
+                )
+                .child(
+                    div()
+                        .w(16)
+                        .flex_none()
+                        .text_center()
+                        .text_color(strong)
+                        .child(add ? "+" : del ? "−" : ""),
+                )
+                .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(text))
+        );
     }
 
     // A small header button; disabled looks dim and does nothing.
@@ -641,9 +729,8 @@ export default class RepoReview extends View {
         const file = this.files.find((f) => f.path === this.sel);
         if (!file)
             return v_flex()
-                .flex_1()
+                .size_full()
                 .min_w(0)
-                .h_full()
                 .items_center()
                 .justify_center()
                 .text_color(t.dim)
@@ -653,10 +740,10 @@ export default class RepoReview extends View {
         const { dir, name } = splitPath(file.path),
             i = this.files.indexOf(file),
             list = `review-diff-${this.listId}`;
+        const copy = selectionCopy(this.rows, this.range);
         return v_flex()
-            .flex_1()
+            .size_full()
             .min_w(0)
-            .h_full()
             .child(
                 h_flex()
                     .h(32)
@@ -676,6 +763,41 @@ export default class RepoReview extends View {
                     )
                     .child(div().flex_none().text_size(11).text_color(t.ansi2).child(`+${add}`))
                     .child(div().flex_none().text_size(11).text_color(t.ansi1).child(`−${del}`))
+                    .when(Boolean(copy), (el) =>
+                        el.child(
+                            this.textButton(
+                                t,
+                                "review-copy-lines",
+                                `Copy ${copy.lines} line${copy.lines === 1 ? "" : "s"}`,
+                                false,
+                                (_e, cx) => this.copyLines(cx),
+                                true,
+                            ),
+                        ),
+                    )
+                    .child(
+                        this.textButton(
+                            t,
+                            "review-copy-file",
+                            "Copy file",
+                            false,
+                            (_e, cx) => this.copyFile(cx, file),
+                            true,
+                        ),
+                    )
+                    .child(
+                        this.textButton(
+                            t,
+                            "review-copy-path",
+                            "Copy path",
+                            false,
+                            (_e, cx) => {
+                                cx.write_to_clipboard(file.path);
+                                this.flash(cx, true, `Copied ${file.path}`);
+                            },
+                            true,
+                        ),
+                    )
                     .children(this.fileActions(t, file))
                     .child(this.headerButton(t, "review-prev", "‹", i > 0, (_e, cx) => this.step(-1, cx)))
                     .child(
@@ -722,8 +844,15 @@ export default class RepoReview extends View {
                                             (range) =>
                                                 this.rows
                                                     .slice(range.start, range.end)
-                                                    .map((row) => this.diffRow(t, row)),
-                                        ).size_full(),
+                                                    .map((row, i) =>
+                                                        this.diffRow(t, row, inSelection(this.range, range.start + i)),
+                                                    ),
+                                        )
+                                            .on_item_click((key, cx) => {
+                                                this.range = selectLine(this.rows, this.range, Number(key), this.shift);
+                                                cx.notify();
+                                            })
+                                            .size_full(),
                                     ),
                             ),
                     )
@@ -743,8 +872,22 @@ export default class RepoReview extends View {
             .text_size(13)
             .track_focus(this.handle)
             .on_key_down((e, cx) => this.key(e, cx))
-            .on_mouse_down("left", () => this.handle.focus())
-            .child(this.sidebar(t))
-            .child(this.diffPanel(t));
+            .on_modifiers_changed((e) => {
+                this.shift = e.modifiers.shift;
+            })
+            .on_mouse_down("left", (e) => {
+                this.shift = e.modifiers.shift;
+                this.handle.focus();
+            })
+            .child(
+                h_resizable("review-split")
+                    .size_full()
+                    .on_resize((sizes) => {
+                        this.sideWidth = sizes[0];
+                        saveSideWidth(sizes[0]);
+                    })
+                    .child(resizable_panel().size(this.sideWidth).size_range(SIDE_MIN, SIDE_MAX).child(this.sidebar(t)))
+                    .child(resizable_panel().child(this.diffPanel(t))),
+            );
     }
 }

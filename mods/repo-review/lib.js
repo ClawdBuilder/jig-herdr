@@ -80,15 +80,48 @@ export function diffRows(lines) {
             next = +match[2];
             return { kind: "@", text: line };
         }
+        // text is drawn (an empty line shows as a space so the row keeps its height); raw is what a copy takes.
         const kind = line[0];
-        if (kind === "-") return { kind, number: old++, text: line.slice(1) || " " };
-        if (kind === "+") return { kind, number: next++, text: line.slice(1) || " " };
+        if (kind === "-") return { kind, number: old++, text: line.slice(1) || " ", raw: line.slice(1) };
+        if (kind === "+") return { kind, number: next++, text: line.slice(1) || " ", raw: line.slice(1) };
         if (kind === " ") {
             old++;
-            return { kind, number: next++, text: line.slice(1) || " " };
+            return { kind, number: next++, text: line.slice(1) || " ", raw: line.slice(1) };
         }
         return { kind: "", text: line };
     });
+}
+
+// ---- Selecting lines to copy ----
+// A selection is null or { anchor, end }: row indexes into diffRows' result, in click order (end may be before anchor).
+
+/** A line of code, as opposed to a hunk header or a note. */
+export const isCodeRow = (row) => row?.kind === "+" || row?.kind === "-" || row?.kind === " ";
+
+/** The selection after a click on row `index`: a plain click selects that line, or clears the selection when that line is
+ * all that was selected; with `extend` (shift) the range runs from the old anchor to `index`. A header row changes nothing. */
+export function selectLine(rows, sel, index, extend) {
+    if (!isCodeRow(rows[index])) return sel;
+    if (extend && sel) return { anchor: sel.anchor, end: index };
+    if (!extend && sel && sel.anchor === index && sel.end === index) return null;
+    return { anchor: index, end: index };
+}
+
+/** Is row `index` inside the selection? */
+export const inSelection = (sel, index) =>
+    Boolean(sel) && index >= Math.min(sel.anchor, sel.end) && index <= Math.max(sel.anchor, sel.end);
+
+/** What a selection copies: { text, lines }, or null when it holds no code line. The code only, with no +/- marker and no line
+ * number, joined by "\n". Added and context lines are the new side of the file, so deleted lines in the range are left out;
+ * a range of nothing but deleted lines copies those instead. */
+export function selectionCopy(rows, sel) {
+    if (!sel) return null;
+    const lo = Math.min(sel.anchor, sel.end),
+        hi = Math.max(sel.anchor, sel.end);
+    const code = rows.slice(lo, hi + 1).filter(isCodeRow);
+    if (!code.length) return null;
+    const keep = code.every((r) => r.kind === "-") ? code : code.filter((r) => r.kind !== "-");
+    return { text: keep.map((r) => r.raw ?? r.text).join("\n"), lines: keep.length };
 }
 
 // ---- Stage, unstage and discard the shown file ----
