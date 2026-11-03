@@ -44,7 +44,7 @@ The repository panels work the same way: a `sh` script with `git` (or `gh`) on t
 | PR & CI (`repo-prs`) | The pull request and checks of each feature branch, and yours | `gh pr view`, `gh pr list`, `gh search prs`; cached 5 min |
 | Worktrees (`repo-worktrees`) | Linked worktrees, ready to remove or in progress | `git worktree list` every 30 s; `git worktree remove` on click |
 | Files (`jig-files`) | A file tree of the folder; a click opens a file tab | Lists the folder; writes nothing |
-| Review tab (`repo-review`) | One repository's changed files and a diff, or its whole branch against its base (read-only); stage, unstage, discard; a draggable file list; copy lines, file or path | `git status` and `git diff HEAD` (branch: `git diff <merge base>`) every 5 s |
+| Review tab (`repo-review`) | One repository's changed files and a diff, or its whole branch against its base (read-only); stage, unstage, discard; a draggable file list; a Diff, File or Patch view (the last two select by dragging); copy lines, file or path | `git status` and `git diff HEAD` (branch: `git diff <merge base>`) every 5 s |
 | File tab (`file-view`) | One file, read-only; Markdown rendered, `Source` for its text | `readTextFile` with `on`, every 5 s |
 | Tab bar (`jig-tabs`) | Tabs, `+`, then `Panel` (shows or hides the side panel) and `Jig` (shows Work) | Herdr's `layout.show`, `layout.hide`, `tab.*` |
 | Icon bar (`jig-activity`) | A button per panel, Jig group on top; counts on Changes, PR & CI, Worktrees | `layout.select`; counts from `shared("badge.<mod>")` |

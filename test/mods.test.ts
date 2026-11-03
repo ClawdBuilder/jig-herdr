@@ -188,6 +188,26 @@ test("repo-review selects diff lines and copies their code", async () => {
     assert.equal(lib.selectionCopy(rows, null), null);
 });
 
+test("repo-review picks a view and a language for the File and Patch editors", async () => {
+    const lib = await load<{
+        PANES: string[];
+        reviewPane(value: unknown): string;
+        langFor(path: string): string;
+        capText(text: string, max: number): string;
+    }>("mods/repo-review/lib.js");
+    assert.deepEqual(lib.PANES, ["diff", "file", "patch"]);
+    assert.equal(lib.reviewPane("patch"), "patch");
+    assert.equal(lib.reviewPane("file"), "file");
+    assert.equal(lib.reviewPane(null), "diff", "nothing remembered: Diff");
+    assert.equal(lib.reviewPane("Patch"), "diff", "an unknown value: Diff");
+    assert.equal(lib.langFor("src/App.tsx"), "js");
+    assert.equal(lib.langFor("a/b.toml"), "yaml");
+    assert.equal(lib.langFor("notes.md"), "md");
+    assert.equal(lib.langFor("dir.d/Makefile"), "txt", "no extension: plain text");
+    assert.equal(lib.capText("abc", 5), "abc");
+    assert.equal(lib.capText("abcdef", 3), "abc\n… (truncated)");
+});
+
 test("jig-activity lists the stack's buttons from the layout, leaves out missing mods and puts 'end' last", async () => {
     const lib = await load<{
         buttons(

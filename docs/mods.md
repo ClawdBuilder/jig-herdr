@@ -173,9 +173,15 @@ one that was clicked shows first.
 **Width.** The divider between the file list and the diff drags (160 to 720 px, 280 by default). The width is kept in the
 mod's `localStorage`, so a new Review tab and a restart open at it.
 
-**Copying code.** The diff is not text you can select with the mouse, so lines are picked by clicking:
+**Views.** A switch in the diff header, `Diff | File | Patch`, picks what the right side shows, and the choice is kept in the
+mod's `localStorage` (every Review tab, and a restart). `Diff` is the tinted rows below. `File` is the file's current text
+(a deleted file's last version) and `Patch` the diff's text, each in a read-only code editor with line numbers and syntax
+colours (`Patch` as `diff`), where the mouse drags a selection and `Ctrl+C` copies it. Text over 400,000 characters is cut
+with a note. Switching file or view releases the old editor. Arrow keys and `j`/`k` step through files until the editor is clicked.
 
-- **Select:** click a code line to select it, shift-click another to extend the range, click the only selected line again or
+**Copying code in Diff.** The rows are not text the mouse can select (use `File` or `Patch` for that), so lines are picked by clicking:
+
+- **Select:** click a code line to select it, shift-click another to extend the range (a click takes the keyboard first so Shift is seen), click the only selected line again or
   press `Escape` to clear. Hunk headers cannot be selected. The selection is tinted blue (the theme's ANSI blue), so it never reads as an added or deleted line.
 - **Copy:** `Ctrl+C`, or `Copy N lines` in the header while a selection exists. The text is the code alone, with no `+` or `-`
   marker and no line number, joined by newlines. Context and added lines are the new side of the file, so a range that mixes

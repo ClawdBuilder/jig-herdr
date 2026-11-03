@@ -92,6 +92,38 @@ export function diffRows(lines) {
     });
 }
 
+// ---- The three views of a file: Diff, File, Patch ----
+
+/** The views the header switch offers; Diff is the default. */
+export const PANES = ["diff", "file", "patch"];
+
+/** A remembered or requested view, or "diff" when it is none of the three. */
+export const reviewPane = (value) => (PANES.includes(value) ? value : "diff");
+
+// Extensions the editor's highlighter names differently (the same map as file-view; mods cannot import each other).
+const LANG = {
+    ts: "js",
+    tsx: "js",
+    mts: "js",
+    cts: "js",
+    jsx: "js",
+    mjs: "js",
+    toml: "yaml",
+    jsonc: "json",
+    svelte: "html",
+    vue: "html",
+};
+
+/** The editor language for a file path: its extension, mapped where the highlighter calls it something else. */
+export function langFor(path) {
+    const name = path.split("/").pop() ?? "";
+    const ext = name.includes(".") ? name.split(".").pop().toLowerCase() : "txt";
+    return LANG[ext] ?? ext;
+}
+
+/** Text cut at `max` characters with a note, or whole when it fits. */
+export const capText = (text, max) => (text.length > max ? `${text.slice(0, max)}\n… (truncated)` : text);
+
 // ---- Selecting lines to copy ----
 // A selection is null or { anchor, end }: row indexes into diffRows' result, in click order (end may be before anchor).
 

@@ -4,6 +4,9 @@
 // an inline confirm (lib.js); nothing else is written, and nothing is committed or fetched here.
 // The file list's width is a draggable divider, remembered in the mod's localStorage. Code is copied by clicking a line
 // (shift-click extends, Escape clears) and pressing Ctrl+C or "Copy N lines"; "Copy file" and "Copy path" are in the header.
+// A switch in the diff header, Diff | File | Patch, picks what the right side shows: the tinted rows (click to select lines),
+// the file's text, or the diff's text, the last two in a read-only code editor where the mouse drags a selection and Ctrl+C
+// copies it. The choice is remembered in localStorage like the width.
 // Two modes: "working" (uncommitted changes, `git diff HEAD`) and "branch" (the branch against its base branch,
 // `git diff <merge base>`: committed work plus uncommitted). Branch mode is read-only. A switch in the sidebar
 // changes between them when both have something to show.
@@ -12,7 +15,16 @@
 //          mode?: "working" | "branch" (default working) }
 
 import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex, Scrollbar, v_virtual_list, h_resizable, resizable_panel } from "gpui-base";
+import {
+    v_flex,
+    h_flex,
+    Scrollbar,
+    v_virtual_list,
+    h_resizable,
+    resizable_panel,
+    Editor,
+    EditorState,
+} from "gpui-base";
 import { spaces, panes, exec, readTextFile, theme, settings, shared, props as modProps } from "herdr";
 import {
     parseStatus,
@@ -31,6 +43,10 @@ import {
     selectLine,
     inSelection,
     selectionCopy,
+    PANES,
+    reviewPane,
+    langFor,
+    capText,
 } from "./lib.js";
 
 const EVERY = 5000; // re-list the files this often while the tab is shown
@@ -38,6 +54,8 @@ const BASE_EVERY = 60000; // find the base branch again this often even when HEA
 const SIDE_DEFAULT = 280; // the file list's width until the user drags it
 const SIDE_MIN = 160;
 const SIDE_MAX = 720;
+const MAX = 400000; // most characters the File and Patch editors show; more is cut with a note
+const PANE_LABEL = { diff: "Diff", file: "File", patch: "Patch" };
 const ICON = (name) => `mods/workspace-chrome/${name}.svg`;
 // Reads write nothing under .git (same flags as repo-changes).
 const READ = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "diff.autoRefreshIndex=false"];
@@ -57,6 +75,23 @@ function saveSideWidth(n) {
         localStorage.setItem("sideWidth", String(Math.round(n)));
     } catch {
         // storage full or unavailable: the width resets next time
+    }
+}
+
+// The chosen view (Diff, File or Patch), remembered like the width.
+function readPane() {
+    try {
+        return reviewPane(localStorage.getItem("pane"));
+    } catch {
+        return "diff";
+    }
+}
+
+function savePane(pane) {
+    try {
+        localStorage.setItem("pane", pane);
+    } catch {
+        // storage unavailable: the view resets next time
     }
 }
 
@@ -96,6 +131,11 @@ export default class RepoReview extends View {
         this.sideWidth = readSideWidth();
         this.range = null; // the selected diff lines: { anchor, end } (lib.js), or null
         this.shift = false; // is Shift held? (a row click does not report it, so the root and the list track it)
+        this.pane = readPane(); // "diff" | "file" | "patch"
+        this.editor = null; // { key, text, state } for File and Patch; state is released when replaced
+        this.editorNote = null; // why there is no editor (binary, folder, unreadable)
+        this.eseq = 0;
+        this.patchText = "";
         this.handle = cx.focus_handle(); // so arrow keys reach this tab
         cx.timer.every(500, (cx) => this.tick(cx));
         this.refresh(cx);
@@ -218,6 +258,7 @@ export default class RepoReview extends View {
         this.note = null;
         this.sel = null;
         this.fixSelection();
+        this.dropEditor();
         this.rows = [];
         this.sig = "";
         this.listId += 1;
@@ -273,11 +314,17 @@ export default class RepoReview extends View {
     // Loads the selected file's diff. A newer call makes an older one stale (this.seq), and an
     // unchanged diff is left alone, so the 5 s re-list does not redraw or reset the scroll.
     async loadDiff() {
+        await this.loadRows();
+        await this.syncEditor();
+    }
+
+    async loadRows() {
         const seq = ++this.seq,
             file = this.files.find((f) => f.path === this.sel);
         if (!file) {
             this.rows = [];
             this.sig = "";
+            this.patchText = "";
             return;
         }
         let lines;
@@ -293,7 +340,92 @@ export default class RepoReview extends View {
         this.range = null; // the rows are new: a selection would point at other lines
         const cut = lines.slice(0, 1500).map((l) => (l.length > 4000 ? `${l.slice(0, 4000)}… (line truncated)` : l));
         this.rows = diffRows(cut);
+        this.patchText = cut.join("\n");
         this.diffWidth = Math.max(300, ...cut.map((l) => l.length * 7.5 + 60));
+    }
+
+    /** The file's current text: the one on disk, or for a deleted file its last version (the base in branch mode). */
+    async fileText(file) {
+        if (file.status === "D") {
+            const from = this.view === "branch" && this.base ? this.base.mergeBase : "HEAD";
+            const r = await exec("git", [...READ, "show", `${from}:${file.path}`], { cwd: this.repo, on: this.on });
+            if (r.code !== 0) throw new Error(r.stderr);
+            return r.stdout;
+        }
+        return readTextFile(`${this.repo}/${file.path}`, { on: this.on });
+    }
+
+    /** Lets go of the editor (File and Patch) and cancels a read in flight. */
+    dropEditor() {
+        this.eseq += 1;
+        this.editor?.state.release();
+        this.editor = null;
+        this.editorNote = null;
+    }
+
+    // Makes the File or Patch editor match the shown file: a state is made here (never in render) and replaced only when its
+    // text changed, so the 5 s re-list keeps the scroll and the selection. Diff holds no editor.
+    async syncEditor() {
+        const file = this.files.find((f) => f.path === this.sel);
+        if (this.pane === "diff" || !file) return this.dropEditor();
+        const seq = ++this.eseq,
+            pane = this.pane;
+        let text,
+            note = null;
+        if (pane === "patch") text = this.patchText;
+        else if (file.path.endsWith("/")) note = "That is a folder; there is no file to show.";
+        else {
+            try {
+                text = await this.fileText(file);
+            } catch {
+                text = null;
+            }
+            if (text === null || text === undefined) note = "Cannot show this file (binary, too large, or unreadable)";
+            else if (text.includes("\0")) note = "Binary file · no text to show";
+        }
+        if (seq !== this.eseq) return;
+        if (note) {
+            this.editor?.state.release();
+            this.editor = null;
+            this.editorNote = note;
+            return;
+        }
+        const key = `${pane}|${file.path}`;
+        if (this.editor?.key === key && this.editor.text === text) return;
+        const t = theme();
+        const state = EditorState.new({
+            language: pane === "patch" ? "diff" : langFor(file.path),
+            readonly: true,
+            value: capText(text, MAX),
+            font_family: settings().font_family,
+            font_size: 13,
+            syntax: {
+                keyword: t.ansi5,
+                string: t.ansi2,
+                comment: t.dim,
+                function: t.ansi4,
+                type: t.ansi3,
+                number: t.ansi1,
+                constant: t.ansi6,
+            },
+        });
+        this.editor?.state.release();
+        this.editor = { key, text, state };
+        this.editorNote = null;
+    }
+
+    /** The Diff | File | Patch switch. */
+    setPane(pane, cx) {
+        if (pane === this.pane) return;
+        this.pane = pane;
+        savePane(pane);
+        this.dropEditor();
+        if (pane !== "diff") this.handle.focus(); // arrow keys keep working until the editor is clicked
+        cx.spawn(async (cx) => {
+            await this.syncEditor();
+            cx.notify();
+        });
+        cx.notify();
     }
 
     /** Stage, unstage or discard the shown file (lib.js), then list the files again at once. */
@@ -380,6 +512,7 @@ export default class RepoReview extends View {
         this.note = null;
         this.sel = path;
         this.want = null;
+        this.dropEditor();
         this.rows = [];
         this.sig = "";
         this.listId += 1; // a new list id starts the diff at the top
@@ -422,16 +555,7 @@ export default class RepoReview extends View {
         if (file.path.endsWith("/")) return this.flash(cx, false, "That is a folder; there is no file to copy.");
         cx.spawn(async (cx) => {
             try {
-                let text;
-                if (file.status === "D") {
-                    const from = this.view === "branch" && this.base ? this.base.mergeBase : "HEAD";
-                    const r = await exec("git", [...READ, "show", `${from}:${file.path}`], {
-                        cwd: this.repo,
-                        on: this.on,
-                    });
-                    if (r.code !== 0) throw new Error(r.stderr);
-                    text = r.stdout;
-                } else text = await readTextFile(`${this.repo}/${file.path}`, { on: this.on });
+                const text = await this.fileText(file);
                 cx.write_to_clipboard(text);
                 this.flash(cx, true, `Copied ${file.path}`);
             } catch {
@@ -441,12 +565,13 @@ export default class RepoReview extends View {
     }
 
     key(e, cx) {
+        this.shift = Boolean(e.modifiers?.shift);
         if (e.keystroke === "ctrl-c" || e.keystroke === "cmd-c") {
-            if (!selectionCopy(this.rows, this.range)) return;
+            if (this.pane !== "diff" || !selectionCopy(this.rows, this.range)) return;
             cx.stop_propagation();
             return this.copyLines(cx);
         }
-        if (e.keystroke === "escape" && this.range) {
+        if (e.keystroke === "escape" && this.range && this.pane === "diff") {
             cx.stop_propagation();
             this.range = null;
             return cx.notify();
@@ -454,6 +579,7 @@ export default class RepoReview extends View {
         const down = e.keystroke === "down" || e.keystroke === "j",
             up = e.keystroke === "up" || e.keystroke === "k";
         if (!down && !up) return;
+        if (this.editor && !this.handle.is_focused()) return; // the editor has the keyboard: its own keys
         cx.stop_propagation();
         this.step(down ? 1 : -1, cx);
     }
@@ -724,6 +850,46 @@ export default class RepoReview extends View {
             .child(label);
     }
 
+    // Diff | File | Patch, the shown one filled.
+    paneSwitch(t) {
+        return h_flex()
+            .flex_none()
+            .gap(2)
+            .p(2)
+            .rounded(6)
+            .bg(t.raised)
+            .children(
+                PANES.map((pane) =>
+                    div()
+                        .id(`review-pane-${pane}`)
+                        .h(20)
+                        .px(8)
+                        .flex()
+                        .items_center()
+                        .rounded(5)
+                        .text_size(11.5)
+                        .cursor_pointer()
+                        .when(this.pane === pane, (el) => el.bg(t.selected).text_color(t.foreground).font_semibold())
+                        .when(this.pane !== pane, (el) =>
+                            el.text_color(t.muted).hover((s) => s.bg(t.hover).text_color(t.foreground)),
+                        )
+                        .on_click((_e, cx) => this.setPane(pane, cx))
+                        .child(PANE_LABEL[pane]),
+                ),
+            );
+    }
+
+    // File and Patch: a read-only editor (drag to select, Ctrl+C to copy), or the reason there is none.
+    editorArea(t) {
+        if (this.editor) return v_flex().flex_1().min_h(0).child(Editor.new(this.editor.state).flex_1().min_h(0));
+        return div()
+            .flex_1()
+            .min_h(0)
+            .p(12)
+            .text_color(t.dim)
+            .child(this.editorNote ?? "Loading…");
+    }
+
     // Right side: a 32 px header (path, +added −removed, prev/next), then the diff at full size.
     diffPanel(t) {
         const file = this.files.find((f) => f.path === this.sel);
@@ -761,9 +927,10 @@ export default class RepoReview extends View {
                             .child(div().min_w(0).truncate().text_color(t.dim).child(dir))
                             .child(div().flex_none().font_semibold().child(name)),
                     )
+                    .child(this.paneSwitch(t))
                     .child(div().flex_none().text_size(11).text_color(t.ansi2).child(`+${add}`))
                     .child(div().flex_none().text_size(11).text_color(t.ansi1).child(`−${del}`))
-                    .when(Boolean(copy), (el) =>
+                    .when(Boolean(copy) && this.pane === "diff", (el) =>
                         el.child(
                             this.textButton(
                                 t,
@@ -819,44 +986,59 @@ export default class RepoReview extends View {
                 ),
             )
             .child(
-                div()
-                    .flex_1()
-                    .min_h(0)
-                    .relative()
-                    .font_family(settings().font_family ?? "JetBrains Mono")
-                    .text_size(12)
-                    .child(
-                        div()
-                            .id(`review-x-${this.listId}`)
-                            .size_full()
-                            .overflow_x_scrollbar()
-                            .child(
-                                div()
-                                    .w_full()
-                                    .min_w(this.diffWidth)
-                                    .h_full()
-                                    .child(
-                                        v_virtual_list(
-                                            list,
-                                            this.rows.length,
-                                            20,
-                                            (n) => String(n),
-                                            (range) =>
-                                                this.rows
-                                                    .slice(range.start, range.end)
-                                                    .map((row, i) =>
-                                                        this.diffRow(t, row, inSelection(this.range, range.start + i)),
-                                                    ),
-                                        )
-                                            .on_item_click((key, cx) => {
-                                                this.range = selectLine(this.rows, this.range, Number(key), this.shift);
-                                                cx.notify();
-                                            })
-                                            .size_full(),
-                                    ),
-                            ),
-                    )
-                    .child(Scrollbar.vertical(list).viewport_from_layout().absolute().inset_0()),
+                this.pane !== "diff"
+                    ? this.editorArea(t)
+                    : div()
+                          .flex_1()
+                          .min_h(0)
+                          .relative()
+                          .font_family(settings().font_family ?? "JetBrains Mono")
+                          .text_size(12)
+                          .child(
+                              div()
+                                  .id(`review-x-${this.listId}`)
+                                  .size_full()
+                                  .on_mouse_down("left", (e) => {
+                                      this.shift = e.modifiers.shift;
+                                  })
+                                  .overflow_x_scrollbar()
+                                  .child(
+                                      div()
+                                          .w_full()
+                                          .min_w(this.diffWidth)
+                                          .h_full()
+                                          .child(
+                                              v_virtual_list(
+                                                  list,
+                                                  this.rows.length,
+                                                  20,
+                                                  (n) => String(n),
+                                                  (range) =>
+                                                      this.rows
+                                                          .slice(range.start, range.end)
+                                                          .map((row, i) =>
+                                                              this.diffRow(
+                                                                  t,
+                                                                  row,
+                                                                  inSelection(this.range, range.start + i),
+                                                              ),
+                                                          ),
+                                              )
+                                                  .on_item_click((key, cx) => {
+                                                      this.handle.focus(); // so Shift changes reach on_modifiers_changed
+                                                      this.range = selectLine(
+                                                          this.rows,
+                                                          this.range,
+                                                          Number(key),
+                                                          this.shift,
+                                                      );
+                                                      cx.notify();
+                                                  })
+                                                  .size_full(),
+                                          ),
+                                  ),
+                          )
+                          .child(Scrollbar.vertical(list).viewport_from_layout().absolute().inset_0()),
             );
     }
 
@@ -875,9 +1057,13 @@ export default class RepoReview extends View {
             .on_modifiers_changed((e) => {
                 this.shift = e.modifiers.shift;
             })
+            .on_key_up((e) => {
+                this.shift = Boolean(e.modifiers?.shift);
+            })
             .on_mouse_down("left", (e) => {
                 this.shift = e.modifiers.shift;
-                this.handle.focus();
+                // Diff keeps the keyboard on the tab; the editors take it themselves when clicked.
+                if (this.pane === "diff") this.handle.focus();
             })
             .child(
                 h_resizable("review-split")
