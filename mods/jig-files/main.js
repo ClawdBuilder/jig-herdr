@@ -167,7 +167,7 @@ export default class Files extends View {
     toggle(path, cx) {
         if (this.folders.has(path)) {
             for (const folder of [...this.folders])
-                if (folder === path || folder.startsWith(path + "/")) {
+                if (folder === path || folder.startsWith(`${path}/`)) {
                     this.folders.delete(folder);
                     this.entries.delete(folder);
                 }
