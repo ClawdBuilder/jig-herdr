@@ -90,6 +90,8 @@ export function startCommand(platform, { ownerPid, script, stopFile, display, to
             "herdr-app",
             "-Token",
             token ?? "",
+            "-Seconds",
+            "5",
             "-RecordFile",
             recordFile ?? "",
         ];
@@ -119,7 +121,7 @@ export function startCommand(platform, { ownerPid, script, stopFile, display, to
                   "--mode=block",
                   "sh",
                   "-c",
-                  `while kill -0 ${Math.max(1, Number(ownerPid) || 0)} 2>/dev/null; do sleep 20; done`,
+                  linuxLoop(ownerPid, stopFile, token),
                   "keep-awake",
               ];
     return { cmd: "sh", args: ["-c", `nohup ${program.map(shQuote).join(" ")} >/dev/null 2>&1 & echo $!`] };
@@ -188,7 +190,7 @@ export function stopCommand(platform, pid) {
     const id = Math.max(1, Number(pid) || 0);
     return platform === "windows"
         ? { cmd: "taskkill", args: ["/PID", String(id), "/F"] }
-        : { cmd: "sh", args: ["-c", `kill ${id} 2>/dev/null`] };
+        : { cmd: "sh", args: ["-c", `pkill -TERM -P ${id} 2>/dev/null; kill -TERM ${id} 2>/dev/null`] };
 }
 
 /** Whether a process's command line names this mod's script (the Windows helper's own marker). */
@@ -234,6 +236,32 @@ export function killDecision({ recorded, alive, commandLine, platform, script, o
  * the command line could not be read — the record is kept and another check waits, so a live helper is never duplicated
  * because one reading failed.
  */
+/**
+ * Resolves with the promise's value, or with `fallback` when `timer(ms, fn)` fires first. The mod's own `exec` has no
+ * timeout, so every command goes through this; the tests hand it setTimeout.
+ */
+export function withDeadline(promise, timer, ms, fallback) {
+    return new Promise((resolve) => {
+        let done = false;
+        const finish = (value) => {
+            if (done) return;
+            done = true;
+            resolve(value);
+        };
+        timer(ms, () => finish(fallback));
+        Promise.resolve(promise).then(finish, () => finish(fallback));
+    });
+}
+
+/** Whether a step that started at `at` has been running too long: its flag is cleared and the worker tries again. */
+export const isStuck = (at, now = Date.now(), limit = 20000) => Number.isFinite(at) && at > 0 && now - at >= limit;
+
+/**
+ * What a release does with the record: "drop" when the helper is surely gone (or was just killed), "keep" when its
+ * liveness or command line could not be read — starting now could leave the old helper untracked, so the next tick retries.
+ */
+export const releaseOutcome = ({ known, decision }) => (known || decision === "kill" ? "drop" : "keep");
+
 export function recordState({ alive, commandLine, platform, script, owner }) {
     if (alive === false) return "gone";
     if (alive !== true) return "unknown";
@@ -297,6 +325,14 @@ export function setDisplay(text, display) {
 /** The helper's stop file: `${appHome}/keep-awake.stop`, one file for every helper. Its content names the start that
  * wrote it ("run <token>", "stop <token>"), so a "stop" left by an earlier helper can never end a new one and nothing
  * accumulates. */
+/** The Linux helper's loop: Herdr's PID alive and still named herdr-app, no stop for its own token, every 5 seconds. */
+function linuxLoop(ownerPid, stopFile, token) {
+    const owner = Math.max(1, Number(ownerPid) || 0),
+        file = shQuote(stopFile ?? ""),
+        stop = `stop ${token ?? ""}`;
+    return `while kill -0 ${owner} 2>/dev/null && [ "$(ps -p ${owner} -o comm= 2>/dev/null)" = "herdr-app" ] && ! ( [ -f ${file} ] && [ "$(cat ${file} 2>/dev/null)" = ${shQuote(stop)} ] ); do sleep 5; done`;
+}
+
 export const stopFileIn = (appHome) => `${String(appHome).replace(/\/+$/, "")}/keep-awake.stop`;
 
 /** A stop line for a start token: "run <token>" or "stop <token>". */

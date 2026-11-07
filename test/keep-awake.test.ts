@@ -1,6 +1,7 @@
 // The Keep awake mod's pure parts (mods/keep-awake/lib.js): the mode state machine with its idle timer, the commands
 // that hold a computer awake on each platform, the helper's process bookkeeping and config.json.
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
@@ -122,6 +123,7 @@ test("the helper starts hidden and detached on Windows, and in the background on
     assert.match(line, /4321/);
     assert.match(line, /-OwnerName/, "the helper checks the owner's process name too");
     assert.match(line, /-Display/);
+    assert.match(line, /-Seconds/, "the helper polls every few seconds, so close can be a write");
     // Each argument is quoted for the child command line, so a folder with a space (and a quote for PowerShell) works.
     assert.match(line, /"C:\/Users\/Jane Doe\/it''s\/keep-awake\.ps1"/);
     assert.match(line, /"C:\/Users\/Jane Doe\/it''s\/keep-awake\.stop"/);
@@ -141,8 +143,14 @@ test("the helper starts hidden and detached on Windows, and in the background on
     assert.match(linux.args[1], /--what=sleep'/);
     assert.match(linux.args[1], /--mode=block/);
     assert.match(linux.args[1], /while kill -0 99/, "the helper watches its owner itself");
+    assert.match(linux.args[1], /ps -p 99 -o comm=/, "and that the owner is still herdr-app");
+    assert.match(linux.args[1], /herdr-app/, "by name");
+    assert.match(linux.args[1], /stop abc123/, "and stops for its own token");
+    assert.match(linux.args[1], /sleep 5/, "checking every five seconds");
     assert.match(linux.args[1], /'keep-awake'/, "and carries a marker the mod can recognise");
     assert.match(startCommand("linux", { ...where, ownerPid: 99, display: true }).args[1], /--what=sleep:idle'/);
+    // The loop, stop check and quoting are real shell: sh -n must accept the whole command line.
+    execFileSync("sh", ["-n", "-c", linux.args[1]], { encoding: "utf8" });
 });
 
 test("every process question has one command per platform", async () => {
@@ -156,7 +164,8 @@ test("every process question has one command per platform", async () => {
     assert.match(commandLineCommand("windows", 7).args.join(" "), /ProcessId=7/);
     assert.match(commandLineCommand("macos", 7).args[1], /ps -p 7 -o command=/);
     assert.deepEqual(stopCommand("windows", 7).args, ["/PID", "7", "/F"], "no /T: the helper has no tree to take");
-    assert.match(stopCommand("linux", 7).args[1], /kill 7/);
+    assert.match(stopCommand("linux", 7).args[1], /pkill -TERM -P 7/);
+    assert.match(stopCommand("linux", 7).args[1], /kill -TERM 7/);
     // A PID that is not a number cannot become a command of its own.
     assert.match(aliveCommand("linux", "x").args[1], /kill -0 1 /);
     assert.match(stopCommand("windows", -5).args[1], /^1$/);
@@ -312,4 +321,29 @@ test("one start claim, and a config edit on start wins over the session value", 
     );
     assert.equal(displayRestart({ previous: true, next: false, helperPid: 7, ...idle, restarting: true }), false);
     assert.equal(displayRestart({ previous: true, next: false, helperPid: 7, ...idle, stopping: true }), false);
+});
+
+test("a command that never returns cannot hold a step, and a failed check keeps the record", async () => {
+    const { withDeadline, isStuck, releaseOutcome } = await lib();
+    const late = await withDeadline(
+        new Promise(() => {}),
+        (ms, fn) => setTimeout(fn, ms),
+        5,
+        "late",
+    );
+    assert.equal(late, "late", "a hung exec resolves with its fallback");
+    const quick = await withDeadline(Promise.resolve("ok"), (ms, fn) => setTimeout(fn, ms), 50, "late");
+    assert.equal(quick, "ok");
+    const failing = await withDeadline(Promise.reject(new Error("no")), (ms, fn) => setTimeout(fn, ms), 50, "late");
+    assert.equal(failing, "late");
+
+    const now = 1_000_000;
+    assert.equal(isStuck(0, now), false);
+    assert.equal(isStuck(now - 1000, now), false);
+    assert.equal(isStuck(now - 20000, now), true);
+    assert.equal(isStuck(now - 20000, now, 30000), false);
+
+    assert.equal(releaseOutcome({ known: true, decision: "drop" }), "drop", "gone: forget it");
+    assert.equal(releaseOutcome({ known: false, decision: "drop" }), "keep", "could not check: keep it for the next tick");
+    assert.equal(releaseOutcome({ known: false, decision: "kill" }), "drop", "killed: forget it");
 });

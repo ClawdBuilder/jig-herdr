@@ -39,6 +39,9 @@ import {
     helperToRelease,
     claimState,
     claimText,
+    withDeadline,
+    isStuck,
+    releaseOutcome,
     displayRestart,
     displaySource,
     killDecision,
@@ -59,7 +62,11 @@ const MODE = "keep-awake.mode";
 const ACTIVE = "keep-awake.active";
 const HELPER = "keep-awake.helper";
 const DISPLAY = "keep-awake.display";
-const EVERY = 1000; // the mode, the agents and the idle timer, every second
+const EVERY = 1000;
+/** No exec may keep a step (and its flag) waiting longer than this; a timeout counts as "could not ask". */
+const EXEC_MS = 8000;
+/** A flag older than this is cleared and the step retried, whatever happened to its task. */
+const STUCK_MS = 20000; // the mode, the agents and the idle timer, every second
 const VERIFY_MS = 10000; // how often a running helper is asked whether it is still ours
 const CONFIG_MS = 60000; // how long config.json is trusted
 const ICON = "mods/keep-awake/keep-awake.svg";
@@ -245,12 +252,21 @@ export default class KeepAwake extends View {
             this.menu = new Menu(cx);
             return;
         }
-        // `herdr-app check` loads a copy with no window and no layout: it decides nothing and must never start a
-        // helper, which would then be left behind when the check process exits.
-        if (!window() || !layout()) {
-            this.inert = true;
-            return;
-        }
+        // The layout's block can be initialised just before Herdr's window and layout exist (right after a restart), and
+        // `herdr-app check` loads a copy that never has them. Wait for both: a check copy exits long before, so it still
+        // starts nothing, while a real block begins as soon as the window is there.
+        this.inert = true;
+        if (window() && layout()) return this.begin(cx);
+        cx.timer.every(500, (cx) => {
+            if (this.inert === false || !window() || !layout()) return;
+            this.begin(cx);
+            cx.notify();
+        });
+    }
+
+    /** The worker proper: only once Herdr's window and layout exist. */
+    begin(cx) {
+        this.inert = false;
         this.platform = window()?.platform ?? "linux";
         this.config = parseConfig(null);
         this.configAt = 0;
@@ -261,6 +277,10 @@ export default class KeepAwake extends View {
         this.restarting = false;
         this.stopping = false;
         this.settling = false;
+        this.settlingAt = 0;
+        this.startingAt = 0;
+        this.stoppingAt = 0;
+        this.restartingAt = 0;
         this.configText = undefined; // the config.json text last read
         this.warned = new Set();
         this.owns = false; // true only for the copy that started the helper it holds
@@ -285,7 +305,7 @@ export default class KeepAwake extends View {
         if (this.configAt && Date.now() - this.configAt < CONFIG_MS) return;
         this.configAt = Date.now();
         cx.spawn(async (cx) => {
-            const text = await readTextFile(configPath()).catch(() => null);
+            const text = await this.readIn(cx, configPath());
             if (text === this.configText) return;
             const firstRead = this.configText === undefined,
                 previous = this.config.display,
@@ -312,6 +332,41 @@ export default class KeepAwake extends View {
         });
     }
 
+    /** One command, with a deadline: a command that never returns must not leave a step, or a record, stuck. */
+    async execIn(cx, command) {
+        if (!command) return null;
+        const run = exec(command.cmd, command.args).catch(() => null);
+        if (!cx?.timer) return run;
+        return withDeadline(run, (ms, fn) => cx.timer.after(ms, fn), EXEC_MS, null);
+    }
+
+    async readIn(cx, path) {
+        const read = readTextFile(path).catch(() => null);
+        if (!cx?.timer) return read;
+        return withDeadline(read, (ms, fn) => cx.timer.after(ms, fn), 4000, null);
+    }
+
+    async writeIn(cx, path, text, before) {
+        const write = writeTextFile(path, text, before).then(
+            () => true,
+            () => false,
+        );
+        if (!cx?.timer) return write;
+        return withDeadline(write, (ms, fn) => cx.timer.after(ms, fn), 4000, false);
+    }
+
+    /** Clears a step flag whose task never came back, so the next tick can try again. */
+    clearStuck() {
+        const now = Date.now();
+        for (const name of ["settling", "starting", "stopping", "restarting"]) {
+            if (this[name] && isStuck(this[`${name}At`], now, STUCK_MS)) {
+                this[name] = false;
+                this[`${name}At`] = 0;
+                this.warn(`The ${name} step stalled; trying again.`);
+            }
+        }
+    }
+
     /** The record in shared.json outlives a crash: forget it when it is not our helper any more, without killing. */
     settle(cx) {
         const recorded = this.helper;
@@ -322,12 +377,17 @@ export default class KeepAwake extends View {
             if (state === "gone" || state === "other") this.dropRecord();
             // "unknown" keeps the record; a later check decides, and cannot kill an unverified PID either way.
             this.settling = false;
+        this.settlingAt = 0;
+        this.startingAt = 0;
+        this.stoppingAt = 0;
+        this.restartingAt = 0;
             cx.notify();
         });
     }
 
     /** One second of the mode: decide, publish it, and let the helper follow. */
     tick(cx) {
+        this.clearStuck();
         this.loadConfig(cx);
         // The popup's switch (or another copy) changed the setting: apply it now, not when the helper next dies.
         const display = shared(DISPLAY);
@@ -370,10 +430,12 @@ export default class KeepAwake extends View {
         if (!this.helper?.pid || this.restarting || this.stopping) return;
         const recorded = this.helper;
         this.restarting = true;
+        this.restartingAt = Date.now();
         cx.spawn(async (cx) => {
-            await this.release(recorded);
-            if (shared(ACTIVE) === true) await this.start();
+            const released = await this.release(recorded, cx);
+            if (released && shared(ACTIVE) === true) await this.start(cx);
             this.restarting = false;
+            this.restartingAt = 0;
             cx.notify();
         });
     }
@@ -384,11 +446,12 @@ export default class KeepAwake extends View {
         const recorded = this.helper;
         if (recorded?.pid && Date.now() - this.verifiedAt < VERIFY_MS) return;
         this.starting = true;
+        this.startingAt = Date.now();
         cx.spawn(async (cx) => {
             try {
                 const recorded = this.helper;
                 if (recorded?.pid) {
-                    const action = await this.helperState(recorded);
+                    const action = await this.helperState(recorded, cx);
                     if (action === "reuse") {
                         this.verifiedAt = Date.now();
                         return;
@@ -399,30 +462,31 @@ export default class KeepAwake extends View {
                     this.dropRecord();
                 }
                 // Another copy (a reload, a second window) may already run one: take that over, never a second.
-                if (await this.adoptRecord()) return;
-                await this.start();
+                if (await this.adoptRecord(cx)) return;
+                await this.start(cx);
             } finally {
                 this.starting = false;
+                this.startingAt = 0;
             }
             cx.notify();
         });
     }
 
     /** What a PID looks like now: alive (true, false, or null when the check itself failed) and its command line. */
-    async inspect(pid) {
+    async inspect(pid, cx) {
         const alive = aliveCommand(this.platform, pid);
-        const running = await exec(alive.cmd, alive.args).catch(() => null);
-        if (!running) return { alive: null, commandLine: "" }; // could not ask: never kill on this
+        const running = await this.execIn(cx, alive);
+        if (!running) return { alive: null, commandLine: "" }; // could not ask (or timed out): never kill on this
         if (running.code !== 0) return { alive: false, commandLine: "" };
         const line = commandLineCommand(this.platform, pid);
-        const said = await exec(line.cmd, line.args).catch(() => null);
+        const said = await this.execIn(cx, line);
         if (said?.code !== 0) return { alive: true, commandLine: "" }; // alive, but not verified
         return { alive: true, commandLine: said.stdout };
     }
 
     /** "reuse", "gone", "other" or "unknown" for the recorded PID; it never kills. */
-    async helperState(recorded) {
-        const seen = await this.inspect(recorded.pid);
+    async helperState(recorded, cx) {
+        const seen = await this.inspect(recorded.pid, cx);
         return recordState({
             alive: seen.alive,
             commandLine: seen.commandLine,
@@ -441,58 +505,44 @@ export default class KeepAwake extends View {
     }
 
     /** Claims the one start slot (two windows share the app folder); false when another worker holds it. */
-    async claim() {
+    async claim(cx) {
         const file = helperFileIn(appHome());
-        const before = await readTextFile(file).catch(() => null);
+        const before = await this.readIn(cx, file);
         if (claimState(before) === "held") return null;
         const token = Math.random().toString(36).slice(2, 10);
         const text = claimText(token);
-        try {
-            await writeTextFile(file, text, before);
-        } catch {
-            return null;
-        }
+        if (!(await this.writeIn(cx, file, text, before))) return null;
         return { token, text, file, before };
     }
 
     /** Ends a claim that did not become a helper, so the next attempt can take it. */
-    async clearClaim(claim) {
-        await writeTextFile(claim.file, `${JSON.stringify({ phase: "idle" })}\n`, claim.text).catch(() => null);
+    async clearClaim(claim, cx) {
+        await this.writeIn(cx, claim.file, `${JSON.stringify({ phase: "idle" })}\n`, claim.text);
     }
 
     /** Records the started helper in the claim file, so another window can see it. False when another worker got there
      * first: the helper this copy started is then stopped, never left unrecorded. */
-    async recordHelper(claim, helper) {
+    async recordHelper(claim, helper, cx) {
         const text = `${JSON.stringify({ phase: "helper", ...helper })}\n`;
-        try {
-            await writeTextFile(claim.file, text, claim.text);
-            return true;
-        } catch {
-            return false;
-        }
+        return this.writeIn(cx, claim.file, text, claim.text);
     }
 
     /** Herdr's own PID: the parent of this command when it is the app, else the running app with the earliest start. */
-    async ownerPid() {
+    async ownerPid(cx) {
         const find = appPidCommand(this.platform);
-        const app = await exec(find.cmd, find.args).catch(() => null);
+        const app = await this.execIn(cx, find);
         return parsePid(app?.stdout);
     }
 
     /** Writes a stop file and says whether it stuck: a start must not proceed on a stop it cannot replace. */
-    async writeStopFile(file, text) {
-        const before = await readTextFile(file).catch(() => null);
-        try {
-            await writeTextFile(file, text, before);
-            return true;
-        } catch {
-            return false;
-        }
+    async writeStopFile(file, text, cx) {
+        const before = await this.readIn(cx, file);
+        return this.writeIn(cx, file, text, before);
     }
 
     /** Takes over the helper another copy recorded, instead of starting a second one. */
-    async adoptRecord() {
-        const text = await readTextFile(helperFileIn(appHome())).catch(() => null);
+    async adoptRecord(cx) {
+        const text = await this.readIn(cx, helperFileIn(appHome()));
         if (!text) return false;
         let raw;
         try {
@@ -501,7 +551,7 @@ export default class KeepAwake extends View {
             return false;
         }
         if (raw?.phase !== "helper" || !raw.pid || raw.pid === this.helper?.pid) return false;
-        if ((await this.helperState(raw)) !== "reuse") return false;
+        if ((await this.helperState(raw, cx)) !== "reuse") return false;
         this.helper = { pid: raw.pid, owner: raw.owner, at: raw.at, stopFile: stopFileIn(appHome()), token: raw.token };
         this.verifiedAt = Date.now();
         this.owns = false;
@@ -509,20 +559,20 @@ export default class KeepAwake extends View {
         return true;
     }
 
-    async start() {
-        const claim = await this.claim();
+    async start(cx) {
+        const claim = await this.claim(cx);
         if (!claim) return; // another window is starting, or already did
-        const owner = await this.ownerPid();
+        const owner = await this.ownerPid(cx);
         if (!owner) {
-            await this.clearClaim(claim);
+            await this.clearClaim(claim, cx);
             this.warn("Herdr's own process was not found; nothing can be kept awake.");
             return;
         }
         // A fresh stop file per helper: a "stop" left by an earlier one can never end this one, and a failure to create
         // it stops the start rather than risking a helper that would read an old stop.
         const stopFile = stopFileIn(appHome());
-        if (!(await this.writeStopFile(stopFile, stopLine("run", claim.token)))) {
-            await this.clearClaim(claim);
+        if (!(await this.writeStopFile(stopFile, stopLine("run", claim.token), cx))) {
+            await this.clearClaim(claim, cx);
             this.warn("The stop file could not be written; the helper was not started.");
             return;
         }
@@ -534,12 +584,12 @@ export default class KeepAwake extends View {
             token: claim.token,
             recordFile: helperFileIn(appHome()),
         });
-        const r = await exec(command.cmd, command.args).catch((e) => ({ code: 1, stdout: "", stderr: String(e) }));
-        const pid = parsePid(r.stdout);
-        if (r.code !== 0 || !pid) {
-            await this.clearClaim(claim);
+        const r = await this.execIn(cx, command);
+        const pid = parsePid(r?.stdout);
+        if (!r || r.code !== 0 || !pid) {
+            await this.clearClaim(claim, cx);
             this.warn(
-                `The keep-awake helper did not start: ${(r.stderr || r.stdout || "").trim().split("\n")[0] || r.code}`,
+                `The keep-awake helper did not start: ${(r?.stderr || r?.stdout || "no answer").trim().split("\n")[0]}`,
             );
             return;
         }
@@ -547,18 +597,19 @@ export default class KeepAwake extends View {
         this.verifiedAt = Date.now();
         this.owns = true;
         setShared(HELPER, this.helper);
-        if (await this.recordHelper(claim, this.helper)) return;
+        if (await this.recordHelper(claim, this.helper, cx)) return;
         // Another worker recorded its own between our claim and this write: ours is the duplicate.
         this.warn("Another window started a keep-awake helper first; this one was stopped.");
-        await this.release(this.helper);
+        await this.release(this.helper, cx);
         this.helper = shared(HELPER) ?? null;
         this.verifiedAt = 0;
     }
 
-    /** Stops the helper: its stop file first, then a kill only after it verifies as ours. */
-    async release(recorded) {
-        await this.writeStopFile(stopFileIn(appHome()), stopLine("stop", recorded.token));
-        const seen = await this.inspect(recorded.pid);
+    /** Stops the helper: its stop file first, then a kill only after it verifies as ours. False when the helper could
+     * not be checked, in which case its record stays so the next tick retries instead of forgetting a live one. */
+    async release(recorded, cx) {
+        await this.writeStopFile(stopFileIn(appHome()), stopLine("stop", recorded.token), cx);
+        const seen = await this.inspect(recorded.pid, cx);
         const decision = killDecision({
             recorded,
             alive: seen.alive,
@@ -569,9 +620,11 @@ export default class KeepAwake extends View {
         });
         if (decision === "kill") {
             const command = stopCommand(this.platform, recorded.pid);
-            await exec(command.cmd, command.args).catch(() => null);
+            await this.execIn(cx, command);
         }
+        if (releaseOutcome({ known: seen.alive !== null, decision }) === "keep") return false;
         this.dropRecord();
+        return true;
     }
 
     /** Stops the helper when the mode no longer needs it. */
@@ -580,9 +633,12 @@ export default class KeepAwake extends View {
         const recorded = this.helper ?? shared(HELPER);
         if (!recorded?.pid) return;
         this.stopping = true;
+        this.stoppingAt = Date.now();
         cx.spawn(async (cx) => {
-            await this.release(recorded);
+            const released = await this.release(recorded, cx);
+            if (!released) this.warn("The keep-awake helper could not be checked; trying again next tick.");
             this.stopping = false;
+            this.stoppingAt = 0;
             cx.notify();
         });
     }
@@ -600,11 +656,14 @@ export default class KeepAwake extends View {
         return div();
     }
 
-    /** Herdr is quitting: end the request now, while exec and the file writes still go out. A popup copy holds nothing. */
-    async close() {
+    /** Herdr is quitting: a fast stop-file write, no process checks; the helper's 5-second poll ends it. A popup copy
+     * holds nothing, and a release cannot leave the button lit. */
+    async close(cx) {
         if (this.inert) return;
         const recorded = helperToRelease(this.menu, this.helper, this.owns);
         if (!recorded?.pid) return;
-        await this.release(recorded);
+        await this.writeStopFile(stopFileIn(appHome()), stopLine("stop", recorded.token), cx);
+        this.dropRecord();
+        setShared(ACTIVE, false);
     }
 }

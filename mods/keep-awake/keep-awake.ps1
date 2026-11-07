@@ -8,7 +8,7 @@ param(
     [string]$Token = "",
     [string]$RecordFile = "",
     [int]$Display = 0,
-    [int]$Seconds = 20
+    [int]$Seconds = 5
 )
 
 Add-Type -Namespace KeepAwake -Name Native -MemberDefinition @'
