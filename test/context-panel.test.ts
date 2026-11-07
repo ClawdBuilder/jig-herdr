@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { TestContext } from "node:test";
 import { test } from "node:test";
-import { parseRequest, takeRequest } from "../../plugins/jig-session/src/requests.ts";
+import { parseRequest, takeRequest } from "@clawdbuilder/jig/contracts/requests.js";
 import { HERDR, load } from "./support.ts";
 
 type Pending = { tools: Record<string, boolean>; skills: Record<string, boolean>; reload: boolean };

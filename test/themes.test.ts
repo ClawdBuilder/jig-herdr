@@ -10,7 +10,8 @@ type Theme = { background: string; foreground: string; ansi: string[]; colors: R
 type Convert = { toHerdr(vars: unknown, appearance?: string): Theme | null; NEEDED: string[] };
 
 test("herdr/themes has one theme for each palette of jig-theme and nothing else", () => {
-    assert.deepEqual(readdirSync(THEMES).sort(), readdirSync(PALETTES).sort());
+    const palettes = Object.keys(JSON.parse(readFileSync(PALETTES, "utf8")) as object);
+    assert.deepEqual(readdirSync(THEMES).sort(), palettes.sort());
     assert.equal(readdirSync(THEMES).length, 6);
 });
 
@@ -32,13 +33,14 @@ test("a theme has the 16 terminal colours and the panel colours, all #rrggbb", a
     }
 });
 
+const palette = (name: string) =>
+    (JSON.parse(readFileSync(PALETTES, "utf8")) as Record<string, {
+        vars: Record<string, string>;
+        appearance: string;
+    }>)[`${name}.json`] as { vars: Record<string, string>; appearance: string };
+
 test("a dark palette keeps a black window and a light one takes the palette's own backgrounds", async () => {
     const { toHerdr } = await load<Convert>("mods/jig-theme-sync/convert.js");
-    const palette = (name: string) =>
-        JSON.parse(readFileSync(path.join(PALETTES, `${name}.json`), "utf8")) as {
-            vars: Record<string, string>;
-            appearance: string;
-        };
     const lime = palette("jig-lime");
     assert.equal(toHerdr(lime.vars, lime.appearance)?.colors.canvas, "#000000");
     const paper = palette("jig-paper");
@@ -48,9 +50,7 @@ test("a dark palette keeps a black window and a light one takes the palette's ow
 
 test("a palette that lacks a colour, or has one that is not #rrggbb, is not converted", async () => {
     const { toHerdr, NEEDED } = await load<Convert>("mods/jig-theme-sync/convert.js");
-    const lime = JSON.parse(readFileSync(path.join(PALETTES, "jig-lime.json"), "utf8")) as {
-        vars: Record<string, string>;
-    };
+    const lime = palette("jig-lime");
     assert.ok(toHerdr(lime.vars));
     assert.equal(toHerdr({ ...lime.vars, accent: "oklch(0.8 0.2 130)" }), null);
     for (const name of NEEDED) assert.equal(toHerdr({ ...lime.vars, [name]: "" }), null, name);

@@ -3,11 +3,13 @@
 // that was not followed by a run of this script fails there.
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-const ROOT = path.resolve(import.meta.dirname, "../..");
-/** The palettes: jig-theme's Pi theme files. */
-export const PALETTES = path.join(ROOT, "plugins/jig-theme/themes");
+/** The palettes from the published Jig package, never a relative path into Jig. */
+export const PALETTES = path.join(
+    path.dirname(fileURLToPath(import.meta.resolve("@clawdbuilder/jig/package.json"))),
+    "contracts/palettes.json",
+);
 /** Where the Herdr themes go, and the conversion the mod uses. */
 export const THEMES = path.resolve(import.meta.dirname, "../themes");
 const CONVERT = path.resolve(import.meta.dirname, "../mods/jig-theme-sync/convert.js");
@@ -21,8 +23,9 @@ interface Converter {
 export async function herdrThemes(): Promise<Record<string, string>> {
     const convert = (await import(pathToFileURL(CONVERT).href)) as Converter;
     const out: Record<string, string> = {};
-    for (const file of readdirSync(PALETTES).sort()) {
-        const palette = JSON.parse(readFileSync(path.join(PALETTES, file), "utf8")) as {
+    const all = JSON.parse(readFileSync(PALETTES, "utf8")) as Record<string, unknown>;
+    for (const file of Object.keys(all).sort()) {
+        const palette = all[file] as {
             vars: unknown;
             appearance: unknown;
         };
