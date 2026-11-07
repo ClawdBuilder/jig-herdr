@@ -15,11 +15,12 @@ window follows, unseen, the colour palette the Jig plugins give Pi.
 Left to right, top to bottom, in a window with no system title bar (`titlebar: none`, `traffic_lights: [12, 16]`):
 
 - **Sidebar, 300 px (44 to 520), background `chrome`,** not resizable. A 46 px brand row (`workspace-chrome`, drags the window), then
-  Herdr's `spaces` and `agents` lists sharing the height equally (each at least 90 px), a 0 px block for `jig-theme-sync`
+  Herdr's `spaces` and `agents` lists sharing the height equally (each at least 90 px), 0 px blocks for `jig-theme-sync`
   (it draws nothing), then a 69 px footer
   (`workspace-chrome` with `footer: true`).
 - **Work column.** A 42 px tab bar (`jig-tabs`, drags the window): Herdr's tab pills and `+`, then two 26 px buttons with an
-  icon and a label, `Panel` (`panel-right` icon) and `Jig` (a set-square icon), on `selected` while lit. Below it, on 8 px
+  icon and a label, `Panel` (`panel-right` icon) and `Jig` (a set-square icon), on `selected` while lit, and a 26 px sun
+  (Keep awake) that takes the accent colour and a selected background while the computer is held awake. Below it, on 8 px
   padding with an 8 px gap: the terminals, and the side panel.
 - **Terminals** as cards: radius 10, 8 px gap, 1 px `border`, a 1 px `accent` border on the focused one, and a 30 px header
   (`pane`) always shown. A single terminal is framed too (`lone: true`).
@@ -71,6 +72,13 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
   answer comes. A tool switch applies from the model's next request and a skill switch from the next prompt; Reload waits until the agent is idle.
 - **Panel and Jig.** `Panel` shows or hides the side panel on its last section; `Jig` shows the Work section, and hides the
   panel when it already shows it. The panel's state is remembered per space.
+- **Keep awake.** The sun holds the computer awake on its idle timer: Off, On (until switched off or Herdr closes), or While
+  agents work (while any agent anywhere is working or blocked, and `idleMinutes` after the last one). A click turns Off ↔
+  On; a right click opens a 330×196 popup with the three modes, whether the request is held and that a lid or the power
+  button still sleeps the computer. `Ctrl+Shift+Alt+K` cycles the modes. The helper is a hidden PowerShell
+  (`SetThreadExecutionState`) on Windows, `caffeinate -i [-d] -w <herdr pid>` on macOS, or `systemd-inhibit --what=sleep[:idle]
+  --mode=block sleep infinity` on Linux, started on Herdr's own computer and stopped when it is no longer wanted or Herdr
+  exits; its request ends with its process.
 - **Changes.** The repositories under the space's folder (or the one repository, if the folder is inside one) are read by one
   `sh` script on the space's machine: every 5 seconds while the panel is shown, when it is opened, and at once when any
   terminal changes status. A click on a repository's row folds it; the filter keeps repositories whose name matches (with
@@ -107,7 +115,7 @@ The layout is `layouts/jig.json`, rewritten from Herdr's shipped `main` layout. 
 - `root` (row; theme `jig-lime`, `background: canvas`, `terminal_padding: [14, 12]`, 1 px `border` dividers, `preview:
   layouts/jig.svg`)
   - `sidebar` (column, 300 px, min 44, max 520) with `brand`, `sidebar-lists` (`spaces`, `agents`), `jig-theme` (0 px,
-    mod `jig-theme-sync`) and `sidebar-footer`
+    mod `jig-theme-sync`), `keep-awake` (a 0 px block, mod `keep-awake`) and `sidebar-footer`
   - `work` (column) with `tabs` (mod `jig-tabs`) and `work-body`
     - `work-body` (row, padding 8, gap 8): `main` (`{ tab: "active", pane: {...} }`) and `panel` (row, 420 px)
     - `panel`: `panel-body` (stack, active `jig-work`) and `activity` (block, 40 px, not resizable;
@@ -135,9 +143,18 @@ The mods, all in `mods/`, each with `mod.json` `{ "place": "none", "title": "...
   ["-c", SCRIPT, "sh", stateDir], { on })`, and for a switch or Reload one `exec("sh", ["-c", 'printf %s "$2" > "$1.tmp" &&
   mv "$1.tmp" "$1"', "sh", requestFile, json], { on })`; `focused()`, `spaces()`, `layout()`, `localStorage` for the open
   lists. Files: `main.js`, `lib.js` (a copy of Work's session finding, the bar, the request).
-- **`jig-tabs`** (props `{ panel, stack, jig }`). Herdr's `tabs` mod (Apache-2.0) with the two buttons; `run("layout.select" |
-  "layout.show" | "layout.hide")`; icons `mods/jig-tabs/jig.svg`, `mods/workspace-chrome/panel-right.svg`, and Herdr's
-  window buttons from `mods/tabs/`.
+- **`jig-tabs`** (props `{ panel, stack, jig }`). Herdr's `tabs` mod (Apache-2.0) with the two buttons and the sun;
+  `run("layout.select" | "layout.show" | "layout.hide")`, `setShared("keep-awake.mode", ...)` from the sun, and
+  `openOverlay({ mod: "keep-awake", kind: "popup", props: { menu: true } })` on a right click; icons
+  `mods/jig-tabs/jig.svg`, `mods/keep-awake/keep-awake.svg`, `mods/workspace-chrome/panel-right.svg`, and Herdr's window
+  buttons from `mods/tabs/`.
+- **`keep-awake`** (props: none, or `{ menu: true }` for its popup; settings in `config.json`: `{ idleMinutes, display }`).
+  Reads `agents()`, `window()`, `shared("keep-awake.mode")`; sets `shared("keep-awake.mode" | "active" | "helper")`; runs
+  `exec` on Herdr's own computer for the helper (`powershell`'s `Start-Process -WindowStyle Hidden`, `sh` for `caffeinate`
+  or `systemd-inhibit`), for `appPidCommand`, `aliveCommand`, `commandLineCommand` and `stopCommand`; reads and writes
+  `keep-awake.stop` in the app folder with `readTextFile`/`writeTextFile`; `notify` on a failure. A 1-second timer decides,
+  a 10-second check asks whether the helper is still ours, and a `nextCommand()` loop serves `cycle`, `on`, `off` and
+  `agents`. Files: `main.js`, `lib.js`, `keep-awake.ps1`, `keep-awake.svg`, `config.json`.
 - **`file-view`** (props `{ on, path }` from `tab.new`). `readTextFile(path, { on })`, `EditorState` and `Editor` from
   `gpui-base`, read-only.
 - **`repo-changes`** (props: none, or `{ picker }` as its own popup; settings in `config.json`: `{ newBranchPrefix,
@@ -192,7 +209,8 @@ Work panel needs Jig's Pi plugin `jig-session` loaded in Pi: it writes the statu
   (`HC_TERMINAL_ID`). Put the machine in front before comparing with `focused().terminal`.
 - **`tab.new` does not give a mod the new tab's id.** Find it as the tab that was not there before, and keep the map in
   `shared("file-view.tabs")` so a second click selects it.
-- **A block of 0 px still runs its mod.** Its timers run, so `jig-theme-sync` syncs without taking a line of the sidebar.
+- **A block of 0 px still runs its mod.** Its timers run, so `jig-theme-sync` syncs and `keep-awake` watches agents without
+  taking a line of the sidebar.
 - **Pane headers stay `"reveal": "always"`.** On hover the header is drawn over the terminal and hides its prompt line.
 - **Poll only while shown.** A mod's timers run while its block is hidden; check `layout()` (no hidden node, every stack on
   the way showing it) before reading.
