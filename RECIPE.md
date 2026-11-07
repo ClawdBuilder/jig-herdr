@@ -74,7 +74,7 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
   panel when it already shows it. The panel's state is remembered per space.
 - **Keep awake.** The sun holds the computer awake on its idle timer: Off, On (until switched off or Herdr closes), or While
   agents work (while any agent anywhere is working or blocked, and `idleMinutes` after the last one). A click turns Off ↔
-  On; a right click opens a 330×232 popup with the three modes, a `Keep screen on` switch (on by default; writing it restarts
+  On; a right click opens a 330×252 popup with the three modes, a `Keep screen on` switch (on by default; writing it restarts
   the helper at once), whether the request is held and that a lid or the power button still sleeps the computer. `Ctrl+Shift+Alt+K` cycles the modes. The helper is a hidden PowerShell
   (`SetThreadExecutionState`) on Windows, `caffeinate -i [-d] -w <herdr pid>` on macOS, or `systemd-inhibit --what=sleep[:idle]
   --mode=block sleep infinity` on Linux, started on Herdr's own computer and stopped when it is no longer wanted or Herdr

@@ -82,28 +82,41 @@ plan, the registry or the display is changed, and it needs no administrator righ
   space, tab or machine is `working` or `blocked`, and `idleMinutes` after the last one stops). A click on the sun turns
   Off ↔ On; a right-click opens a popup with the three modes, `Keep screen on` (on by default), what is held now, and what it
   cannot do. `Ctrl+Shift+Alt+K` cycles the modes; the sun's tooltip says whether the screen is kept on too.
+- **Every machine counts**: "While agents work" holds for agents in any space, tab or machine, and `blocked` ones (a
+  permission question) count as busy, so one blocked agent anywhere keeps the computer awake.
 - **The screen is kept on** by default (`display: true`), not only the system; the popup's switch writes `config.json` and
   restarts a running helper at once with the new flag, so the screen follows without waiting for it to die. A closed lid or
   the power button still sleeps the computer; the popup says so.
-- **One helper, never two.** Its PID is in `shared("keep-awake.helper")`; a second copy (or a restart) reuses it while it
-  is alive and still ours, and starts a new one otherwise. A PID that now belongs to another process is forgotten, never
-  killed. Restarting Herdr starts it again if the mode is On or agents are busy (the mode lives in `shared.json`).
+- **One helper, never two.** Its PID is in `shared("keep-awake.helper")`, and a claim in `keep-awake.helper.json` in the app
+  folder lets only one worker start one (two Herdr windows share that folder). A second copy, a reload or a restart reuses
+  it while it is alive and its command line is ours — the PowerShell with `-Owner <herdr pid>`, `caffeinate -w <herdr pid>`,
+  or the `systemd-inhibit` line whose `--why` is ours — and starts a new one otherwise.
+- **A recorded PID is verified before every kill.** If the record is gone, cannot be checked, or its PID now belongs to
+  another process, the record is dropped without touching anything; `taskkill` runs without `/T`, because the helper has no
+  tree of its own. A copy loaded by `herdr-app check` has no window or layout and does nothing at all; only the copy that
+  started a helper releases it when Herdr quits (the owner check ends it within about 20 seconds otherwise). The helper's
+  stop file, `keep-awake.stop` in the app folder, names the start that wrote it (`stop <token>`), so an old stop cannot end
+  a new helper.
 - **It ends when Herdr does.** The helper watches Herdr's own process and exits within about 20 seconds when it is gone;
   the mod also asks it to stop on close, so a crash cannot leave a computer awake for ever. Its request is tied to its own
   lifetime, so nothing can outlive it.
 - **What it runs, on Herdr's computer** (`exec` without `on`, never on a space's machine):
-  - **Windows:** a hidden, detached PowerShell (`Start-Process -WindowStyle Hidden`) running `keep-awake.ps1`, which calls
-    `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED [| ES_DISPLAY_REQUIRED])` and repeats it every 20 seconds.
+  - **Windows:** a hidden, detached PowerShell (`Start-Process -WindowStyle Hidden`, every argument quoted for the child)
+    running `keep-awake.ps1`, which calls
+    `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED [| ES_DISPLAY_REQUIRED])`, repeats it every 20 seconds, and
+    exits when its owner is gone, is no longer `herdr-app`, or the stop file names its own start.
   - **macOS:** `caffeinate -i [-d] -w <herdr pid>`, in the background.
-  - **Linux:** `systemd-inhibit --what=sleep[:idle] --why="Herdr keep awake" --mode=block sleep infinity`, in the
-    background and killed on stop.
+  - **Linux:** `systemd-inhibit --what=sleep[:idle] --why="Herdr keep awake" --mode=block sh -c 'while kill -0 <herdr pid>;
+    do sleep 20; done' keep-awake`, in the background: the helper watches Herdr itself, so it cannot outlive it, and its
+    command line carries the marker and owner the mod recognises.
 - **Shared state:** `shared("keep-awake.mode")` (`"off"`, `"on"` or `"agents"`), `shared("keep-awake.display")` (the screen
   setting for this session), `shared("keep-awake.active")` (whether the request is held now) and
   `shared("keep-awake.helper")` (`{ pid, owner, at }`), so the tab bar, other layouts and the key all drive the same worker.
 - **Props:** none for the worker; `{ menu: true }` draws the mode popup. **Files:** `main.js`, `lib.js` (the mode decision
   and idle timer, the commands for each platform, the PID bookkeeping and `config.json`), `keep-awake.ps1`,
-  `keep-awake.svg`, `config.json`. **Settings:** `idleMinutes` (5 by default; 0 stops as soon as the last agent does) and
-  `display` (true by default: keep the screen on too).
+  `keep-awake.svg`, `config.json`. The Windows helper also checks that its owner process is still `herdr-app`, so a reused
+  PID cannot keep the computer awake. **Settings:** `idleMinutes` (5 by default; 0 stops as soon as the last agent does) and
+  `display` (true by default: keep the screen on too; a hand edit made while Herdr was closed wins at the next start).
 
 ## file-view: a file in a tab
 

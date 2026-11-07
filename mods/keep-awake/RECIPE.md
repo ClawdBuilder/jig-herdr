@@ -10,7 +10,7 @@ about the power plan, the registry or the display is changed, and no administrat
 - **In the tab bar**, beside `Panel` and `Jig`, a 26 px sun. Off it is dim; while the request is held it takes the accent
   colour and a selected background. Its tooltip names the mode and whether the computer will sleep, and says a right click
   opens the modes.
-- **The popup** (330×232, at the pointer): `Keep awake` and `holding off sleep` or `not holding`, then three rows — `Off`,
+- **The popup** (330×252, at the pointer): `Keep awake` and `holding off sleep` or `not holding`, then three rows — `Off`,
   `On` ("until you switch it off, or Herdr closes"), `While agents work` ("and 5 min after it stops") — the current one
   ticked; a `Keep screen on` row with a 28×16 switch and `on`/`off` beside it; and a line saying a closed lid or the power
   button still sleeps the computer.
@@ -28,9 +28,12 @@ about the power plan, the registry or the display is changed, and no administrat
   holding, restarts the helper at once with the new flag (stop, then start: never two), so the screen follows without waiting
   for the helper to die. The sun's tooltip says whether the screen is kept on. A closed lid or the power button still sleeps
   the computer.
-- **One helper only.** Its PID lives in `shared("keep-awake.helper")`; a second copy, a reload or a restart reuses it while
-  it is alive and its command line still names this mod's script, and starts one otherwise. A PID that now belongs to
-  another process is forgotten, never killed.
+- **One helper only.** Its PID lives in `shared("keep-awake.helper")` and a fresh claim in `keep-awake.helper.json` (the app
+  folder) lets only one worker start one, so two windows cannot each start their own. A second copy, a reload or a restart
+  reuses it while it is alive and its command line is ours on that platform, with the same Herdr as owner.
+- **Never an unverified kill.** Before every `taskkill`/`kill` the PID is checked: alive, and its command line is this mod's
+  helper for this owner. A record that is gone, unreadable or now another process's is dropped without touching it, and a
+  failed liveness check never becomes a kill.
 - **It ends with Herdr.** The helper watches Herdr's process and exits within about 20 seconds when it is gone; the mod
   also writes `stop` to its stop file and kills it on close. Its OS request is tied to its own process, so a crash cannot
   leave the computer awake for ever.
@@ -47,11 +50,16 @@ about the power plan, the registry or the display is changed, and no administrat
 - `lib.js`: the pure parts — `modeOf`, `toggleMode`, `nextMode`, `tooltip`, `anyBusy`, `decide` (the idle timer),
   `parseConfig`, `setDisplay` (the switch's write, keeping the file's other fields), `parsePid`, `isHelper`, `helperAction`,
   and the commands for each platform:
-  - **Windows:** `powershell -NoProfile -Command "$p = Start-Process -FilePath 'powershell.exe' -ArgumentList … -WindowStyle
-    Hidden -PassThru; $p.Id"`, which returns at once and prints the hidden process's PID. It runs `keep-awake.ps1`, which
-    calls `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED [| ES_DISPLAY_REQUIRED])` and repeats it every 20 s.
+  - **Windows:** `powershell -NoProfile -Command "$q = @(…quoted words…) -join ' '; $p = Start-Process -FilePath
+    'powershell.exe' -ArgumentList $q -WindowStyle Hidden -PassThru; $p.Id"`, which returns at once and prints the hidden
+    process's PID. Each argument is quoted for the child command line, so a folder with spaces works. It runs
+    `keep-awake.ps1`, which calls `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED [| ES_DISPLAY_REQUIRED])`,
+    repeats it every 20 s, and exits if its owner PID is gone or is no longer `herdr-app` (a reused PID), or if the stop
+    file says `stop` for its own token.
   - **macOS:** `caffeinate -i [-d] -w <herdr pid>` in the background (`sh -c 'nohup … & echo $!'`).
-  - **Linux:** `systemd-inhibit --what=sleep[:idle] --why="Herdr keep awake" --mode=block sleep infinity` the same way.
+  - **Linux:** `systemd-inhibit --what=sleep[:idle] --why="Herdr keep awake" --mode=block sh -c 'while kill -0 <herdr pid>;
+    do sleep 20; done' keep-awake` the same way: it watches Herdr itself, and its command line carries the marker and owner
+    the mod matches.
 - `keep-awake.ps1`: the Windows helper. It exits on the stop file (`stop`), when the owner PID is gone, or when killed, and
   clears the request on the way out.
 - `keep-awake.svg`: the sun, a one-colour glyph drawn in the text colour.
@@ -72,8 +80,9 @@ about the power plan, the registry or the display is changed, and no administrat
 - **Herdr's own PID is found by process name** (`herdr-app`); with two windows of two installs, the first is watched.
 - **A helper started while no Herdr process is found is not started at all** (one warning), rather than a request no
   process would ever end.
-- **The stop file is `keep-awake.stop` in the app folder**, next to `shared.json`; a helper restarted by hand must use the
-  same script path or the mod will not recognise it as its own.
+- **The stop file is `keep-awake.stop` in the app folder**, one file whose content names the start that wrote it
+  (`run <token>` / `stop <token>`), so a "stop" left by an earlier helper can never end a new one and nothing accumulates; a
+  helper restarted by hand must use the same script path, owner and token or the mod will not recognise it.
 - **The switch writes inside the app folder** (`mods/keep-awake/config.json`) with `writeTextFile`; a read-only folder or a
   file changed under it shows "Could not write config.json" and leaves the setting as it was.
 - **The tab bar is `jig-tabs`**, which this repository owns; the popup is `openOverlay({ mod: "keep-awake", kind: "popup",
