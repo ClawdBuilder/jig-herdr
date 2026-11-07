@@ -377,10 +377,10 @@ export default class KeepAwake extends View {
             if (state === "gone" || state === "other") this.dropRecord();
             // "unknown" keeps the record; a later check decides, and cannot kill an unverified PID either way.
             this.settling = false;
-        this.settlingAt = 0;
-        this.startingAt = 0;
-        this.stoppingAt = 0;
-        this.restartingAt = 0;
+            this.settlingAt = 0;
+            this.startingAt = 0;
+            this.stoppingAt = 0;
+            this.restartingAt = 0;
             cx.notify();
         });
     }
