@@ -94,16 +94,18 @@ plan, the registry or the display is changed, and it needs no administrator righ
 - **A recorded PID is verified before every kill.** If the record is gone, cannot be checked, or its PID now belongs to
   another process, the record is dropped without touching anything; `taskkill` runs without `/T`, because the helper has no
   tree of its own. A copy loaded by `herdr-app check` has no window or layout and does nothing at all; only the copy that
-  started a helper releases it when Herdr quits (the owner check ends it within about 20 seconds otherwise). The helper's
+  started a helper releases it when Herdr quits; otherwise the owner check ends it within about 5 seconds. The helper's
   stop file, `keep-awake.stop` in the app folder, names the start that wrote it (`stop <token>`), so an old stop cannot end
   a new helper.
-- **It ends when Herdr does.** The helper watches Herdr's own process and exits within about 20 seconds when it is gone;
-  the mod also asks it to stop on close, so a crash cannot leave a computer awake for ever. Its request is tied to its own
+- **It ends when Herdr does.** The helper checks its stop file and Herdr's own process every 5 seconds; on close the mod
+  only writes `stop` (fast), so the helper is gone within about 5 seconds, and a crash cannot leave a computer awake for ever.
+  A started helper whose liveness cannot be read keeps its record and is retried, and every command the worker runs has a
+  deadline, so a step cannot stay stuck after a restart. Its request is tied to its own
   lifetime, so nothing can outlive it.
 - **What it runs, on Herdr's computer** (`exec` without `on`, never on a space's machine):
   - **Windows:** a hidden, detached PowerShell (`Start-Process -WindowStyle Hidden`, every argument quoted for the child)
     running `keep-awake.ps1`, which calls
-    `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED [| ES_DISPLAY_REQUIRED])`, repeats it every 20 seconds, and
+    `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED [| ES_DISPLAY_REQUIRED])`, repeats it every 5 seconds, and
     exits when its owner is gone, is no longer `herdr-app`, or the stop file names its own start.
   - **macOS:** `caffeinate -i [-d] -w <herdr pid>`, in the background.
   - **Linux:** `systemd-inhibit --what=sleep[:idle] --why="Herdr keep awake" --mode=block sh -c 'while kill -0 <herdr pid>;

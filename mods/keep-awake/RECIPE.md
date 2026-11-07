@@ -34,8 +34,9 @@ about the power plan, the registry or the display is changed, and no administrat
 - **Never an unverified kill.** Before every `taskkill`/`kill` the PID is checked: alive, and its command line is this mod's
   helper for this owner. A record that is gone, unreadable or now another process's is dropped without touching it, and a
   failed liveness check never becomes a kill.
-- **It ends with Herdr.** The helper watches Herdr's process and exits within about 20 seconds when it is gone; the mod
-  also writes `stop` to its stop file and kills it on close. Its OS request is tied to its own process, so a crash cannot
+- **It ends with Herdr.** The helper checks its stop file and Herdr's process every 5 seconds; on close the mod writes
+  `stop` and returns (no process checks), so it is gone within about 5 seconds. Every command the worker runs has a deadline;
+  a step that never returns clears its flag and is retried, and a release whose liveness check failed keeps the record. Its OS request is tied to its own process, so a crash cannot
   leave the computer awake for ever.
 - **Failures** (no Herdr process found, a helper that would not start) post one warning notification and leave the mode as
   it was.
@@ -54,7 +55,7 @@ about the power plan, the registry or the display is changed, and no administrat
     'powershell.exe' -ArgumentList $q -WindowStyle Hidden -PassThru; $p.Id"`, which returns at once and prints the hidden
     process's PID. Each argument is quoted for the child command line, so a folder with spaces works. It runs
     `keep-awake.ps1`, which calls `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED [| ES_DISPLAY_REQUIRED])`,
-    repeats it every 20 s, and exits if its owner PID is gone or is no longer `herdr-app` (a reused PID), or if the stop
+    repeats it every 5 s, and exits if its owner PID is gone or is no longer `herdr-app` (a reused PID), or if the stop
     file says `stop` for its own token.
   - **macOS:** `caffeinate -i [-d] -w <herdr pid>` in the background (`sh -c 'nohup … & echo $!'`).
   - **Linux:** `systemd-inhibit --what=sleep[:idle] --why="Herdr keep awake" --mode=block sh -c 'while kill -0 <herdr pid>;
