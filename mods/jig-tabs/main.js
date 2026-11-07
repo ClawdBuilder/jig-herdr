@@ -1,6 +1,8 @@
 // The tab bar of the jig layout: Herdr's shipped `tabs` mod with its Files and Changes buttons replaced by two:
 // "Panel" shows or hides the side panel on the section it showed last, and "Jig" shows it on the Jig Work section
-// (or hides it when that is what it shows). The side panel is still remembered per space.
+// (or hides it when that is what it shows). The side panel is still remembered per space. A third control keeps the
+// computer awake: a lit sun when the keep-awake worker holds the request; a click turns it on or off, a right click
+// opens its three modes (Off, On, While agents work).
 //
 // Derived from the `tabs` mod shipped with the Herdr app (mods/tabs/main.js), Copyright the Herdr authors,
 // licensed under the Apache License, Version 2.0 (the LICENSE file in the Herdr app's folder,
@@ -11,7 +13,7 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { spaces, panes, run, openOverlay, theme, window, layout, settings, props } from "herdr";
+import { spaces, panes, run, openOverlay, theme, window, layout, settings, props, shared, setShared } from "herdr";
 
 function find(node, id) {
     if (node?.id === id) return node;
@@ -172,6 +174,48 @@ export default class JigTabs extends View {
         const panel = find(root, names.panel),
             body = find(root, names.stack);
         this.syncPanel(space, panel, body, names);
+        // Keep awake: the worker owns the request; this only says what the person wants.
+        const awakeMode = ["off", "on", "agents"].includes(shared("keep-awake.mode"))
+                ? shared("keep-awake.mode")
+                : "off",
+            awake = shared("keep-awake.active") === true,
+            awakeLabel =
+                awakeMode === "on"
+                    ? "On until switched off or Herdr closes"
+                    : awakeMode === "agents"
+                      ? "While agents work"
+                      : "Off",
+            awakeButton = div()
+                .id("keep-awake")
+                .size(26)
+                .flex_none()
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(6)
+                .when(awake, (el) => el.bg(t.selected).text_color(t.accent))
+                .when(!awake, (el) => el.text_color(t.dim))
+                .hover((s) => s.bg(t.hover).text_color(t.foreground))
+                .tooltip(
+                    `Keep awake: ${awakeLabel}${awake ? " — the computer will not sleep" : ""}\n` +
+                        `Click to turn it ${awakeMode === "off" ? "on" : "off"}; right-click for the modes`,
+                )
+                .on_mouse_down("left", stop)
+                .on_mouse_down("right", (_e, cx) => {
+                    cx.stop_propagation();
+                    openOverlay({
+                        mod: "keep-awake",
+                        kind: "popup",
+                        width: 330,
+                        height: 196,
+                        props: { menu: true },
+                    });
+                })
+                .on_click((_e, cx) => {
+                    cx.stop_propagation();
+                    setShared("keep-awake.mode", awakeMode === "off" ? "on" : "off");
+                })
+                .child(svg("mods/keep-awake/keep-awake.svg").size(15));
         const open = Boolean(panel && !panel.hidden),
             onJig = open && body?.active === names.jig;
         const hasJig = Boolean(body?.children?.some((c) => c.id === names.jig));
@@ -244,6 +288,7 @@ export default class JigTabs extends View {
                 ),
             )
             .when(hasJig, (el) => el.child(panelButton("panel-jig", "Jig", "mods/jig-tabs/jig.svg", onJig, showJig)))
+            .child(awakeButton)
             .when(w?.buttons, (el) =>
                 el
                     .child(

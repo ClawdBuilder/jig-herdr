@@ -30,6 +30,8 @@ test("a first install copies the layout, the mods and the themes, and adds the k
         "mods/jig-context/main.js",
         "mods/jig-activity/icons/context.svg",
         "mods/jig-tabs/main.js",
+        "mods/keep-awake/main.js",
+        "mods/keep-awake/config.json",
         "mods/file-view/main.js",
         "mods/repo-changes/main.js",
         "mods/repo-review/main.js",
@@ -53,6 +55,7 @@ test("a mod's mod.json is written before its other files, so Herdr never docks a
         "jig-work",
         "jig-context",
         "jig-tabs",
+        "keep-awake",
         "file-view",
         "repo-changes",
         "repo-review",
@@ -140,16 +143,19 @@ test("keys.json: other sections and keys stay, a key you bound differently is ke
     );
     const report = install(target);
     const keys = readJson(target, "keys.json");
-    assert.deepEqual(keys.global, { "alt-1": "space.select:1" });
+    assert.deepEqual(keys.global, { "alt-1": "space.select:1", "ctrl-shift-alt-k": "keep-awake.cycle" });
     assert.equal(keys["layout:jig"]?.["ctrl-shift-r"], "tab.next");
     assert.equal(keys["layout:jig"]?.["ctrl-shift-y"], "tab.prev");
     assert.deepEqual(report.keys.kept, ["layout:jig ctrl-shift-r (yours: tab.next)"]);
-    assert.equal(report.keys.added.length, 0);
+    assert.deepEqual(report.keys.added, ["global ctrl-shift-alt-k"], "its own new key is added, the person's kept");
 
     install(target, { force: true });
     assert.equal(readJson(target, "keys.json")["layout:jig"]?.["ctrl-shift-r"], "layout.toggle:panel");
     assert.equal(readJson(target, "keys.json")["layout:jig"]?.["ctrl-shift-y"], "tab.prev");
-    assert.deepEqual(readJson(target, "keys.json").global, { "alt-1": "space.select:1" });
+    assert.deepEqual(readJson(target, "keys.json").global, {
+        "alt-1": "space.select:1",
+        "ctrl-shift-alt-k": "keep-awake.cycle",
+    });
 });
 
 test("a keys.json that is not JSON is not touched", (t) => {

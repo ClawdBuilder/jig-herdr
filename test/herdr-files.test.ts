@@ -29,7 +29,7 @@ function walk(dir: string): string[] {
 const nodes = (node: Node): Node[] => [node, ...(node.children ?? []).flatMap(nodes)];
 const layout = JSON.parse(readFileSync(path.join(HERDR, "layouts/jig.json"), "utf8")) as Node;
 
-test("the mods are the twelve this folder ships", () => {
+test("the mods are the thirteen this folder ships", () => {
     assert.deepEqual(MODS, [
         "file-view",
         "jig-activity",
@@ -38,6 +38,7 @@ test("the mods are the twelve this folder ships", () => {
         "jig-tabs",
         "jig-theme-sync",
         "jig-work",
+        "keep-awake",
         "repo-changes",
         "repo-history",
         "repo-prs",
@@ -121,17 +122,22 @@ test("keys.json binds keys for the jig layout only, to commands that exist", () 
         string,
         Record<string, string>
     >;
-    assert.deepEqual(keys, { "layout:jig": { "ctrl-shift-r": "layout.toggle:panel" } });
+    assert.deepEqual(keys, {
+        global: { "ctrl-shift-alt-k": "keep-awake.cycle" },
+        "layout:jig": { "ctrl-shift-r": "layout.toggle:panel" },
+    });
 });
 
-test("there is no status bar: the palette follower sits unseen, in a 0 px block above the sidebar's footer", () => {
+test("there is no status bar: the unseen workers sit in 0 px blocks above the sidebar's footer", () => {
     const sidebar = layout.children?.find((n) => n.id === "sidebar");
     assert.deepEqual(
         sidebar?.children?.map((n) => n.id),
-        ["brand", "sidebar-lists", "jig-theme", "sidebar-footer"],
+        ["brand", "sidebar-lists", "jig-theme", "keep-awake", "sidebar-footer"],
     );
     assert.equal(sidebar?.children?.[2]?.content?.mod, "jig-theme-sync");
     assert.deepEqual((sidebar?.children?.[2] as { size?: unknown } | undefined)?.size, { px: 0 });
+    assert.equal(sidebar?.children?.[3]?.content?.mod, "keep-awake");
+    assert.deepEqual((sidebar?.children?.[3] as { size?: unknown } | undefined)?.size, { px: 0 });
     // Pane headers stay on screen: on hover they would cover the terminal's prompt line.
     const main = nodes(layout).find((n) => n.id === "main") as {
         content?: { pane?: { header?: { reveal?: string } } };
@@ -248,6 +254,7 @@ test("jig-tabs credits Herdr's tabs mod and its licence, and has the Panel and J
 test("the Jig icons are monochrome glyphs drawn in the text colour", () => {
     for (const file of [
         "mods/jig-tabs/jig.svg",
+        "mods/keep-awake/keep-awake.svg",
         "mods/jig-activity/icons/jig.svg",
         "mods/jig-activity/icons/context.svg",
     ]) {

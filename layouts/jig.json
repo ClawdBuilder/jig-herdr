@@ -73,6 +73,16 @@
                     }
                 },
                 {
+                    "id": "keep-awake",
+                    "type": "block",
+                    "size": {
+                        "px": 0
+                    },
+                    "content": {
+                        "mod": "keep-awake"
+                    }
+                },
+                {
                     "id": "sidebar-footer",
                     "type": "block",
                     "size": {
