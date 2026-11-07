@@ -10,10 +10,10 @@ about the power plan, the registry or the display is changed, and no administrat
 - **In the tab bar**, beside `Panel` and `Jig`, a 26 px sun. Off it is dim; while the request is held it takes the accent
   colour and a selected background. Its tooltip names the mode and whether the computer will sleep, and says a right click
   opens the modes.
-- **The popup** (330×196, at the pointer): `Keep awake` and `holding off sleep` or `not holding`, then three rows — `Off`,
+- **The popup** (330×232, at the pointer): `Keep awake` and `holding off sleep` or `not holding`, then three rows — `Off`,
   `On` ("until you switch it off, or Herdr closes"), `While agents work` ("and 5 min after it stops") — the current one
-  ticked, and a line saying the display may still turn off and that a closed lid or the power button still sleeps the
-  computer.
+  ticked; a `Keep screen on` row with a 28×16 switch and `on`/`off` beside it; and a line saying a closed lid or the power
+  button still sleeps the computer.
 - Nothing else: the worker has no panel of its own. In the layout it sits in a 0 px block of the sidebar, unseen.
 
 ## How it behaves
@@ -24,8 +24,10 @@ about the power plan, the registry or the display is changed, and no administrat
 - **Off** holds no request. **On** holds it until the mode changes or Herdr exits. **While agents work** holds it while any
   agent in any space, tab or machine is `working` or `blocked`, and for `idleMinutes` (5 by default) after the last one
   stops, so a status flicker or a quick hand-over never stops and starts the helper.
-- **The display may still turn off**: only the system is kept awake, unless `display: true`, which also keeps the screen on.
-  A closed lid or the power button still sleeps the computer.
+- **The screen is kept on too** by default (`display: true`). The popup's switch writes `config.json` and, when the mode is
+  holding, restarts the helper at once with the new flag (stop, then start: never two), so the screen follows without waiting
+  for the helper to die. The sun's tooltip says whether the screen is kept on. A closed lid or the power button still sleeps
+  the computer.
 - **One helper only.** Its PID lives in `shared("keep-awake.helper")`; a second copy, a reload or a restart reuses it while
   it is alive and its command line still names this mod's script, and starts one otherwise. A PID that now belongs to
   another process is forgotten, never killed.
@@ -43,7 +45,8 @@ about the power plan, the registry or the display is changed, and no administrat
   and runs `exec` on Herdr's own computer (never on a space's) for the helper, `appPidCommand`, `aliveCommand`,
   `commandLineCommand` and `stopCommand`.
 - `lib.js`: the pure parts — `modeOf`, `toggleMode`, `nextMode`, `tooltip`, `anyBusy`, `decide` (the idle timer),
-  `parseConfig`, `parsePid`, `isHelper`, `helperAction`, and the commands for each platform:
+  `parseConfig`, `setDisplay` (the switch's write, keeping the file's other fields), `parsePid`, `isHelper`, `helperAction`,
+  and the commands for each platform:
   - **Windows:** `powershell -NoProfile -Command "$p = Start-Process -FilePath 'powershell.exe' -ArgumentList … -WindowStyle
     Hidden -PassThru; $p.Id"`, which returns at once and prints the hidden process's PID. It runs `keep-awake.ps1`, which
     calls `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED [| ES_DISPLAY_REQUIRED])` and repeats it every 20 s.
@@ -52,7 +55,8 @@ about the power plan, the registry or the display is changed, and no administrat
 - `keep-awake.ps1`: the Windows helper. It exits on the stop file (`stop`), when the owner PID is gone, or when killed, and
   clears the request on the way out.
 - `keep-awake.svg`: the sun, a one-colour glyph drawn in the text colour.
-- `config.json`: `{ "idleMinutes": 5, "display": false }`, read at start and every minute.
+- `config.json`: `{ "idleMinutes": 5, "display": true }`, read at start and every minute (a file edit restarts a running
+  helper too); the popup writes it back.
 - **herdr functions used:** `agents`, `appHome`, `closeOverlay`, `exec`, `nextCommand`, `notify`, `props`, `readTextFile`,
   `setShared`, `shared`, `theme`, `window`, `writeTextFile`. The tab bar (`jig-tabs`) only writes
   `shared("keep-awake.mode")` and opens the popup; every layout reaches the same worker through that shared state.
@@ -70,6 +74,8 @@ about the power plan, the registry or the display is changed, and no administrat
   process would ever end.
 - **The stop file is `keep-awake.stop` in the app folder**, next to `shared.json`; a helper restarted by hand must use the
   same script path or the mod will not recognise it as its own.
+- **The switch writes inside the app folder** (`mods/keep-awake/config.json`) with `writeTextFile`; a read-only folder or a
+  file changed under it shows "Could not write config.json" and leaves the setting as it was.
 - **The tab bar is `jig-tabs`**, which this repository owns; the popup is `openOverlay({ mod: "keep-awake", kind: "popup",
   props: { menu: true } })`.
 

@@ -80,10 +80,11 @@ plan, the registry or the display is changed, and it needs no administrator righ
 
 - **Off** (the default), **On** (until switched off or Herdr closes), and **While agents work** (on while any agent in any
   space, tab or machine is `working` or `blocked`, and `idleMinutes` after the last one stops). A click on the sun turns
-  Off ↔ On; a right-click opens a popup with the three modes, what is held now, and what it cannot do. `Ctrl+Shift+Alt+K`
-  cycles them.
-- **The display may still turn off**: only the system is kept awake, unless `display: true` in `config.json`, which also
-  keeps the screen on. A closed lid or the power button still sleeps the computer; the tooltip and the popup say so.
+  Off ↔ On; a right-click opens a popup with the three modes, `Keep screen on` (on by default), what is held now, and what it
+  cannot do. `Ctrl+Shift+Alt+K` cycles the modes; the sun's tooltip says whether the screen is kept on too.
+- **The screen is kept on** by default (`display: true`), not only the system; the popup's switch writes `config.json` and
+  restarts a running helper at once with the new flag, so the screen follows without waiting for it to die. A closed lid or
+  the power button still sleeps the computer; the popup says so.
 - **One helper, never two.** Its PID is in `shared("keep-awake.helper")`; a second copy (or a restart) reuses it while it
   is alive and still ours, and starts a new one otherwise. A PID that now belongs to another process is forgotten, never
   killed. Restarting Herdr starts it again if the mode is On or agents are busy (the mode lives in `shared.json`).
@@ -96,13 +97,13 @@ plan, the registry or the display is changed, and it needs no administrator righ
   - **macOS:** `caffeinate -i [-d] -w <herdr pid>`, in the background.
   - **Linux:** `systemd-inhibit --what=sleep[:idle] --why="Herdr keep awake" --mode=block sleep infinity`, in the
     background and killed on stop.
-- **Shared state:** `shared("keep-awake.mode")` (`"off"`, `"on"` or `"agents"`), `shared("keep-awake.active")` (whether the
-  request is held now) and `shared("keep-awake.helper")` (`{ pid, owner, at }`), so the tab bar, other layouts and the key
-  all drive the same worker.
+- **Shared state:** `shared("keep-awake.mode")` (`"off"`, `"on"` or `"agents"`), `shared("keep-awake.display")` (the screen
+  setting for this session), `shared("keep-awake.active")` (whether the request is held now) and
+  `shared("keep-awake.helper")` (`{ pid, owner, at }`), so the tab bar, other layouts and the key all drive the same worker.
 - **Props:** none for the worker; `{ menu: true }` draws the mode popup. **Files:** `main.js`, `lib.js` (the mode decision
   and idle timer, the commands for each platform, the PID bookkeeping and `config.json`), `keep-awake.ps1`,
   `keep-awake.svg`, `config.json`. **Settings:** `idleMinutes` (5 by default; 0 stops as soon as the last agent does) and
-  `display` (false).
+  `display` (true by default: keep the screen on too).
 
 ## file-view: a file in a tab
 
