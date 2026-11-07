@@ -71,7 +71,7 @@ export function parsePid(text) {
  * once on every platform: Windows starts a hidden PowerShell through Start-Process, macOS and Linux put their program in
  * the background from a shell (`nohup … & echo $!`).
  */
-export function startCommand(platform, { ownerPid, script, stopFile, display }) {
+export function startCommand(platform, { ownerPid, script, stopFile, display, token, recordFile }) {
     if (platform === "windows") {
         const flags = [
             "-NoProfile",
@@ -86,15 +86,26 @@ export function startCommand(platform, { ownerPid, script, stopFile, display }) 
             stopFile,
             "-Display",
             display ? "1" : "0",
+            "-OwnerName",
+            "herdr-app",
+            "-Token",
+            token ?? "",
+            "-RecordFile",
+            recordFile ?? "",
         ];
-        const list = flags.map(psQuote).join(",");
+        // Each argument is quoted for the child's command line (Start-Process joins the list with spaces, so an
+        // unquoted path with spaces would break -File), then quoted as one PowerShell string.
+        const childQuoted = flags
+            .map((value) => `"${String(value).replace(/"/g, '\\"')}"`)
+            .map(psQuote)
+            .join(",");
         return {
             cmd: "powershell",
             args: [
                 "-NoProfile",
                 "-NonInteractive",
                 "-Command",
-                `$p = Start-Process -FilePath 'powershell.exe' -ArgumentList ${list} -WindowStyle Hidden -PassThru; $p.Id`,
+                `$q = @(${childQuoted}) -join ' '; $p = Start-Process -FilePath 'powershell.exe' -ArgumentList $q -WindowStyle Hidden -PassThru; $p.Id`,
             ],
         };
     }
@@ -106,13 +117,17 @@ export function startCommand(platform, { ownerPid, script, stopFile, display }) 
                   `--what=${display ? "sleep:idle" : "sleep"}`,
                   "--why=Herdr keep awake",
                   "--mode=block",
-                  "sleep",
-                  "infinity",
+                  "sh",
+                  "-c",
+                  `while kill -0 ${Math.max(1, Number(ownerPid) || 0)} 2>/dev/null; do sleep 20; done`,
+                  "keep-awake",
               ];
     return { cmd: "sh", args: ["-c", `nohup ${program.map(shQuote).join(" ")} >/dev/null 2>&1 & echo $!`] };
 }
 
-/** How to find Herdr's own process on this machine (its PID, printed alone). */
+/** How to find Herdr's own process on this machine (its PID, printed alone). The process this command runs in is a
+ * child of the app that started the mod, so its parent is the right one when two windows are open; the name lookup is
+ * the fallback. */
 export function appPidCommand(platform) {
     return platform === "windows"
         ? {
@@ -121,10 +136,19 @@ export function appPidCommand(platform) {
                   "-NoProfile",
                   "-NonInteractive",
                   "-Command",
-                  "(Get-Process -Name herdr-app -ErrorAction SilentlyContinue | Select-Object -First 1).Id",
+                  '$me = Get-CimInstance Win32_Process -Filter "ProcessId=$PID"; $p = $me.ParentProcessId; ' +
+                      '$parent = Get-CimInstance Win32_Process -Filter "ProcessId=$p"; ' +
+                      "if ($parent -and $parent.Name -eq 'herdr-app.exe') { $p } else { " +
+                      "(Get-Process -Name herdr-app -ErrorAction SilentlyContinue | Sort-Object StartTime | Select-Object -First 1).Id }",
               ],
           }
-        : { cmd: "sh", args: ["-c", "pgrep -x herdr-app 2>/dev/null | head -n 1"] };
+        : {
+              cmd: "sh",
+              args: [
+                  "-c",
+                  'if [ "$(ps -p "$PPID" -o comm= 2>/dev/null)" = "herdr-app" ]; then echo "$PPID"; else pgrep -x herdr-app 2>/dev/null | head -n 1; fi',
+              ],
+          };
 }
 
 /** How to ask whether a PID is alive: exit 0 when it is. */
@@ -163,11 +187,11 @@ export function commandLineCommand(platform, pid) {
 export function stopCommand(platform, pid) {
     const id = Math.max(1, Number(pid) || 0);
     return platform === "windows"
-        ? { cmd: "taskkill", args: ["/PID", String(id), "/T", "/F"] }
+        ? { cmd: "taskkill", args: ["/PID", String(id), "/F"] }
         : { cmd: "sh", args: ["-c", `kill ${id} 2>/dev/null`] };
 }
 
-/** Whether a process's command line is our helper: it names the script's file name. */
+/** Whether a process's command line names this mod's script (the Windows helper's own marker). */
 export function isHelper(commandLine, script) {
     const name = String(script ?? "")
         .split(/[\\/]/)
@@ -175,12 +199,59 @@ export function isHelper(commandLine, script) {
     return Boolean(name) && String(commandLine ?? "").includes(name);
 }
 
-/** What to do about the recorded helper: keep it, forget a PID that is now someone else's, or start a fresh one. */
-export function helperAction({ recorded, alive, commandLine, script }) {
-    if (!recorded?.pid) return "start";
-    if (!alive) return "start";
-    return isHelper(commandLine, script) ? "reuse" : "stale";
+/**
+ * Whether a process's command line is this mod's helper on that platform, owned by that Herdr: the PowerShell running
+ * `keep-awake.ps1` with `-Owner <owner>`; `caffeinate … -w <owner>`; or the `systemd-inhibit` line whose `--why` is ours
+ * (the new owner loop, or the old `sleep infinity` one it replaces).
+ */
+export function matchesHelper(commandLine, platform, { script, owner } = {}) {
+    const said = String(commandLine ?? "");
+    if (!said) return false;
+    // The owner may be bare or quoted ("13284"), as Windows' child-quoted arguments are.
+    const owned =
+        owner === undefined || owner === null || new RegExp(`(^|[\\s"'])${Number(owner)}([\\s"']|$)`).test(said);
+    if (platform === "windows") return isHelper(said, script) && owned;
+    if (platform === "macos")
+        return /(^|[\\/\s"])caffeinate(?:\.exe)?(\s|$)/.test(said) && said.includes("-w") && owned;
+    if (said.includes("Herdr keep awake") && said.includes("sleep infinity")) return true; // the older helper, ours
+    return said.includes("Herdr keep awake") && said.includes("keep-awake") && owned;
 }
+
+/**
+ * What to do about a recorded helper: "kill" only when it is alive and its command line is ours (with this owner);
+ * "drop" when it is gone, its PID now belongs to another process, or the checks themselves failed — never an unverified
+ * kill; "none" when there is no record.
+ */
+export function killDecision({ recorded, alive, commandLine, platform, script, owner }) {
+    if (!recorded?.pid) return "none";
+    if (alive !== true) return "drop";
+    return matchesHelper(commandLine, platform, { script, owner: owner ?? recorded.owner }) ? "kill" : "drop";
+}
+
+/**
+ * What a recorded helper is, without ever killing: "reuse" when it is alive and its command line is ours; "gone" when it
+ * is not alive; "other" when its PID now belongs to a different process; "unknown" when the checks themselves failed or
+ * the command line could not be read — the record is kept and another check waits, so a live helper is never duplicated
+ * because one reading failed.
+ */
+export function recordState({ alive, commandLine, platform, script, owner }) {
+    if (alive === false) return "gone";
+    if (alive !== true) return "unknown";
+    if (!commandLine) return "unknown";
+    return matchesHelper(commandLine, platform, { script, owner }) ? "reuse" : "other";
+}
+
+/** Whether a display change must restart the helper now: it changed, one runs, and no release or start is under way. */
+export const displayRestart = ({ previous, next, helperPid, starting, stopping, restarting }) =>
+    previous !== next && Boolean(helperPid) && !starting && !stopping && !restarting;
+
+/** What a copy of the mod does when it goes away: a popup copy holds nothing, and only the copy that started the helper
+ * releases it (a copy loaded for a check, or one that only found it in shared state, takes nothing with it). */
+export const closePlan = (menu, owned) => (menu || !owned ? "none" : "release");
+
+/** The record of a helper that must be released when this copy goes away, or null. */
+export const helperToRelease = (menu, recorded, owned) =>
+    closePlan(menu, owned) === "none" ? null : (recorded ?? null);
 
 /** config.json: `idleMinutes` (0 to 1440, fractions allowed for a quick test) and `display` (keep the screen on too). */
 export function parseConfig(text) {
@@ -223,8 +294,51 @@ export function setDisplay(text, display) {
     return `${JSON.stringify({ ...raw, idleMinutes: config.idleMinutes, display: Boolean(display) }, null, 4)}\n`;
 }
 
-/** The path of the helper's stop file, next to Herdr's own state: `${appHome}/keep-awake.stop`. */
+/** The helper's stop file: `${appHome}/keep-awake.stop`, one file for every helper. Its content names the start that
+ * wrote it ("run <token>", "stop <token>"), so a "stop" left by an earlier helper can never end a new one and nothing
+ * accumulates. */
 export const stopFileIn = (appHome) => `${String(appHome).replace(/\/+$/, "")}/keep-awake.stop`;
+
+/** A stop line for a start token: "run <token>" or "stop <token>". */
+export const stopLine = (action, token) => `${action}${token ? ` ${token}` : ""}`;
+
+/** Whether a stop file's text ends the helper started with this token (a legacy "stop" ends any of ours). */
+export function stopSays(text, token) {
+    const said = String(text ?? "").trim();
+    return said === "stop" || (Boolean(token) && said === `stop ${token}`);
+}
+
+/** Where the claim that one worker is starting a helper lives: `${appHome}/keep-awake.helper.json`. */
+export const helperFileIn = (appHome) => `${String(appHome).replace(/\/+$/, "")}/keep-awake.helper.json`;
+
+/** How long a start claim holds before another worker may take over. */
+export const CLAIM_MS = 30000;
+
+/** "held" while a fresh start claim is in this helper file, else "free" (empty, another phase, malformed or stale). */
+export function claimState(text, now = Date.now(), ttl = CLAIM_MS) {
+    let raw;
+    try {
+        raw = JSON.parse(text ?? "null");
+    } catch {
+        return "free";
+    }
+    if (!raw || typeof raw !== "object" || raw.phase !== "claim") return "free";
+    const at = Number(raw.at);
+    return Number.isFinite(at) && now - at >= 0 && now - at < ttl ? "held" : "free";
+}
+
+/** The text of a start claim, for the helper file. */
+export const claimText = (token, now = Date.now()) => `${JSON.stringify({ phase: "claim", token, at: now })}\n`;
+
+/**
+ * The display setting to use: the file wins on the first read of a session (an edit made while Herdr was closed) and
+ * whenever a later read shows a different value the person wrote; otherwise the session's shared value stands.
+ */
+export function displaySource({ firstRead, edited, fileDisplay, sharedDisplay }) {
+    if (firstRead) return fileDisplay;
+    if (edited) return fileDisplay;
+    return typeof sharedDisplay === "boolean" ? sharedDisplay : fileDisplay;
+}
 
 /** The helper's script in this mod's folder, named for the platform. */
 export const helperScriptIn = (appHome) => `${String(appHome).replace(/\/+$/, "")}/mods/keep-awake/keep-awake.ps1`;

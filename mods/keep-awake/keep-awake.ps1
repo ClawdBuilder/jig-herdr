@@ -3,7 +3,10 @@
 # tied to this process, so nothing can stay awake once it is gone. It changes no power plan, registry or setting.
 param(
     [Parameter(Mandatory = $true)][int]$Owner,
+    [string]$OwnerName = "herdr-app",
     [string]$StopFile = "",
+    [string]$Token = "",
+    [string]$RecordFile = "",
     [int]$Display = 0,
     [int]$Seconds = 20
 )
@@ -24,9 +27,18 @@ while ($true) {
     Start-Sleep -Seconds $Seconds
     if ($StopFile -ne "") {
         $said = Get-Content -LiteralPath $StopFile -Raw -ErrorAction SilentlyContinue
-        if ($said -and $said.Trim() -eq "stop") { break }
+        if ($said) {
+            $said = $said.Trim()
+            if ($said -eq "stop" -or ($Token -ne "" -and $said -eq "stop $Token")) { break }
+        }
     }
-    if (-not (Get-Process -Id $Owner -ErrorAction SilentlyContinue)) { break }
+    $ownerProcess = Get-Process -Id $Owner -ErrorAction SilentlyContinue
+    if (-not $ownerProcess -or $ownerProcess.ProcessName -ne $OwnerName) { break }
+    # Another copy recorded its own helper (a reload or a second window): this one is the extra, so it goes.
+    if ($RecordFile -ne "") {
+        $rec = Get-Content -LiteralPath $RecordFile -Raw -ErrorAction SilentlyContinue
+        if ($rec -and $rec -match '"phase"\s*:\s*"helper"' -and $rec -notmatch ('"pid"\s*:\s*' + [string]$PID + '(\D|$)')) { break }
+    }
     [void][KeepAwake.Native]::SetThreadExecutionState($flags)
 }
 [void][KeepAwake.Native]::SetThreadExecutionState($ES_CONTINUOUS)

@@ -211,7 +211,7 @@ export default class JigTabs extends View {
                         mod: "keep-awake",
                         kind: "popup",
                         width: 330,
-                        height: 232,
+                        height: 252,
                         props: { menu: true },
                     });
                 })
