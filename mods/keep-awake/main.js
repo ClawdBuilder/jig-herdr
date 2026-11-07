@@ -41,6 +41,7 @@ import {
     parseConfig,
     parsePid,
     startCommand,
+    setDisplay,
     stopCommand,
     stopFileIn,
 } from "./lib.js";
@@ -48,6 +49,7 @@ import {
 const MODE = "keep-awake.mode";
 const ACTIVE = "keep-awake.active";
 const HELPER = "keep-awake.helper";
+const DISPLAY = "keep-awake.display";
 const EVERY = 1000; // the mode, the agents and the idle timer, every second
 const VERIFY_MS = 10000; // how often a running helper is asked whether it is still ours
 const CONFIG_MS = 60000; // how long config.json is trusted
@@ -84,15 +86,63 @@ function menuRow(t, mode, hint, current) {
         .child(div().min_w(0).truncate().text_size(11).text_color(t.dim).child(hint));
 }
 
+/** A 28×16 switch, as the Context panel draws them. */
+function toggle(t, id, on) {
+    return div()
+        .id(id)
+        .flex_none()
+        .w(28)
+        .h(16)
+        .p(2)
+        .rounded_full()
+        .flex()
+        .items_center()
+        .border(1)
+        .border_color(on ? t.accent : t.border)
+        .bg(on ? t.accent : t.background)
+        .when(on, (el) => el.justify_end())
+        .child(
+            div()
+                .size(10)
+                .rounded_full()
+                .bg(on ? t.accent_foreground : t.dim),
+        );
+}
+
+/** config.json next to the mod. */
+const configPath = () => `${appHome()}/mods/keep-awake/config.json`;
+
 /** The popup the tab bar's button opens: the three modes, what is happening now, and what it cannot do. */
 class Menu {
     constructor(cx) {
         this.config = parseConfig(null);
+        this.display = this.config.display;
+        this.failed = null;
         cx.spawn(async (cx) => {
-            const text = await readTextFile(`${appHome()}/mods/keep-awake/config.json`).catch(() => null);
+            const text = await readTextFile(configPath()).catch(() => null);
             this.config = parseConfig(text);
+            this.display = typeof shared(DISPLAY) === "boolean" ? shared(DISPLAY) : this.config.display;
             cx.notify();
         });
+    }
+
+    /** The switch: write config.json, then tell the worker; a failed write leaves both as they were. */
+    toggleDisplay(cx) {
+        const next = !this.display;
+        this.display = next;
+        cx.spawn(async (cx) => {
+            const text = await readTextFile(configPath()).catch(() => null);
+            try {
+                await writeTextFile(configPath(), setDisplay(text, next), text);
+                this.failed = null;
+                setShared(DISPLAY, next);
+            } catch {
+                this.display = !next;
+                this.failed = "Could not write config.json";
+            }
+            cx.notify();
+        });
+        cx.notify();
     }
 
     render() {
@@ -136,6 +186,35 @@ class Menu {
             .child(menuRow(t, "off", "no request", mode === "off"))
             .child(menuRow(t, "on", "until you switch it off, or Herdr closes", mode === "on"))
             .child(menuRow(t, "agents", `and ${idle} min after it stops`, mode === "agents"))
+            .child(div().flex_none().h(1).mx(9).my(5).bg(t.border))
+            .child(
+                h_flex()
+                    .id("keep-awake-display")
+                    .h(30)
+                    .flex_none()
+                    .px(9)
+                    .gap(8)
+                    .items_center()
+                    .rounded(7)
+                    .cursor_pointer()
+                    .hover((s) => s.bg(t.selected))
+                    .on_click((_e, cx) => {
+                        cx.stop_propagation();
+                        this.toggleDisplay(cx);
+                    })
+                    .child(div().flex_1().child("Keep screen on"))
+                    .child(
+                        div()
+                            .flex_none()
+                            .text_size(11)
+                            .text_color(t.dim)
+                            .child(this.display ? "on" : "off"),
+                    )
+                    .child(toggle(t, "keep-awake-display-switch", this.display)),
+            )
+            .when(Boolean(this.failed), (el) =>
+                el.child(div().flex_none().px(9).pt(2).text_size(11).text_color(t.blocked).child(this.failed)),
+            )
             .child(
                 div()
                     .flex_none()
@@ -144,9 +223,7 @@ class Menu {
                     .pb(2)
                     .text_size(11)
                     .text_color(t.dim)
-                    .child(
-                        "The display may still turn off. A closed lid or the power button still sleeps the computer.",
-                    ),
+                    .child("A closed lid or the power button still sleeps the computer."),
             );
     }
 }
@@ -166,6 +243,9 @@ export default class KeepAwake extends View {
         this.helper = shared(HELPER) ?? null; // { pid, owner, at }
         this.verifiedAt = 0; // when the helper was last seen alive and ours
         this.starting = false;
+        this.restarting = false;
+        this.stopping = false;
+        this.configText = undefined; // the config.json text last read
         this.warned = new Set();
         // The defaults exist before anything is rendered, so the button and a key have a value to read.
         if (shared(MODE) === undefined) setShared(MODE, "off");
@@ -187,8 +267,15 @@ export default class KeepAwake extends View {
         if (this.configAt && Date.now() - this.configAt < CONFIG_MS) return;
         this.configAt = Date.now();
         cx.spawn(async (cx) => {
-            const text = await readTextFile(`${appHome()}/mods/keep-awake/config.json`).catch(() => null);
-            this.config = parseConfig(text);
+            const text = await readTextFile(configPath()).catch(() => null);
+            if (text === this.configText) return;
+            const read = parseConfig(text),
+                // A file edit is a person's change; the shared value is this session's (the popup writes both).
+                edited = this.configText !== undefined && read.display !== this.config.display;
+            this.configText = text;
+            this.config = read;
+            if (typeof shared(DISPLAY) !== "boolean") setShared(DISPLAY, read.display);
+            else if (edited && shared(DISPLAY) !== read.display) setShared(DISPLAY, read.display);
             cx.notify();
         });
     }
@@ -196,6 +283,9 @@ export default class KeepAwake extends View {
     /** One second of the mode: decide, publish it, and let the helper follow. */
     tick(cx) {
         this.loadConfig(cx);
+        // The popup's switch (or another copy) changed the setting: apply it now, not when the helper next dies.
+        const display = shared(DISPLAY);
+        if (typeof display === "boolean" && display !== this.config.display) this.applyDisplay(cx, display);
         const now = Date.now(),
             mode = modeOf(shared(MODE)),
             result = decide({
@@ -211,9 +301,24 @@ export default class KeepAwake extends View {
         else this.stop(cx);
     }
 
+    /** A live `display` change: restart a running helper with the new flag, so the screen follows at once. */
+    applyDisplay(cx, display) {
+        if (this.config.display === display) return;
+        this.config = { ...this.config, display };
+        if (!this.helper?.pid || this.restarting || this.stopping) return;
+        const pid = this.helper.pid;
+        this.restarting = true;
+        cx.spawn(async (cx) => {
+            await this.forget(pid);
+            if (shared(ACTIVE) === true) await this.start();
+            this.restarting = false;
+            cx.notify();
+        });
+    }
+
     /** Starts the helper when one is needed and none of ours is running; never a second one. */
     ensure(cx) {
-        if (this.starting) return;
+        if (this.starting || this.restarting || this.stopping) return;
         const recorded = this.helper;
         if (recorded?.pid && Date.now() - this.verifiedAt < VERIFY_MS) return;
         this.starting = true;
@@ -241,7 +346,7 @@ export default class KeepAwake extends View {
     async verify(pid) {
         const alive = aliveCommand(this.platform, pid);
         const running = await exec(alive.cmd, alive.args).catch(() => null);
-        if (!running || running.code !== 0) return "start";
+        if (running?.code !== 0) return "start";
         const line = commandLineCommand(this.platform, pid);
         const said = await exec(line.cmd, line.args).catch(() => null);
         return helperAction({
@@ -282,7 +387,7 @@ export default class KeepAwake extends View {
 
     /** Stops the helper: the stop file first (it can read it), then the process itself. */
     stop(cx) {
-        if (this.stopping) return;
+        if (this.stopping || this.restarting) return;
         const recorded = this.helper ?? shared(HELPER);
         if (!recorded?.pid) return;
         this.stopping = true;
@@ -324,7 +429,7 @@ export default class KeepAwake extends View {
     }
 
     /** Herdr is quitting: end the request now, while exec and the file writes still go out. */
-    async close(cx) {
+    async close(_cx) {
         const recorded = this.helper ?? shared(HELPER);
         if (!recorded?.pid) return;
         const file = stopFileIn(appHome());

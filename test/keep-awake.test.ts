@@ -62,17 +62,13 @@ test("while agents work is the busy ones only, and a flicker does not stop it be
     assert.equal(decide({ mode: "agents", busy: false, now, busyAt: now, idleMs: 0 }).active, false);
 });
 
-test("config.json has its defaults and reports a wrong field", async () => {
-    const { parseConfig } = await lib();
-    assert.deepEqual(parseConfig(null), { idleMinutes: 5, display: false, problems: [] });
-    assert.deepEqual(parseConfig(""), { idleMinutes: 5, display: false, problems: [] });
-    assert.deepEqual(parseConfig('{ "idleMinutes": 0.1, "display": true }'), {
+test("config.json keeps the screen on by default, and the popup's switch writes it back", async () => {
+    const { parseConfig, setDisplay } = await lib();
+    assert.deepEqual(parseConfig(null), { idleMinutes: 5, display: true, problems: [] });
+    assert.deepEqual(parseConfig(""), { idleMinutes: 5, display: true, problems: [] });
+    assert.deepEqual(parseConfig("{}"), { idleMinutes: 5, display: true, problems: [] });
+    assert.deepEqual(parseConfig('{ "idleMinutes": 0.1, "display": false }'), {
         idleMinutes: 0.1,
-        display: true,
-        problems: [],
-    });
-    assert.deepEqual(parseConfig('{ "idleMinutes": 0, "display": false }'), {
-        idleMinutes: 0,
         display: false,
         problems: [],
     });
@@ -80,7 +76,26 @@ test("config.json has its defaults and reports a wrong field", async () => {
     assert.equal(parseConfig("{").problems.length, 1);
     assert.match(parseConfig("{").problems[0], /not valid JSON/);
     const shipped = parseConfig(readFileSync(path.join(HERDR, "mods/keep-awake/config.json"), "utf8"));
-    assert.deepEqual(shipped, { idleMinutes: 5, display: false, problems: [] });
+    assert.deepEqual(shipped, { idleMinutes: 5, display: true, problems: [] });
+
+    // The switch's write: the other settings and fields survive, and the result is valid JSON.
+    assert.deepEqual(JSON.parse(setDisplay('{ "idleMinutes": 0.1, "display": true }', false)), {
+        idleMinutes: 0.1,
+        display: false,
+    });
+    assert.deepEqual(JSON.parse(setDisplay('{ "display": false, "theme": "x" }', true)), {
+        idleMinutes: 5,
+        display: true,
+        theme: "x",
+    });
+    assert.deepEqual(JSON.parse(setDisplay("not json", false)), { idleMinutes: 5, display: false });
+    assert.deepEqual(JSON.parse(setDisplay(null, true)), { idleMinutes: 5, display: true });
+    // What the switch writes is what the next read and the restart use.
+    for (const display of [true, false]) {
+        const text = setDisplay('{ "idleMinutes": 2 }', display);
+        assert.equal(parseConfig(text).display, display);
+        assert.equal(parseConfig(text).idleMinutes, 2);
+    }
 });
 
 test("the helper starts hidden and detached on Windows, and in the background on macOS and Linux", async () => {

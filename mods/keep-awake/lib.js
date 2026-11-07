@@ -12,8 +12,9 @@ export const MODES = ["off", "on", "agents"];
 /** How the modes are named to a person. */
 export const MODE_LABEL = { off: "Off", on: "On", agents: "While agents work" };
 
-/** config.json next to the mod: `{ idleMinutes, display }`. A wrong field keeps its default and is reported. */
-const DEFAULTS = { idleMinutes: 5, display: false };
+/** config.json next to the mod: `{ idleMinutes, display }`. A wrong field keeps its default and is reported. A new install
+ * keeps the screen on too (`display: true`), which the popup's switch can turn off. */
+const DEFAULTS = { idleMinutes: 5, display: true };
 
 /** The mode value in shared state, "off" when it is anything else. */
 export const modeOf = (value) => (MODES.includes(value) ? value : "off");
@@ -206,6 +207,20 @@ export function parseConfig(text) {
         else config.problems.push('"display" must be true or false');
     }
     return config;
+}
+
+/** config.json's text with `display` set, for the popup's switch: the other settings and unknown fields are kept, and an
+ * unreadable file starts from the defaults. */
+export function setDisplay(text, display) {
+    let raw = {};
+    try {
+        const parsed = JSON.parse(text ?? "{}");
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) raw = parsed;
+    } catch {
+        // an unreadable file is replaced by the defaults below
+    }
+    const config = parseConfig(text);
+    return `${JSON.stringify({ ...raw, idleMinutes: config.idleMinutes, display: Boolean(display) }, null, 4)}\n`;
 }
 
 /** The path of the helper's stop file, next to Herdr's own state: `${appHome}/keep-awake.stop`. */

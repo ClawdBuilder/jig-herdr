@@ -179,6 +179,7 @@ export default class JigTabs extends View {
                 ? shared("keep-awake.mode")
                 : "off",
             awake = shared("keep-awake.active") === true,
+            screenOn = shared("keep-awake.display") !== false,
             awakeLabel =
                 awakeMode === "on"
                     ? "On until switched off or Herdr closes"
@@ -197,8 +198,11 @@ export default class JigTabs extends View {
                 .when(!awake, (el) => el.text_color(t.dim))
                 .hover((s) => s.bg(t.hover).text_color(t.foreground))
                 .tooltip(
-                    `Keep awake: ${awakeLabel}${awake ? " — the computer will not sleep" : ""}\n` +
-                        `Click to turn it ${awakeMode === "off" ? "on" : "off"}; right-click for the modes`,
+                    `Keep awake: ${awakeLabel}` +
+                        (awake
+                            ? ` — the computer will not sleep${screenOn ? ", and the screen stays on" : "; the screen may still turn off"}`
+                            : "") +
+                        `\nClick to turn it ${awakeMode === "off" ? "on" : "off"}; right-click for the modes`,
                 )
                 .on_mouse_down("left", stop)
                 .on_mouse_down("right", (_e, cx) => {
@@ -207,7 +211,7 @@ export default class JigTabs extends View {
                         mod: "keep-awake",
                         kind: "popup",
                         width: 330,
-                        height: 196,
+                        height: 232,
                         props: { menu: true },
                     });
                 })
