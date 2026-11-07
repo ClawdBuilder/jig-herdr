@@ -39,7 +39,7 @@ The repository panels work the same way: a `sh` script with `git` (or `gh`) on t
 |---|---|---|
 | Work (`jig-work`) | The focused Pi session: ticket, stages, pull requests, ticket files, recent calls | `sh` on the status files every 2 s; `gh`, cached 5 min |
 | Context (`jig-context`) | What fills that session's context; a switch per tool and skill; Reload | The same read; one `sh` that writes a request file |
-| Changes (`repo-changes`) | Every checkout under the folder, worktrees nested, `3 commits vs develop` for committed work; stage, commit, switch branch | `git status` every 5 s; git writes when you click |
+| Changes (`repo-changes`) | The focused terminal's folder (or the space's, with the header toggle): one line per checkout, worktrees foldable under their repo, ahead and behind as badges, the last commit under the focused one; stage, commit, fetch, pull, push or publish (each send after a confirm), switch branch | `git status` every 5 s; `git fetch`, `git pull` and `git push` when you click |
 | History (`repo-history`) | A repository picker (a filter with no commit match offers repos by name or branch), its commit graph and each commit's files | `git log` and `git status` every 10 s; `git show` |
 | PR & CI (`repo-prs`) | The pull request and checks of each feature branch, and yours | `gh pr view`, `gh pr list`, `gh search prs`; cached 5 min |
 | Worktrees (`repo-worktrees`) | Linked worktrees, ready to remove or in progress | `git worktree list` every 30 s; `git worktree remove` on click |
@@ -97,6 +97,9 @@ Three files in the Herdr folder. Every field is optional, and later installs nev
 | `mods/keep-awake/config.json` `display` | `true` | Keep the screen on too, not only the system; the popup has a switch |
 | `mods/repo-changes/config.json` `newBranchPrefix` | `"feature/"` | What a new branch's name starts with |
 | `mods/repo-changes/config.json` `baseBranch` | origin's HEAD branch, else `main` | The branch a new branch starts from |
+| `mods/repo-changes/config.json` `remote` | `"origin"` | The remote to fetch, pull, push to and publish on |
+| `mods/repo-changes/config.json` `networkTimeoutSeconds` | `60` | How long a fetch, pull or push may run before it is stopped |
+| `mods/repo-changes/config.json` `rowDetail` | `"compact"` | `"compact"` (one line per checkout) or `"full"` (a commit line under every row) |
 
 ```json
 { "machine": "dev-box", "stateDir": "~/.local/state/jig", "prOwners": ["acme"] }

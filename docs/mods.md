@@ -5,7 +5,7 @@ together. Back to the [Herdr app overview](../README.md); [How it works](how-it-
 the agent's machine first.
 
 All of them are trusted code that runs inside the Herdr app, so this page says what each reaches. `jig-work` and `repo-prs`
-reach the network through `gh`, and a new branch in `repo-changes` runs `git fetch`, on the machine where the folders are.
+reach the network through `gh`, and `repo-changes` fetches, pulls and pushes with git (after a confirm), on the machine where the folders are.
 Three mods write with git: `repo-changes` and `repo-review` with [the git actions](#the-git-actions), and `repo-worktrees`
 with its `Remove`. Each is a `main.js` with the helper files named below; the pure parts are in `lib.js` files, which the
 tests load.
@@ -131,38 +131,80 @@ the header shows its text with syntax colours, and `Preview` goes back.
 
 ## repo-changes: the Changes panel
 
-Every git checkout under the space's folder, changed ones first, then a `Clean (N)` group; a filter box matches checkout
-names and file paths. A click on a file opens it in a `Review` tab. A checkout with commits its base branch lacks, such as a
-ticket branch with its work committed, shows a `3 commits vs develop` chip; a click on the chip, or on the row of a checkout
-with no uncommitted file, opens `Review` on the whole branch. The branch chip, the file checkboxes and the buttons that
-appear on hover run [the git actions](#the-git-actions).
+Every git checkout under the folder the focused terminal is in, changed ones first, then a `Clean (N)` group; a filter box
+matches checkout names and file paths. A click on a file opens it in a `Review` tab. A checkout with commits its base
+branch lacks, such as a ticket branch with its work committed, shows a `3 commits vs develop` chip; a click on the chip,
+or on the row of a checkout with no uncommitted file, opens `Review` on the whole branch. The branch chip, the file
+checkboxes and the buttons that appear on hover run [the git actions](#the-git-actions).
 
-- **Worktrees nest.** Checkouts are grouped by their git common folder: a main checkout shows its linked worktrees under it
-  as `↳ <folder>` rows, each with its own branch, ahead and behind, and files. A worktree whose main checkout is not listed
-  stands as a row of its own. A main checkout that is clean, with every worktree clean, folds into `Clean (N)`.
+- **Follow the terminal.** The header's toggle picks the folder: the focused terminal's (`Terminal`, the default) or the
+  space's (`Space`). The header names the folder it lists, with its full path on hover, and how many checkouts it found.
+  The choice is kept per space in the mod's `localStorage`. Following the terminal means `cd`ing a tab switches the panel
+  at the next refresh (within 5 seconds), without clearing the filter; a terminal with no folder falls back to the space's.
+- **Inside a checkout** it shows that checkout, and its linked worktrees when it is the main one. Outside one, folders with
+  a `.git` up to three levels down, so `worktrees/PROJ-123/orders-api` is found, plus the linked worktrees of every main
+  checkout found; `node_modules` is skipped.
+- **One line per checkout**: `name  branch  ↑ahead ↓behind`, with the name at its natural width (capped at about 60% of the
+  row, truncated only as the last resort) and the branch filling the rest — so it is cut only when it truly does not fit, from
+  the left, keeping its end. The conventional `feature/` prefix is dim on wide panels and dropped on narrow ones; a short
+  branch like `develop` stays whole; when it repeats the name already shown, only its icon remains, with the branch in the
+  tooltip.
+  and the last commit only under the focused checkout (the row's tooltip has the commit and the
+  full path elsewhere). Files start folded; a click on the row shows them. `rowDetail: "full"` in `config.json` brings back a
+  commit line under every row.
+- **Worktrees fold under their main checkout.** Checkouts are grouped by their git common folder: a chevron on the main row
+  hides or shows its worktrees (`▸`/`▾`; a folded one shows their count and a dot when one has changes or is ahead/behind, so
+  nothing hides). The choice is kept per repo path in `shared("repo-changes.folded")`, so it survives a reload and a folder
+  switch; a repo no one has touched starts folded unless a worktree is the focused folder or has changes. The header's chevron
+  folds or unfolds every repo. A worktree whose main checkout is not listed stands as a row of its own, and a main checkout
+  that is clean, with every worktree clean, folds into `Clean (N)`.
+- **Short names.** A worktree drops the repo prefix (`jig-dark` → `dark`, `orders-api-42` → `42`), and when its folder is
+  the repo's name again it takes the parent folder (`worktrees/PROJ-42/orders-api` → `PROJ-42`); it is indented instead of
+  carrying an arrow. A parent tag appears only for two visible rows that really share a name and is the shortest folder
+  suffix that tells them apart, never on every row. The full path is in the tooltip.
+- **Ahead and behind** are its upstream's (`↑2 ↓1`), read from the branch line of `git status --porcelain=v1 -b`: no
+  network on the 5-second refresh. A diverged branch shows the same numbers in the warning colour with a `⇅` whose tooltip
+  says to rebase or merge in a terminal — never an extra line.
+- **The right-hand slot is reserved**, empty when idle; on hover the action buttons replace it (stage all, pull,
+  push/publish, fetch; unstage all and a terminal when the panel is wide enough), so nothing is drawn over the text or the row
+  above. A file fold is a small chevron and the count beside the name, distinct from the repo chevron on the left, and is the
+  only changed-file count (hidden under 340 px, where a row click still shows the files); a folded repo's worktree count sits
+  beside the name too. The `↑` button is **Publish** when git has no safe push target: no upstream, an upstream that is gone, or one under
+  another branch's name; it follows the same `pushTarget` decision as the dialog (cached for half a minute), so the label
+  matches. Publish goes to the remote git would push to — `pushRemote`, else `remote.pushDefault`, else the configured remote
+  — never onto another branch. Push and publish open a confirm dialog first: the branch, the destination git will really use
+  (`branch.<b>.pushRemote`, `remote.pushDefault` and `push.default` included) and up to ten commits with their short hash and
+  subject ("and 3 more"). Nothing is sent until its button is pressed; while it runs the slot says what it is doing and its
+  other buttons — and another copy's, in the dialog — are out of reach for that checkout only. A result shows under the
+  checkout for 12 seconds.
+- **The commit box** under a checkout with staged files says how many are staged (`Commit 3`), stays disabled without a
+  message or staged files, commits on Ctrl+Enter, and `Commit & Push` commits and then opens the push confirm.
 - **The base branch:** the closest of `origin/develop`, origin's HEAD branch, `origin/main`, `origin/master`, `develop`,
   `main` and `master` that exist: the one with the fewest commits after `git merge-base <base> HEAD` (`develop` first, then the order above, on a
   tie), so work that landed on the base later is not counted and a branch cut from `develop` is not measured against an older
   `master`. A local branch equal to its `origin/` twin counts once. A checkout on `develop`, `main`, `master` or origin's HEAD
   branch has no chip. No fetch: it uses the refs the clone has.
-- **Where it looks:** the space's folder on the space's machine. Inside a repository, only that checkout, and its linked
-  worktrees when it is the main one. Otherwise folders with a `.git` up to three levels down, so
-  `worktrees/PROJ-123/orders-api` is found, plus the linked worktrees of every main checkout found; `node_modules` is skipped.
 - **What it runs:** one `sh -c` script on that machine (`exec` with `on`), reading each checkout's `git status` with no
-  locks and no fsmonitor, 8 at a time, at most 200 files each, and `git worktree list` of each main checkout.
-- **When:** every 5 seconds while the panel is on screen, when you open it, when an agent or terminal changes state, and at
-  once after an action.
-- **Sets** `shared("badge.repo-changes")`: the number of checkouts (main or worktree) with changes, each counted once; and
-  `shared("repo-changes.done")` after a branch switch, so the panel says so and reads again.
-- **Files:** `main.js` (the panel), `picker.js` (the branch picker), `lib.js` (the script, the parsing, the grouping and the
-  git actions), `layout.js`, `config.json`.
+  locks and no fsmonitor, 8 at a time, at most 200 files each, plus its origin, its upstream and its last commit, and
+  `git worktree list` of each main checkout. Fetch, pull and push run only when their button is pressed.
+- **When:** every 5 seconds while the panel is on screen, when you open it, when an agent or terminal changes state, when
+  the folder it follows changes, and at once after an action.
+- **Sets** `shared("badge.repo-changes")`: the number of checkouts (main or worktree) with changes, each counted once;
+  `shared("repo-changes.done")` after a branch switch or a push, so the panel says so and reads again; and
+  `shared("repo-changes.running")`, one `{ what, at }` entry per checkout, so the panel and its dialog never run two actions
+  in the same checkout (an entry older than 15 minutes is stale).
+- **Files:** `main.js` (the panel), `picker.js` (the branch picker), `push.js` (the push confirm), `lib.js` (the script,
+  the parsing, the grouping and the git actions), `layout.js`, `config.json`, and its own icons.
 
 ### The git actions
 
-Each action is a function in `lib.js` that takes `exec(cmd, args, { cwd })` and returns `{ ok, message }`; the panel passes
-Herdr's `exec` with the space's machine. A result shows under its checkout for 12 seconds, and the list is read again at once.
-None of them uses `--force`, `-D`, `reset`, `--discard-changes`, `--amend`, `--no-verify` or `push`. File names are passed with
-`--literal-pathspecs`, so a file called `*.ts` means that file only.
+Each action is a function in `lib.js` that takes `exec(cmd, args, { cwd, env?, timeout? })` and returns `{ ok, message }`;
+the panel passes Herdr's `exec` with the space's machine. A result shows under its checkout for 12 seconds, and the list is
+read again at once. None of them forces or rewrites history: no `--force`, `--force-with-lease`, `-D`, `reset`,
+`--discard-changes`, `--amend` or `--no-verify`. A pull is `--ff-only`, and a pull that cannot fast-forward is left to the
+person to merge. A push never relies on `push.default`: the destination is resolved (`pushTarget`) and named in full, so
+`pushRemote`, `remote.pushDefault` and `push.default=matching` cannot send a branch the dialog did not show. File names are
+passed with `--literal-pathspecs`, so a file called `*.ts` means that file only.
 
 | Action | Where | Git command |
 |---|---|---|
@@ -175,6 +217,11 @@ None of them uses `--force`, `-D`, `reset`, `--discard-changes`, `--amend`, `--n
 | Discard a tracked file | `↺` on the file, then `Discard` | `git restore --worktree --staged -- <file>` |
 | Delete an untracked file | `↺` on the file, then `Delete file` | `git clean -f -- <file>` |
 | Commit | Message box under a checkout with staged files | `git commit -m <message>` |
+| Fetch | The fetch icon on the row, or the header's | `git fetch --prune <remote>` |
+| Pull | `↓` on the row | `git pull --ff-only` |
+| Push | `↑` on the row, after the confirm | `git push <pushRemote> HEAD:refs/heads/<branch>` |
+| Publish a branch | `↑` where git has no same-named push target, after the confirm | `git push -u <remote> HEAD` |
+| Publish | `↑` on the row when the push target is another branch or there is none, after the confirm | `git push -u <push remote> HEAD`, which sets the upstream |
 
 A checkbox is ticked when the file is staged (`X` of porcelain's `XY`), shows `–` when only part of it is, and is empty
 otherwise. `--no-track` keeps a new branch from pushing to its base by mistake; it gets its own upstream on its first push.
@@ -183,6 +230,12 @@ otherwise. `--no-track` keeps a new branch from pushing to its base by mistake; 
 the current one ticked, a branch checked out in another worktree greyed `in use by <folder>` and not pickable, then origin's
 branches that have no local branch. A refusal or git's error shows in the popup; a switch closes it.
 
+**The push confirm** is a dialog of the same mod (`openOverlay` with `props.push`): the branch, the destination git will
+really use, why it is a publish rather than a push when the push target is another branch, the commits to send (at most ten,
+then "and N more"), Cancel and Push. The dialog passes the branch and destination it showed to the action, which reads them
+again before running and refuses when a `git switch` or a config change moved them. A refusal or git's error shows in the
+dialog, which stays open; a success closes it and the panel reports what happened under the checkout.
+
 **Refusals.** Each is checked right before the command, and a refused action runs no git write:
 
 - **A switch or a new branch** is refused while an agent is `working` or `blocked` in a pane whose folder is inside that
@@ -190,6 +243,15 @@ branches that have no local branch. A refusal or git's error shows in the popup;
   It is also refused for a branch another worktree has, the current branch, and a branch neither here nor on origin.
 - **A new branch** is refused for a name `git check-ref-format --branch` rejects, or one that starts with `-` or `+`, holds
   `@{` or is `HEAD`; for a branch that exists already; when the fetch fails; and when origin has no such base.
+- **A pull, push or publish** is refused while an agent is `working` or `blocked` in a pane inside the checkout, on a
+  detached HEAD, while another action holds the checkout, and while the rows on screen still belong to another folder. A
+  push is also refused when git's push target is not the branch itself (a branch tracking `main`, `push.default=matching`, a
+  gone upstream: publish instead), with nothing ahead, and when the branch or destination changed after the dialog opened. A
+  publish is refused with no commit yet or without the configured remote. A pull with nothing behind is allowed: it fetches.
+- **Network commands never wait for an answer.** They run with `GIT_TERMINAL_PROMPT=0` and, when the machine has no
+  `GIT_SSH_COMMAND` and the repository no `core.sshCommand`, `GIT_SSH_COMMAND="ssh -o BatchMode=yes"`, under
+  `networkTimeoutSeconds` (60 by default) through `timeout`, or a `sleep`/`kill` watchdog where the machine lacks `timeout`
+  (macOS). A command that is stopped says it timed out, never "git exited with 124".
 - **A discard** reads the file's status again first. It is refused for a folder, a path that is not one changed file, and
   a file that changed since the confirm (the confirm says `DELETED` for an untracked or newly added file). There is no
   "discard all".
@@ -202,6 +264,8 @@ branches that have no local branch. A refusal or git's error shows in the popup;
 |---|---|---|
 | `newBranchPrefix` | `"feature/"` | What the new branch's name box starts with |
 | `baseBranch` | `null`: origin's HEAD branch, else `main` or `master` on origin, else `main` | The branch a new branch starts from |
+| `remote` | `"origin"` | The remote to fetch, pull, push to and publish on |
+| `networkTimeoutSeconds` | `60` | How long a fetch, pull or push may run (5 to 600) before it is stopped |
 
 ## repo-review: the Review tab
 

@@ -44,13 +44,15 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
   `ansi6`, System prompt `foreground`, Skills `ansi5`, Context files `ansi3`, Compaction buffer `dim`, Free space `raised`.
   Under it the last answer (`✓` in `done`, `✗` in `blocked`), then folded sections `▸ TOOLS N of M on`, `▸ SKILLS N` and `▸
   CONTEXT FILES N`: 24 px rows with the name, the size and a 28×16 switch (`accent` when on, a 10 px knob).
-- **Changes panel.** A 42 px header with the folder's name, `N repos · W worktrees · M changed` and a `Refresh` link; a
-  filter box; then a row for each repository with changes (name, the folders above it dimmed, a branch chip with an icon, `↑`
-  ahead in `foreground`, `↓` behind in `blocked`, a count in a small outlined box), and under it its linked worktrees as
-  `↳ <folder>` rows, indented 18 px, each the same way. Under each, the files: a 14 px checkbox (ticked on `accent` when
-  staged, `–` when partly), a letter (`M` in `blocked`, `A` and `??` in `ansi2`, `D` and `U` in `ansi1`, `R` in `ansi5`) and the
-  path with its folders dimmed; then, when some are staged, a `Commit message` box and a `Commit N` button. Last, a
-  `Clean (N)` group, folded.
+- **Changes panel.** A 42 px header with the folder's name (full path on hover), a `Terminal`/`Space` toggle, `N repos ·
+  M changed` (with the worktree count when there is room), a fetch-everything icon and a refresh icon; a filter box; then a
+  one line for each checkout with changes (its name, a branch chip with an icon, the parent folder only on a name clash, a `2 vs main` chip
+  when the branch has commits its base lacks, `↑` ahead in `foreground`, `↓` behind in `blocked`, then pull and push/publish
+  icons, and a count in a small outlined box), and under it its linked worktrees as `↳ <folder>` rows, indented 18 px,
+  each the same way. Under each row, dim: the last commit's short hash, subject and age. Under that, the files: a 14 px
+  checkbox (ticked on `accent` when staged, `–` when partly), a letter (`M` in `blocked`, `A` and `??` in `ansi2`, `D` and `U`
+  in `ansi1`, `R` in `ansi5`) and the path with its folders dimmed; then, when some are staged, a `Commit message` box,
+  `Commit N` and `Commit & Push`. Last, a `Clean (N)` group, folded.
 - **Review tab.** A 280 px list of the repository's changed files on the left, and on the right a 32 px header (path,
   `+added`, `−removed`, `Stage` or `Unstage`, `Discard…`, `‹` `›`) over the diff: 20 px rows, a hunk header row on `surface` in `ansi6`, a 3 px bar at the left
   edge of each changed line, added lines tinted with `ansi2` at 16 % and removed lines with `ansi1` at 22 %.
@@ -75,19 +77,30 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
 - **Keep awake.** The sun holds the computer awake on its idle timer: Off, On (until switched off or Herdr closes), or While
   agents work (while any agent anywhere is working or blocked, and `idleMinutes` after the last one). A click turns Off ↔
   On; a right click opens a 330×252 popup with the three modes, a `Keep screen on` switch (on by default; writing it restarts
-  the helper at once), whether the request is held and that a lid or the power button still sleeps the computer. `Ctrl+Shift+Alt+K` cycles the modes. The helper is a hidden PowerShell
-  (`SetThreadExecutionState`) on Windows, `caffeinate -i [-d] -w <herdr pid>` on macOS, or `systemd-inhibit --what=sleep[:idle]
-  --mode=block sleep infinity` on Linux, started on Herdr's own computer and stopped when it is no longer wanted or Herdr
+  the helper at once), whether the request is held and that a lid or the power button still sleeps the computer.
+  `Ctrl+Shift+Alt+K` cycles the modes. The helper is a hidden PowerShell (`SetThreadExecutionState`) on Windows,
+  `caffeinate -i [-d] -w <herdr pid>` on macOS, or `systemd-inhibit --what=sleep[:idle] --mode=block sh -c 'while kill -0
+  <herdr pid> ...' keep-awake` on Linux, started on Herdr's own computer and stopped when it is no longer wanted or Herdr
   exits; its request ends with its process.
-- **Changes.** The repositories under the space's folder (or the one repository, if the folder is inside one) are read by one
-  `sh` script on the space's machine: every 5 seconds while the panel is shown, when it is opened, and at once when any
-  terminal changes status. A click on a repository's row folds it; the filter keeps repositories whose name matches (with
-  all their files) or whose files match. Hovering a row shows `+` (stage all), `−` (unstage all) and a terminal button;
-  hovering a file shows `↺`, which asks inline before discarding (`DELETED` for a new file). A checkbox stages or unstages
-  its file; the message box commits the staged files. A click on the branch chip opens a 360×440 popup: a search box, local
-  branches (current ticked, one in another worktree greyed `in use by <folder>`), origin-only branches, and `New branch…`
-  (name box prefilled from `config.json`). A switch is refused while an agent works in the checkout or files are
-  uncommitted. A click on a file opens or retargets the tab `Review · <repository>`.
+- **Changes.** It follows the focused terminal's folder (its checkout and linked worktrees, else the repositories below it),
+  or the space's folder when the header's toggle says `Space`; the choice is kept per space in `localStorage`, and a switch
+  keeps the old rows until the new ones arrive and never clears the filter. One `sh` script on the space's machine reads
+  them: every 5 seconds while the panel is shown, when it is opened, when a terminal changes status or the folder changes,
+  and at once after an action. A click on a repository's row folds it; the filter keeps repositories whose name matches
+  (with all their files) or whose files match. Hovering a row shows `+` (stage all), `−` (unstage all), the fetch icon and a
+  terminal button; hovering a file shows `↺`, which asks inline before discarding (`DELETED` for a new file). A checkbox
+  stages or unstages its file; the message box commits the staged files, `Commit & Push` then asks before pushing. Fetch
+  and pull run at once; push and publish open a 440 px dialog first with the branch, the destination git will really
+  use and up to ten commits, and nothing is sent until its button is pressed. The destination comes from git's own settings
+  (`pushRemote`, `remote.pushDefault`, `push.default`) and the push names it in full; a branch whose push target is another
+  branch is published under its own name instead, never pushed onto that branch. Network commands run with
+  `GIT_TERMINAL_PROMPT=0` and, where the machine and the repository set none, `GIT_SSH_COMMAND="ssh -o BatchMode=yes"`,
+  under a 60-second `timeout` or a `sleep`/`kill` watchdog. One action at a time per checkout, shared by the panel and its
+  dialog. A click on the branch chip opens a 360×440 popup: a search box, local branches (current ticked, one in another
+  worktree greyed `in use by <folder>`), origin-only branches, and `New branch…` (name box prefilled from `config.json`). A
+  switch is refused while an agent works in the checkout or files are uncommitted; a pull, push or publish, while an
+  agent works there or on a detached HEAD; a push, when git's destination for the branch is a different branch or there is
+  none. A click on a file opens or retargets the tab `Review · <repository>`.
 - **History.** A picker of the repositories (inside one repository, no picker), then the commit graph: 28 px rows with lanes
   14 px apart, a dot per commit (a ring for the checked-out one), the author's initials, branch and tag pills, the pull
   request number, the conventional-commit type, the subject and the age. A click opens the message and files under the
@@ -157,14 +170,17 @@ The mods, all in `mods/`, each with `mod.json` `{ "place": "none", "title": "...
   `agents`. Files: `main.js`, `lib.js`, `keep-awake.ps1`, `keep-awake.svg`, `config.json`.
 - **`file-view`** (props `{ on, path }` from `tab.new`). `readTextFile(path, { on })`, `EditorState` and `Editor` from
   `gpui-base`, read-only.
-- **`repo-changes`** (props: none, or `{ picker }` as its own popup; settings in `config.json`: `{ newBranchPrefix,
-  baseBranch }`). Reads `spaces()`, `panes()`, `focused()`, `terminals()`, `layout()`; runs `exec("sh", ["-c", SCRIPT, "sh",
-  root], { on })` with the space's machine, and `exec("git", ..., { cwd, on })` for the actions; `openOverlay({ mod:
-  "repo-changes", kind: "popup", props: { picker } })` for the branch picker; `run("tab.new", ...)` for the Review tab and
-  terminals; `setShared` for the badge and `repo-changes.done`. `InputState` and `Input` for the filter, the commit messages
-  (made in the timer, never in `render`) and the picker. Icons: `mods/workspace-chrome/` `branch`, `check`, `chevron-down`,
-  `chevron-right`, `minus`, `plus`, `terminal`. Files: `main.js`, `picker.js`, `lib.js` (the script, the parsing, the
-  grouping and the git actions, each taking `exec` and returning `{ ok, message }`), `layout.js`, `config.json`.
+- **`repo-changes`** (props: none; `{ picker }` for its branch popup, `{ push }` for its push dialog; settings in
+  `config.json`: `{ newBranchPrefix, baseBranch, remote, networkTimeoutSeconds }`). Reads `spaces()`, `panes()`,
+  `focused()`, `terminals()`, `layout()`, `appHome()`, `shared("repo-changes.running")`; reads its `config.json` with
+  `readTextFile`; runs `exec("sh", ["-c", SCRIPT, "sh", root], { on })` with the space's machine, `exec("git", ..., { cwd,
+  on })` for the actions, and the network ones through one `sh -c` that sets the environment and a `timeout` (or a
+  watchdog); `openOverlay` for the picker (`kind: "popup"`) and the push dialog (`kind: "dialog"`, 440 wide); `run("tab.new", ...)` for the Review tab and terminals; `setShared` for the
+  badge and `repo-changes.done`. `InputState` and `Input` for the filter, the commit messages (made in the timer, never in
+  `render`) and the picker. Icons: its own `fetch`, `pull`, `push`, `refresh`, and `mods/workspace-chrome/`
+  `branch`, `check`, `chevron-down`, `chevron-right`, `folder`, `minus`, `plus`, `terminal`. Files: `main.js` (the panel),
+  `picker.js`, `push.js` (the confirm dialog), `lib.js` (the script, the parsing, the grouping and the git actions, each
+  taking `exec` and returning `{ ok, message }`), `layout.js`, `config.json`, `RECIPE.md`, `preview.png`.
 - **`repo-review`** (props `{ on, repo, name, file? }` from `tab.new`; read them with `props()`). `exec("git", ...)` and
   `readTextFile` with `{ on }`; `v_virtual_list` and `Scrollbar` from `gpui-base`. Its `lib.js` copies the stage, unstage
   and discard functions of `repo-changes`.
@@ -232,7 +248,10 @@ Work panel needs Jig's Pi plugin `jig-session` loaded in Pi: it writes the statu
 - The sidebar shows Herdr's spaces and agents lists, the terminals are cards, and the right panel shows the icon bar with the
   Changes icon active and a badge equal to the number of checkouts with changes.
 - With a space whose folder holds several git repositories, the Changes panel lists all of them, changed ones first, with
-  branch and counts; editing a file in one shows it within 5 seconds.
+  branch and counts; editing a file in one shows it within 5 seconds. A terminal `cd`ed into one repository lists that one
+  (the header's toggle back to `Space` lists the space's folder again), and a branch one commit ahead of its upstream shows
+  `↑1`; the push icon opens the confirm with that commit and the destination it names, and Cancel sends nothing. With
+  `branch.<b>.pushRemote` set to another remote, the dialog names that remote's branch and the push goes there only.
 - A linked worktree shows as a `↳` row under its repository. Ticking a file's checkbox stages it within a second, the
   commit box commits it and says the short hash, and the branch chip's popup switches branch; with a file changed, the
   switch is refused and says how many files.

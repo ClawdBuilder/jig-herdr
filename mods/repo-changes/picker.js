@@ -12,6 +12,7 @@ import {
     filterBranches,
     listBranches,
     newBranch,
+    panesOn,
     parseConfig,
     switchBranch,
     switchRefusal,
@@ -21,14 +22,6 @@ import {
 export const DONE = "repo-changes.done";
 const ICON = (name) => `mods/workspace-chrome/${name}.svg`;
 const pickable = (b) => !b.current && !b.inUse;
-
-/** The panes of terminals on a machine, as busyAgents takes them. */
-function panesOn(on) {
-    const machineOf = new Map(spaces().flatMap((s) => s.tabs.map((tab) => [tab.id, s.machine ?? null])));
-    return panes()
-        .filter((p) => p.terminal && machineOf.get(p.tab) === (on ?? null))
-        .map((p) => ({ cwd: p.cwd, status: p.status, name: p.program?.name || p.title }));
-}
 
 /** A box around an Input, as the panel's filter is drawn. */
 function field(t, id, state) {
@@ -109,7 +102,7 @@ export class BranchPicker {
     }
 
     busyHere() {
-        return busyAgents(this.path, panesOn(this.on), this.others);
+        return busyAgents(this.path, panesOn(panes(), spaces(), this.on), this.others);
     }
 
     async load() {

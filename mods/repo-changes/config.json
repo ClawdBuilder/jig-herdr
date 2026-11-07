@@ -1,1 +1,7 @@
-{ "newBranchPrefix": "feature/", "baseBranch": null }
+{
+    "newBranchPrefix": "feature/",
+    "baseBranch": null,
+    "remote": "origin",
+    "networkTimeoutSeconds": 60,
+    "rowDetail": "compact"
+}
