@@ -327,14 +327,24 @@ test("a command that never returns cannot hold a step, and a failed check keeps 
     const { withDeadline, isStuck, releaseOutcome } = await lib();
     const late = await withDeadline(
         new Promise(() => {}),
-        (ms, fn) => setTimeout(fn, ms),
+        (ms: number, fn: () => void) => setTimeout(fn, ms),
         5,
         "late",
     );
     assert.equal(late, "late", "a hung exec resolves with its fallback");
-    const quick = await withDeadline(Promise.resolve("ok"), (ms, fn) => setTimeout(fn, ms), 50, "late");
+    const quick = await withDeadline(
+        Promise.resolve("ok"),
+        (ms: number, fn: () => void) => setTimeout(fn, ms),
+        50,
+        "late",
+    );
     assert.equal(quick, "ok");
-    const failing = await withDeadline(Promise.reject(new Error("no")), (ms, fn) => setTimeout(fn, ms), 50, "late");
+    const failing = await withDeadline(
+        Promise.reject(new Error("no")),
+        (ms: number, fn: () => void) => setTimeout(fn, ms),
+        50,
+        "late",
+    );
     assert.equal(failing, "late");
 
     const now = 1_000_000;
@@ -344,6 +354,10 @@ test("a command that never returns cannot hold a step, and a failed check keeps 
     assert.equal(isStuck(now - 20000, now, 30000), false);
 
     assert.equal(releaseOutcome({ known: true, decision: "drop" }), "drop", "gone: forget it");
-    assert.equal(releaseOutcome({ known: false, decision: "drop" }), "keep", "could not check: keep it for the next tick");
+    assert.equal(
+        releaseOutcome({ known: false, decision: "drop" }),
+        "keep",
+        "could not check: keep it for the next tick",
+    );
     assert.equal(releaseOutcome({ known: false, decision: "kill" }), "drop", "killed: forget it");
 });
