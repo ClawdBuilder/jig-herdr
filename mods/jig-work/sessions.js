@@ -42,16 +42,21 @@ case $base in
 esac
 d="$base/sessions"
 printf '@@dir %s\\n' "$d"
+n=0
 for f in "$d"/*.json; do
   [ -f "$f" ] || continue
+  n=$((n + 1)); [ $n -gt 64 ] && break
   m=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null || echo 0)
-  printf '@@mtime %s %s\\n' "$f" "$m"
+  s=$(stat -c %s "$f" 2>/dev/null || stat -f %z "$f" 2>/dev/null || wc -c < "$f" 2>/dev/null || echo 0)
+  printf '@@mtime %s %s %s\\n' "$f" "$m" "$s"
 done`;
 
 // Run with `sh -c READ sh <status file>...`. The same "@@file <alive> <path>" + body format as SCRIPT, for the files
 // named as arguments only.
-export const READ = `for f in "$@"; do
+export const READ = `n=0
+for f in "$@"; do
   [ -f "$f" ] || continue
+  n=$((n + 1)); [ $n -gt 64 ] && break
   pid=$(sed -n 's/^ *"pid": *\\([0-9][0-9]*\\).*/\\1/p' "$f" | head -n 1)
   alive=0
   if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then alive=1; fi
@@ -81,12 +86,12 @@ export function parseSessions(stdout) {
     return sessions;
 }
 
-/** MTIMES output as a map of status file -> mtime in seconds. */
+/** MTIMES output as a map of status file -> "mtime:size" (seconds and bytes, so a same-second write still shows). */
 export function parseMtimes(stdout) {
     const out = {};
     for (const line of String(stdout ?? "").split("\n")) {
-        const m = /^@@mtime (.*) (\d+)$/.exec(line.trim());
-        if (m) out[m[1]] = Number(m[2]);
+        const m = /^@@mtime (.*) (\d+) (\d+)$/.exec(line.trim());
+        if (m) out[m[1]] = `${m[2]}:${m[3]}`;
     }
     return out;
 }
@@ -131,6 +136,11 @@ export function pickSession(sessions, { machine = null, focused = null, agent = 
     const kept = picked && live.find((s) => s.status.session === picked);
     if (kept) return { session: kept, by: "picked" };
     return { session: [...live].sort((a, b) => updated(b) - updated(a))[0], by: "recent" };
+}
+
+/** The panel becoming visible again: the event that makes Work and Context read at once. */
+export function shownAgain(previous, current) {
+    return current === true && previous !== true;
 }
 
 /** Whether the followed terminal's Herdr status changed (working/idle/done) since the previous reading: the event that

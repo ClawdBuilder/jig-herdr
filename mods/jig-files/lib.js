@@ -66,6 +66,11 @@ export function deletedPaths(status, root) {
     return out;
 }
 
+/** Whether a filter search should start now: one per filter change, 500 ms after the last keystroke, never per tick. */
+export function searchDue({ filter, dirty, loading, at, now, debounce = 500 }) {
+    return Boolean(String(filter ?? "").trim()) && Boolean(dirty) && !loading && (!at || now - at >= debounce);
+}
+
 /** File paths from FIND output that match `query` on their path, case aside, relative to root; at most `limit`. */
 export function filterPaths(stdout, root, query, limit = 500) {
     const base = String(root ?? "").replace(/\/+$/, ""),

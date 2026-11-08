@@ -74,8 +74,10 @@ export default class FileView extends View {
         this.refreshScheduler = new RefreshScheduler({ seconds: refreshSeconds(this.config) });
         this.windowActive = window()?.active === true;
         this.loaded = false;
+        this.started = false;
         this.loadConfig(cx);
         this.refreshScheduler.trigger();
+        this.load(cx);
         cx.timer.every(1000, (cx) => this.tick(cx));
     }
 
@@ -96,8 +98,8 @@ export default class FileView extends View {
         const shown = this.shown(),
             back = shown && !this.wasShown;
         this.wasShown = shown;
-        this.loadConfig(cx);
         if (!shown) return;
+        this.loadConfig(cx);
         const active = window()?.active === true;
         if (back || focusRegained(this.windowActive, active) || this.refreshScheduler.due()) this.load(cx);
         this.windowActive = active;
@@ -115,8 +117,9 @@ export default class FileView extends View {
     }
 
     load(cx, user = false) {
-        if (this.loading || !this.path) return;
-        if (!this.refreshState.start({ user, first: !this.loaded, notify: () => cx.notify() })) return;
+        if (!this.path) return;
+        if (!this.refreshState.start({ user, first: !this.started, notify: () => cx.notify() })) return;
+        this.started = true;
         this.refreshScheduler.sweep();
         this.loading = true;
         const seq = ++this.seq;
@@ -178,6 +181,7 @@ export default class FileView extends View {
         this.text = null;
         this.lines = 0;
         this.fileError = message;
+        this.loaded = true;
     }
 
     button(t, id, label, onClick, tip = "") {
@@ -226,7 +230,7 @@ export default class FileView extends View {
                     .child(
                         div()
                             .flex_none()
-                            .max_w(narrow ? 120 : 260)
+                            .max_w(narrow ? 88 : 260)
                             .truncate()
                             .font_semibold()
                             .tooltip(this.path || "No file")
@@ -267,7 +271,7 @@ export default class FileView extends View {
                             this.button(
                                 t,
                                 "fv-wrap",
-                                this.wrap ? "Wrap on" : "Wrap off",
+                                narrow ? "Wrap" : this.wrap ? "Wrap on" : "Wrap off",
                                 (_e, cx) => {
                                     this.wrap = !this.wrap;
                                     this.code?.set_soft_wrap(this.wrap);

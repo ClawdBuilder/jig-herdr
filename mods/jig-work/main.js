@@ -27,11 +27,13 @@ import {
     theme,
     window,
 } from "herdr";
+import { withDeadline } from "./deadline.js";
 import {
     addressOf,
     changedSince,
     clock,
     decisionText,
+    detailsNote,
     folderName,
     MTIMES,
     mergeSessions,
@@ -113,6 +115,9 @@ function readFolds() {
     }
 }
 
+// Every command gets the same deadline, so a hung sh/git/gh cannot hold the panel's loading state and scheduler.
+const execD = (cmd, args, opts) => withDeadline(exec(cmd, args, opts));
+
 const readCache = () => {
     try {
         return JSON.parse(localStorage.getItem("prs") ?? "{}");
@@ -125,7 +130,7 @@ const readCache = () => {
 function openUrl(url) {
     if (!url) return;
     const platform = window()?.platform;
-    exec(platform === "windows" ? "explorer.exe" : platform === "macos" ? "open" : "xdg-open", [url]).catch(() => {});
+    execD(platform === "windows" ? "explorer.exe" : platform === "macos" ? "open" : "xdg-open", [url]).catch(() => {});
 }
 
 export default class JigWork extends View {
@@ -162,6 +167,9 @@ export default class JigWork extends View {
         this.width = 0;
         this.folds = readFolds();
         this.recentAll = false;
+        this.started = false;
+        this.wasSeen = false;
+        this.prUser = false;
         this.lastRenderAt = Date.now();
         cx.timer.every(1000, (cx) => this.tick(cx));
         this.readAll(cx, false);
@@ -194,22 +202,25 @@ export default class JigWork extends View {
     // Herdr status), the backstop, and a cheap mtime check while the session works. No 2 s body polling.
     tick(cx) {
         this.claim();
-        if (!this.lastRenderAt || Date.now() - this.lastRenderAt > 2500) {
+        const now = Date.now(),
+            seen = Boolean(this.lastRenderAt) && now - this.lastRenderAt <= 2500;
+        if (!seen) {
             // A hidden view does not render, so it stays quiet; a visible one renders and the next tick reads.
+            this.wasSeen = false;
             if (this.current().session?.status.state === "busy" || this.refreshScheduler.due()) cx.notify();
             return;
         }
-        const now = Date.now();
+        if (shownAgain(this.wasSeen, seen)) this.refreshScheduler.trigger();
+        this.wasSeen = true;
         if (now - this.modsAt > MODS_MS) this.checkMods(cx);
         const current = this.current(),
             id = current.session?.status.session ?? null;
         if (id !== this.selectedId) {
-            if (this.selectedId !== undefined) this.mtimes = {};
             this.selectedId = id;
             if (id) this.refreshScheduler.trigger();
             cx.notify();
         }
-        if (!this.loaded && !this.loading) this.refreshScheduler.trigger();
+        if (!this.started && !this.loading) this.refreshScheduler.trigger();
         const active = window()?.active === true;
         if (focusRegained(this.windowActive, active)) this.refreshScheduler.trigger();
         this.windowActive = active;
@@ -227,7 +238,8 @@ export default class JigWork extends View {
 
     /** A full read of every status file: an event, the backstop, or a click. Background runs are silent. */
     readAll(cx, user = false) {
-        if (!this.refreshState.start({ user, first: !this.loaded, notify: () => cx.notify() })) return;
+        if (!this.refreshState.start({ user, first: !this.started, notify: () => cx.notify() })) return;
+        this.started = true;
         this.refreshScheduler.sweep();
         this.loading = true;
         const on = this.machine();
@@ -237,16 +249,17 @@ export default class JigWork extends View {
                 for (const problem of config.problems) this.warn(problem);
                 this.config = config;
                 this.refreshScheduler.setSeconds(refreshSeconds(config));
-                const r = await exec("sh", ["-c", SCRIPT, "sh", config.stateDir ?? ""], { on });
+                const before = await this.readMtimes();
+                const r = await execD("sh", ["-c", SCRIPT, "sh", config.stateDir ?? ""], { on });
                 if (r.code !== 0) throw new Error((r.stderr || `exit ${r.code}`).trim().split("\n")[0]);
                 this.raw = r.stdout;
                 this.dir = /^@@dir (.*)$/m.exec(r.stdout)?.[1] ?? null;
                 this.sessions = parseSessions(r.stdout);
                 this.error = null;
                 this.loaded = true;
-                this.mtimes = await this.readMtimes();
+                this.mtimes = before; // the mtimes from the pass whose bodies were just read
                 if (this.home === null) {
-                    const h = await exec("sh", ["-c", 'printf %s "$HOME"'], { on }).catch(() => null);
+                    const h = await execD("sh", ["-c", 'printf %s "$HOME"'], { on }).catch(() => null);
                     this.home = h?.stdout ?? "";
                 }
             } catch (e) {
@@ -261,7 +274,7 @@ export default class JigWork extends View {
     }
 
     async readMtimes() {
-        const r = await exec("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], { on: this.machine() }).catch(
+        const r = await execD("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], { on: this.machine() }).catch(
             () => null,
         );
         return r?.code === 0 ? parseMtimes(r.stdout) : {};
@@ -277,14 +290,14 @@ export default class JigWork extends View {
         const on = this.machine();
         cx.spawn(async (cx) => {
             try {
-                const r = await exec("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], { on }).catch(() => null);
+                const r = await execD("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], { on }).catch(() => null);
                 if (r?.code !== 0) return;
                 const next = parseMtimes(r.stdout),
                     files = changedSince(this.mtimes, next);
-                this.mtimes = next;
                 if (files.length === 0) return;
-                const read = await exec("sh", ["-c", READ, "sh", ...files], { on }).catch(() => null);
+                const read = await execD("sh", ["-c", READ, "sh", ...files], { on }).catch(() => null);
                 if (read?.code !== 0) return;
+                this.mtimes = next; // only the pass whose bodies were read
                 this.sessions = mergeSessions(this.sessions, parseSessions(read.stdout), Object.keys(next));
                 this.error = null;
                 cx.notify();
@@ -305,7 +318,7 @@ export default class JigWork extends View {
         this.repoKey = key;
         cx.spawn(async (cx) => {
             try {
-                const r = await exec("sh", ["-c", REPO_SCRIPT, "sh", ...files], { on: this.machine() });
+                const r = await execD("sh", ["-c", REPO_SCRIPT, "sh", ...files], { on: this.machine() });
                 this.repoInfo = { ...this.repoInfo, ...parseRepoInfo(r.stdout) };
                 cx.notify();
             } catch {
@@ -327,19 +340,20 @@ export default class JigWork extends View {
         const same = JSON.stringify([cached?.known ?? [], cached?.search]) === JSON.stringify([known, search]);
         if (!force && cached && same && Date.now() - cached.at < PR_MS) return;
         this.prLoading = true;
+        this.prUser = force;
         const on = this.machine();
         cx.spawn(async (cx) => {
             const entry = { at: Date.now(), known, search, searched: [], details: {}, error: null };
             try {
                 let urls = known;
                 if (urls.length === 0) {
-                    const r = await exec("gh", search, { on });
+                    const r = await execD("gh", search, { on });
                     if (r.code !== 0) throw new Error((r.stderr || "gh search failed").trim().split("\n")[0]);
                     entry.searched = JSON.parse(r.stdout || "[]");
                     urls = entry.searched.map((p) => p.url);
                 }
                 for (const url of urls.slice(0, 4)) {
-                    const r = await exec("gh", ["pr", "view", url, "--json", VIEW], { on });
+                    const r = await execD("gh", ["pr", "view", url, "--json", VIEW], { on });
                     if (r.code === 0) entry.details[url] = JSON.parse(r.stdout || "{}");
                 }
             } catch (e) {
@@ -759,10 +773,10 @@ export default class JigWork extends View {
                             t,
                             "jw-pr-refresh",
                             OWN("refresh"),
-                            this.prLoading ? "Reading the pull requests…" : "Refresh the pull requests",
+                            this.prUser && this.prLoading ? "Reading the pull requests…" : "Refresh the pull requests",
                             (cx) => this.loadPrs(cx, st, true),
                             false,
-                            this.prLoading,
+                            this.prUser && this.prLoading,
                         ),
                     ),
             )
@@ -774,7 +788,7 @@ export default class JigWork extends View {
                         .pt(2)
                         .text_size(11.5)
                         .text_color(t.dim)
-                        .child(`Details unavailable for ${missingDetails(st.workflow?.prs, cached)} pull request(s).`),
+                        .child(detailsNote(missingDetails(st.workflow?.prs, cached))),
                 ),
             );
     }

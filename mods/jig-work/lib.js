@@ -232,6 +232,11 @@ export function recentTooltip(r) {
     return bits;
 }
 
+/** The note under the pull requests when their details could not be read, in proper English. */
+export function detailsNote(count) {
+    return count === 1 ? "Details unavailable for 1 pull request." : `Details unavailable for ${count} pull requests.`;
+}
+
 /** How many of the ticket's pull requests have no details yet (the workflow listed them, gh did not answer). */
 export function missingDetails(workflowPrs, cached) {
     const known = (workflowPrs ?? []).map((p) => p.url).filter(Boolean);

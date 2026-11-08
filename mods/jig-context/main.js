@@ -12,6 +12,7 @@
 import { h_flex, v_flex } from "gpui-base";
 import { div, svg, View } from "gpui-kit";
 import { appHome, exec, focused, layout, readTextFile, spaces, terminals, theme, window } from "herdr";
+import { withDeadline } from "./deadline.js";
 import {
     addressOf,
     addSwitch,
@@ -42,6 +43,7 @@ const MTIME_MS = 3000; // while the followed session works: a cheap mtime check
 const ANSWER_MS = 10000; // how long a request may wait before the panel says the session does not answer
 
 const ICON = (name) => `mods/workspace-chrome/${name}.svg`;
+const execD = (cmd, args, opts) => withDeadline(exec(cmd, args, opts));
 const OWN = (name) => `mods/jig-context/${name}.svg`;
 
 function iconButton(t, id, icon, tip, onClick, busy = false) {
@@ -110,6 +112,8 @@ export default class JigContext extends View {
         this.lastTerminals = terminals();
         this.windowActive = window()?.active === true;
         this.selectedId = undefined;
+        this.started = false;
+        this.wasSeen = false;
         this.width = 0;
         this.pending = null; // switches sent and not answered yet: { tools, skills, reload }
         this.pendingFor = null; // the session they were sent to
@@ -118,6 +122,7 @@ export default class JigContext extends View {
         this.sendError = null;
         this.seq = 0;
         cx.timer.every(1000, (cx) => this.tick(cx));
+        this.readAll(cx, false);
     }
 
     machine() {
@@ -138,20 +143,23 @@ export default class JigContext extends View {
     // Once a second: focus/session change, window focus and the followed terminal's status trigger a read; the backstop
     // covers the rest; while the session works, a cheap mtime check every 3 s reads only the files that moved.
     tick(cx) {
-        if (!this.lastRenderAt || Date.now() - this.lastRenderAt > 2500) {
+        const seen = Boolean(this.lastRenderAt) && Date.now() - this.lastRenderAt <= 2500;
+        if (!seen) {
+            this.wasSeen = false;
             if (this.current().session?.status.state === "busy" || this.refreshScheduler.due()) cx.notify();
             return;
         }
+        if (shownAgain(this.wasSeen, seen)) this.refreshScheduler.trigger();
+        this.wasSeen = true;
         const current = this.current(),
             id = current.session?.status.session ?? null;
         if (id !== this.selectedId) {
-            if (this.selectedId !== undefined) this.mtimes = {};
             this.selectedId = id;
             this.open = { ...this.openBySession.default, ...(this.openBySession[id] ?? {}) };
             if (id) this.refreshScheduler.trigger();
             cx.notify();
         }
-        if (!this.loaded && !this.loading) this.refreshScheduler.trigger();
+        if (!this.started && !this.loading) this.refreshScheduler.trigger();
         const active = window()?.active === true;
         if (focusRegained(this.windowActive, active)) this.refreshScheduler.trigger();
         this.windowActive = active;
@@ -165,7 +173,8 @@ export default class JigContext extends View {
     }
 
     readAll(cx, user = false) {
-        if (!this.refreshState.start({ user, first: !this.loaded, notify: () => cx.notify() })) return;
+        if (!this.refreshState.start({ user, first: !this.started, notify: () => cx.notify() })) return;
+        this.started = true;
         this.refreshScheduler.sweep();
         this.loading = true;
         const on = this.machine();
@@ -174,16 +183,17 @@ export default class JigContext extends View {
                 const text = await readTextFile(`${appHome()}/mods/jig-work/config.json`, { on: null });
                 this.config = parseConfig(text);
                 this.refreshScheduler.setSeconds(refreshSeconds(this.config));
-                const r = await exec("sh", ["-c", SCRIPT, "sh", this.config.stateDir ?? ""], { on });
+                const before = await this.readMtimes();
+                const r = await execD("sh", ["-c", SCRIPT, "sh", this.config.stateDir ?? ""], { on });
                 if (r.code !== 0) throw new Error((r.stderr || `exit ${r.code}`).trim().split("\n")[0]);
                 this.raw = r.stdout;
                 this.dir = /^@@dir (.*)$/m.exec(r.stdout)?.[1] ?? null;
                 this.sessions = parseSessions(r.stdout);
                 this.error = null;
                 this.loaded = true;
-                this.mtimes = await this.readMtimes();
+                this.mtimes = before; // the mtimes from the pass whose bodies were just read
                 if (this.home === null) {
-                    const h = await exec("sh", ["-c", 'printf %s "$HOME"'], { on }).catch(() => null);
+                    const h = await execD("sh", ["-c", 'printf %s "$HOME"'], { on }).catch(() => null);
                     this.home = h?.stdout ?? "";
                 }
             } catch (e) {
@@ -199,7 +209,7 @@ export default class JigContext extends View {
     }
 
     async readMtimes() {
-        const r = await exec("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], { on: this.machine() }).catch(
+        const r = await execD("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], { on: this.machine() }).catch(
             () => null,
         );
         return r?.code === 0 ? parseMtimes(r.stdout) : {};
@@ -214,14 +224,14 @@ export default class JigContext extends View {
         const on = this.machine();
         cx.spawn(async (cx) => {
             try {
-                const r = await exec("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], { on }).catch(() => null);
+                const r = await execD("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], { on }).catch(() => null);
                 if (r?.code !== 0) return;
                 const next = parseMtimes(r.stdout),
                     files = changedSince(this.mtimes, next);
-                this.mtimes = next;
                 if (files.length === 0) return;
-                const read = await exec("sh", ["-c", READ, "sh", ...files], { on }).catch(() => null);
+                const read = await execD("sh", ["-c", READ, "sh", ...files], { on }).catch(() => null);
                 if (read?.code !== 0) return;
+                this.mtimes = next; // only the pass whose bodies were read
                 this.sessions = mergeSessions(this.sessions, parseSessions(read.stdout), Object.keys(next));
                 this.error = null;
                 cx.notify();
@@ -257,7 +267,7 @@ export default class JigContext extends View {
         const machine = this.machine();
         cx.spawn(async (cx) => {
             try {
-                const r = await exec("sh", ["-c", WRITE, "sh", file, json], { on: machine });
+                const r = await execD("sh", ["-c", WRITE, "sh", file, json], { on: machine });
                 if (r.code !== 0) this.sendError = (r.stderr || "could not write the request").trim().split("\n")[0];
             } catch (e) {
                 this.sendError = String(e?.message ?? e);
