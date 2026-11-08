@@ -50,6 +50,7 @@ import {
     RefreshState,
     refreshSeconds,
     terminalFinished,
+    friendlyError,
     GIT_READ,
     run as runCommand,
 } from "./refresh.js";
@@ -485,7 +486,7 @@ export default class RepoHistory extends View {
                 if (key !== this.logKey()) return;
                 if (log.code !== 0) {
                     this.commits = null;
-                    this.error = friendly(log.stderr) || "git log failed.";
+                    this.error = friendlyError(log, { what: "Reading", follow: true }) || "git log failed.";
                     return;
                 }
                 this.error = null;

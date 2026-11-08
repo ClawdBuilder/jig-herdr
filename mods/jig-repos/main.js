@@ -444,10 +444,7 @@ export default class RepoChanges extends View {
 
     /** Herdr's exec failure as one line: a stopped command says it was stopped. */
     failure(e, what) {
-        const said = String(e?.message ?? e).split("\n")[0];
-        return /timed? ?out|timeout|took too long|abort|cancel/i.test(said)
-            ? `${what} took too long and was stopped. Check the connection, or use a terminal.`
-            : said;
+        return friendlyError(e, { what, follow: true });
     }
 
     /** What runs in this checkout now, from any copy of this mod (the panel and the push dialog share the lock), or null. */

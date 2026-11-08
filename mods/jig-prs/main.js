@@ -307,7 +307,7 @@ export default class RepoPullRequests extends View {
                 })();
             } catch (e) {
                 if (run === this.readGeneration && contextKey === this.contextKey)
-                    this.error = friendly(e?.message ?? e);
+                    this.error = friendlyError(e, { what: "Reading", follow: true });
             } finally {
                 if (run === this.readGeneration) {
                     this.loading = false;

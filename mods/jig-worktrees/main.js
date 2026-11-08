@@ -48,6 +48,7 @@ import {
     RefreshState,
     refreshSeconds,
     terminalFinished,
+    friendlyError,
     GIT_READ,
     run as runCommand,
 } from "./refresh.js";
@@ -260,7 +261,7 @@ export default class RepoWorktrees extends View {
                 await work;
             } catch (e) {
                 if (run === this.readGeneration && contextKey === this.contextKey)
-                    this.error = friendly(e?.message ?? e);
+                    this.error = friendlyError(e, { what: "Reading", follow: true });
             } finally {
                 if (run === this.readGeneration) {
                     this.loading = false;

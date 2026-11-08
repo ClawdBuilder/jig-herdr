@@ -1,4 +1,4 @@
-import { execBudget } from "./refresh.js";
+import { execBudget, friendlyError } from "./refresh.js";
 
 export { execBudget };
 
@@ -841,8 +841,8 @@ export function networkExec(exec, on) {
 }
 
 /** What a stopped command says: never git's bare exit code. */
-export const timeoutMessage = (timeout = NETWORK_TIMEOUT) =>
-    `Timed out after ${execBudget(timeout).shellSeconds} s — check your network or sign-in, then try in a terminal.`;
+export const timeoutMessage = (timeout = NETWORK_TIMEOUT, what = "Push") =>
+    friendlyError({ code: 124, seconds: execBudget(timeout).shellSeconds }, { what });
 
 /** `value` as one POSIX shell word. */
 export function shQuote(value) {

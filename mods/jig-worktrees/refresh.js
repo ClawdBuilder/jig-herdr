@@ -153,6 +153,33 @@ export class RefreshScheduler {
     }
 }
 
+/** One sentence for a failed git/gh read. `follow` adds the folder-panel switch hint. */
+export function friendlyError(result, { what = "Reading", follow = false } = {}) {
+    const text = String(result?.stderr ?? result?.stdout ?? result?.message ?? result ?? "").trim();
+    const first = text.split("\n").find(Boolean) ?? "";
+    const seconds = Number(result?.seconds) || 20;
+    if (result?.timedOut || result?.code === 124 || /tim(e|ed) out|timeout|took too long/i.test(first))
+        return `${what} took too long and was stopped (${seconds} s). Check the connection, or try in a terminal.`;
+    if (/not a git repository|not a git repo/i.test(text))
+        return follow
+            ? "No git repo in this folder. Open a terminal in one, or switch to Space."
+            : "No git repo in this folder.";
+    if (/(?:git: )?(?:command )?not found|git: command not found|spawn git ENOENT/i.test(first) && /git/i.test(first))
+        return "git isn't installed on this machine.";
+    if (/(?:gh: )?(?:command )?not found|gh: command not found|spawn gh ENOENT/i.test(first) && /gh/i.test(first))
+        return "The GitHub CLI (gh) isn't installed here. Install it, then run gh auth login.";
+    if (/gh auth login|not logged in|authentication|HTTP 401|bad credentials/i.test(text))
+        return "gh is not logged in on this machine (run gh auth login).";
+    if (/rate limit/i.test(text)) return "GitHub rate limit reached; try again later.";
+    if (
+        /could not resolve host|dial tcp|timed out|timeout|network is unreachable|connection (refused|reset)|TLS handshake/i.test(
+            text,
+        )
+    )
+        return `Network error: ${first}`;
+    return first;
+}
+
 /** Whether `path` is the folder `root` or inside it. */
 export function insideFolder(path, root) {
     if (typeof path !== "string" || typeof root !== "string" || root === "") return false;
