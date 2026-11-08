@@ -10,17 +10,23 @@
 // nothing, and jig-core's rules still decide every call of a tool switched on.
 
 import { h_flex, v_flex } from "gpui-base";
-import { div, View } from "gpui-kit";
-import { appHome, exec, focused, layout, readTextFile, spaces, theme } from "herdr";
+import { div, svg, View } from "gpui-kit";
+import { appHome, exec, focused, layout, readTextFile, spaces, terminals, theme, window } from "herdr";
 import {
+    addressOf,
     addSwitch,
+    changedSince,
     folderName,
     headline,
     isShown,
+    MTIMES,
+    mergeSessions,
     parseConfig,
+    parseMtimes,
     parseSessions,
     percent,
     pickSession,
+    READ,
     requestJson,
     requestPath,
     SCRIPT,
@@ -28,18 +34,49 @@ import {
     short,
     shownOn,
     splitPath,
+    terminalStateChanged,
     WRITE,
 } from "./lib.js";
+import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds } from "./refresh.js";
 
-const EVERY_MS = 2000; // status files, while on screen
+const MTIME_MS = 3000; // while the followed session works: a cheap mtime check
 const ANSWER_MS = 10000; // how long a request may wait before the panel says the session does not answer
 
-// Which lists are open, remembered in the mod's own storage.
+const ICON = (name) => `mods/workspace-chrome/${name}.svg`;
+const OWN = (name) => `mods/jig-context/${name}.svg`;
+
+function iconButton(t, id, icon, tip, onClick, busy = false) {
+    return div()
+        .id(id)
+        .flex_none()
+        .w(22)
+        .h(20)
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(5)
+        .text_color(busy ? t.dim : t.muted)
+        .when(busy, (el) => el.opacity(0.6))
+        .cursor_pointer()
+        .hover((s) => s.bg(t.raised).text_color(t.foreground))
+        .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+        .on_click((_e, cx) => {
+            cx.stop_propagation();
+            onClick(cx);
+        })
+        .tooltip(tip)
+        .child(svg(icon).size(13));
+}
+
+// Which lists are open, remembered per session: { <session id>: { tools, skills, files } }.
 function readOpen() {
     try {
-        return JSON.parse(localStorage.getItem("open") ?? "{}");
+        return {
+            default: { tools: false, skills: false, files: false },
+            ...JSON.parse(localStorage.getItem("openBySession") ?? "{}"),
+        };
     } catch {
-        return {};
+        return { default: { tools: false, skills: false, files: false } };
     }
 }
 
@@ -59,8 +96,22 @@ export default class JigContext extends View {
         this.error = null;
         this.loading = false;
         this.loadedAt = 0;
+        this.loaded = false;
         this.home = null;
-        this.open = { tools: false, skills: false, files: false, ...readOpen() };
+        this.openBySession = readOpen();
+        this.open = { ...this.openBySession.default };
+        this.picked = null;
+        this.pickedFocus = null;
+        this.pickerOpen = false;
+        this.mtimes = {};
+        this.mtimeAt = 0;
+        this.checking = false;
+        this.refreshState = new RefreshState();
+        this.refreshScheduler = new RefreshScheduler({ seconds: refreshSeconds(this.config) });
+        this.lastTerminals = terminals();
+        this.windowActive = window()?.active === true;
+        this.selectedId = undefined;
+        this.width = 0;
         this.pending = null; // switches sent and not answered yet: { tools, skills, reload }
         this.pendingFor = null; // the session they were sent to
         this.sentId = null;
@@ -75,49 +126,105 @@ export default class JigContext extends View {
     }
 
     current() {
-        const f = focused();
+        const f = focused(),
+            focus = f?.terminal ?? null;
         return pickSession(this.sessions, {
             machine: this.machine(),
-            focused: f?.terminal ?? null,
-            agent: f?.agent ?? null,
+            focused: this.picked && focus === this.pickedFocus ? null : focus,
+            agent: this.picked && focus === this.pickedFocus ? null : (f?.agent ?? null),
+            picked: this.picked,
         });
     }
 
-    // Once a second, never from render: load only while the panel is on screen.
+    // Once a second: focus/session change, window focus and the followed terminal's status trigger a read; the backstop
+    // covers the rest; while the session works, a cheap mtime check every 3 s reads only the files that moved.
     tick(cx) {
         if (!isShown(layout(), "jig-context")) return;
-        if (!this.loading && Date.now() - this.loadedAt >= EVERY_MS) this.load(cx);
-        else if (this.sentId && Date.now() - this.sentAt > ANSWER_MS) cx.notify(); // the "no answer" line
+        const current = this.current(),
+            id = current.session?.status.session ?? null;
+        if (id !== this.selectedId) {
+            if (this.selectedId !== undefined) this.mtimes = {};
+            this.selectedId = id;
+            this.open = { ...this.openBySession.default, ...(this.openBySession[id] ?? {}) };
+            if (id) this.refreshScheduler.trigger();
+            cx.notify();
+        }
+        if (!this.loaded && !this.loading) this.refreshScheduler.trigger();
+        const active = window()?.active === true;
+        if (focusRegained(this.windowActive, active)) this.refreshScheduler.trigger();
+        this.windowActive = active;
+        const currentTerminals = terminals(),
+            address = current.session ? addressOf(current.session.status, this.machine()) : null;
+        if (terminalStateChanged(this.lastTerminals, currentTerminals, address)) this.refreshScheduler.trigger();
+        this.lastTerminals = currentTerminals;
+        if (this.sentId && Date.now() - this.sentAt > ANSWER_MS) cx.notify(); // the "no answer" line
+        if (!this.loading && this.refreshScheduler.due()) this.readAll(cx, false);
+        if (current.session) this.checkMtimes(cx, current.session);
     }
 
-    load(cx) {
+    readAll(cx, user = false) {
+        if (!this.refreshState.start({ user, first: !this.loaded, notify: () => cx.notify() })) return;
+        this.refreshScheduler.sweep();
         this.loading = true;
+        const on = this.machine();
         cx.spawn(async (cx) => {
             try {
                 const text = await readTextFile(`${appHome()}/mods/jig-work/config.json`, { on: null });
                 this.config = parseConfig(text);
-                const on = this.machine();
+                this.refreshScheduler.setSeconds(refreshSeconds(this.config));
                 const r = await exec("sh", ["-c", SCRIPT, "sh", this.config.stateDir ?? ""], { on });
-                if (this.home === null) {
-                    const h = await exec("sh", ["-c", 'printf %s "$HOME"'], { on }).catch(() => null);
-                    this.home = h?.stdout ?? "";
-                }
-                if (r.stdout === this.raw && this.error === null) return;
+                if (r.code !== 0) throw new Error((r.stderr || `exit ${r.code}`).trim().split("\n")[0]);
                 this.raw = r.stdout;
                 this.dir = /^@@dir (.*)$/m.exec(r.stdout)?.[1] ?? null;
                 this.sessions = parseSessions(r.stdout);
                 this.error = null;
-                this.settle();
-                cx.notify();
-            } catch (e) {
-                const message = String(e?.message ?? e);
-                if (message !== this.error) {
-                    this.error = message;
-                    cx.notify();
+                this.loaded = true;
+                this.mtimes = await this.readMtimes();
+                if (this.home === null) {
+                    const h = await exec("sh", ["-c", 'printf %s "$HOME"'], { on }).catch(() => null);
+                    this.home = h?.stdout ?? "";
                 }
+            } catch (e) {
+                this.error = String(e?.message ?? e).split("\n")[0];
             } finally {
                 this.loading = false;
+                const again = this.refreshState.finish();
+                if (again) this.refreshScheduler.trigger();
                 this.loadedAt = Date.now();
+                cx.notify();
+            }
+        });
+    }
+
+    async readMtimes() {
+        const r = await exec("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], { on: this.machine() }).catch(
+            () => null,
+        );
+        return r?.code === 0 ? parseMtimes(r.stdout) : {};
+    }
+
+    checkMtimes(cx, session) {
+        if (this.loading || this.checking || session?.status.state !== "busy") return;
+        const now = Date.now();
+        if (now - this.mtimeAt < MTIME_MS) return;
+        this.mtimeAt = now;
+        this.checking = true;
+        const on = this.machine();
+        cx.spawn(async (cx) => {
+            try {
+                const r = await exec("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], { on }).catch(() => null);
+                if (r?.code !== 0) return;
+                const next = parseMtimes(r.stdout),
+                    files = changedSince(this.mtimes, next);
+                this.mtimes = next;
+                if (files.length === 0) return;
+                const read = await exec("sh", ["-c", READ, "sh", ...files], { on }).catch(() => null);
+                if (read?.code !== 0) return;
+                this.sessions = mergeSessions(this.sessions, parseSessions(read.stdout), Object.keys(next));
+                this.error = null;
+                cx.notify();
+            } finally {
+                this.checking = false;
             }
         });
     }
@@ -153,7 +260,7 @@ export default class JigContext extends View {
             } catch (e) {
                 this.sendError = String(e?.message ?? e);
             }
-            this.loadedAt = 0; // read the answer soon
+            this.refreshScheduler.trigger(); // read the answer soon
             cx.notify();
         });
         cx.notify();
@@ -161,7 +268,7 @@ export default class JigContext extends View {
 
     // ---- drawing ---------------------------------------------------------------------------------------------------
 
-    toggle(t, id, on, waiting, onClick) {
+    toggle(t, id, on, waiting, onClick, tip = "") {
         return div()
             .id(id)
             .flex_none()
@@ -177,6 +284,7 @@ export default class JigContext extends View {
             .when(on, (el) => el.justify_end())
             .when(waiting, (el) => el.opacity(0.55))
             .cursor_pointer()
+            .when(Boolean(tip), (el) => el.tooltip(tip))
             .on_click(onClick)
             .child(
                 div()
@@ -186,50 +294,149 @@ export default class JigContext extends View {
             );
     }
 
-    header(t, session, by) {
-        const st = session.status;
-        const model = st.model?.name ?? st.model?.id ?? "no model";
-        const reloading = this.pending?.reload || st.lastRequest?.reload === "waiting";
-        return v_flex()
-            .px(14)
-            .py(10)
-            .gap(6)
+    // The pinned 42 px header: title left; session picker, Reload and refresh right.
+    topBar(t, _cx, session, _by) {
+        const st = session.status,
+            live = this.sessions.filter((s) => s.alive),
+            busy = st.state === "busy",
+            reloading = this.pending?.reload || st.lastRequest?.reload === "waiting",
+            narrow = this.width > 0 && this.width < 380;
+        return h_flex()
+            .h(42)
+            .flex_none()
+            .px(12)
+            .gap(7)
+            .items_center()
             .border_b(1)
             .border_color(t.border)
+            .child(div().flex_none().text_color(t.accent).font_semibold().child("π"))
             .child(
-                h_flex()
-                    .gap(8)
+                div().flex_1().min_w(0).truncate().font_semibold().tooltip(st.cwd).child(folderName(st.cwd, this.home)),
+            )
+            .when(live.length > 1, (el) =>
+                el.child(
+                    div()
+                        .id("jc-picker")
+                        .flex_none()
+                        .h(22)
+                        .px(7)
+                        .flex()
+                        .items_center()
+                        .gap(4)
+                        .rounded(5)
+                        .border(1)
+                        .border_color(t.border)
+                        .text_size(11)
+                        .text_color(t.muted)
+                        .cursor_pointer()
+                        .hover((x) => x.bg(t.hover).text_color(t.foreground))
+                        .tooltip("Choose the session shown")
+                        .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+                        .on_click((_e, cx) => {
+                            cx.stop_propagation();
+                            this.pickerOpen = !this.pickerOpen;
+                            cx.notify();
+                        })
+                        .child(narrow ? String(live.length) : `${live.length} sessions`)
+                        .child(svg(ICON("chevron-down")).size(10)),
+                ),
+            )
+            .child(
+                div()
+                    .id("jc-reload")
+                    .flex_none()
+                    .h(22)
+                    .px(8)
+                    .flex()
                     .items_center()
-                    .text_size(13)
-                    .child(div().text_color(t.accent).font_semibold().child("π"))
-                    .child(
-                        div().flex_none().font_semibold().text_color(t.foreground).child(folderName(st.cwd, this.home)),
-                    )
-                    .child(div().text_color(t.dim).child("·"))
-                    .child(div().min_w(0).truncate().text_color(t.muted).child(model))
-                    .child(div().flex_1())
-                    .when(by !== "focus", (el) =>
-                        el.child(div().flex_none().text_size(11).text_color(t.dim).child("last active")),
-                    )
-                    .child(
-                        div()
-                            .id("jc-reload")
-                            .flex_none()
-                            .px(8)
-                            .h(22)
-                            .flex()
-                            .items_center()
-                            .rounded(4)
-                            .border(1)
-                            .border_color(t.border)
-                            .text_size(11.5)
-                            .text_color(reloading ? t.working : t.muted)
-                            .cursor_pointer()
-                            .hover((s) => s.bg(t.hover).text_color(t.foreground))
-                            .tooltip("Reload Pi's extensions, skills, prompts and context files once the agent is idle")
-                            .on_click((_e, cx) => this.send(cx, session, "reload"))
-                            .child(reloading ? "Reloading…" : "Reload"),
-                    ),
+                    .rounded(5)
+                    .border(1)
+                    .border_color(t.border)
+                    .text_size(11.5)
+                    .text_color(reloading ? t.working : t.muted)
+                    .cursor_pointer()
+                    .hover((s) => s.bg(t.hover).text_color(t.foreground))
+                    .tooltip("Reload Pi's extensions, skills, prompts and context files once the agent is idle")
+                    .on_click((_e, cx) => this.send(cx, session, "reload"))
+                    .child(reloading ? "Reloading…" : busy ? "Reload when idle" : "Reload"),
+            )
+            .child(
+                iconButton(
+                    t,
+                    "jc-refresh",
+                    OWN("refresh"),
+                    this.refreshState.busy ? "Reading the sessions…" : "Read the sessions again",
+                    (cx) => this.readAll(cx, true),
+                    this.refreshState.busy,
+                ),
+            );
+    }
+
+    infoBar(t, session, by) {
+        const st = session.status,
+            model = st.model?.name ?? st.model?.id ?? "no model";
+        return h_flex()
+            .h(26)
+            .flex_none()
+            .px(14)
+            .gap(10)
+            .items_center()
+            .text_size(11)
+            .text_color(t.dim)
+            .child(div().min_w(0).truncate().child(model))
+            .when(Boolean(st.thinking) && st.thinking !== "off", (el) => el.child(div().flex_none().child(st.thinking)))
+            .when(Boolean(st.terminal), (el) => el.child(div().flex_none().child(st.terminal)))
+            .when(by !== "focus", (el) =>
+                el.child(
+                    div()
+                        .flex_none()
+                        .text_color(t.muted)
+                        .child(by === "picked" ? "picked" : "last active"),
+                ),
+            );
+    }
+
+    picker(t, live, current) {
+        return v_flex()
+            .mx(10)
+            .my(6)
+            .p(4)
+            .rounded(6)
+            .border(1)
+            .border_color(t.border)
+            .bg(t.surface)
+            .children(
+                live.map((x) =>
+                    h_flex()
+                        .id(`jc-pick-${x.status.session}`)
+                        .h(26)
+                        .px(8)
+                        .gap(8)
+                        .items_center()
+                        .rounded(4)
+                        .text_size(12)
+                        .cursor_pointer()
+                        .bg(x === current ? t.selected : t.surface)
+                        .hover((s) => s.bg(t.hover))
+                        .on_click((_e, cx) => {
+                            this.picked = x.status.session;
+                            this.pickedFocus = focused()?.terminal ?? null;
+                            this.pickerOpen = false;
+                            cx.notify();
+                        })
+                        .child(div().text_color(t.foreground).child(folderName(x.status.cwd, this.home)))
+                        .child(
+                            div()
+                                .text_color(t.accent)
+                                .child(x.status.ticket?.key ?? ""),
+                        )
+                        .child(div().flex_1())
+                        .child(
+                            div()
+                                .text_color(t.dim)
+                                .child(addressOf(x.status, this.machine()) ?? ""),
+                        ),
+                ),
             );
     }
 
@@ -311,11 +518,12 @@ export default class JigContext extends View {
                 div()
                     .text_size(11)
                     .text_color(t.dim)
-                    .child(
+                    .tooltip(
                         detail.usedFrom === "parts"
                             ? "≈ counted as characters / 4. No reply yet: the total adds up the parts."
-                            : "≈ counted as characters / 4. Messages: Pi's total less the other parts.",
-                    ),
+                            : "≈ counted as characters / 4. Messages: Pi's total less the other parts, when Pi reports one.",
+                    )
+                    .child("≈ counted as characters / 4"),
             );
     }
 
@@ -366,8 +574,10 @@ export default class JigContext extends View {
             .hover((s) => s.text_color(t.foreground))
             .on_click((_e, cx) => {
                 this.open[key] = !this.open[key];
+                const id = this.current().session?.status.session ?? "default";
+                this.openBySession[id] = { ...this.open };
                 try {
-                    localStorage.setItem("open", JSON.stringify(this.open));
+                    localStorage.setItem("openBySession", JSON.stringify(this.openBySession));
                 } catch {}
                 cx.notify();
             })
@@ -421,8 +631,13 @@ export default class JigContext extends View {
                                         .child(`≈${short(x.tokens)}`),
                                 )
                                 .child(
-                                    this.toggle(t, `jc-tool-${i}`, shown, waiting, (_e, cx) =>
-                                        this.send(cx, session, "tools", x.name, !shown),
+                                    this.toggle(
+                                        t,
+                                        `jc-tool-${i}`,
+                                        shown,
+                                        waiting,
+                                        (_e, cx) => this.send(cx, session, "tools", x.name, !shown),
+                                        `Turn ${x.name} ${shown ? "off" : "on"} for this session's next turn`,
                                     ),
                                 );
                         }),
@@ -482,8 +697,13 @@ export default class JigContext extends View {
                                         .child(`≈${short(x.tokens)}`),
                                 )
                                 .child(
-                                    this.toggle(t, `jc-skill-${i}`, shown, shown !== x.on, (_e, cx) =>
-                                        this.send(cx, session, "skills", x.name, !shown),
+                                    this.toggle(
+                                        t,
+                                        `jc-skill-${i}`,
+                                        shown,
+                                        shown !== x.on,
+                                        (_e, cx) => this.send(cx, session, "skills", x.name, !shown),
+                                        `Turn ${x.name} ${shown ? "off" : "on"} for this session's next turn`,
                                     ),
                                 );
                         }),
@@ -527,6 +747,13 @@ export default class JigContext extends View {
     }
 
     empty(t) {
+        if (!this.loaded && !this.error)
+            return v_flex()
+                .p(14)
+                .gap(6)
+                .text_size(12.5)
+                .text_color(t.dim)
+                .child(div().text_color(t.muted).child("Reading Pi sessions…"));
         const where = this.machine() ?? "this computer";
         return v_flex()
             .p(14)
@@ -541,34 +768,59 @@ export default class JigContext extends View {
             .child(div().child(this.error ?? `Looked in ${this.dir ?? "the Jig state folder"} on ${where}.`));
     }
 
-    render(_cx) {
+    render(cx) {
         const t = theme();
         const { session, by } = this.current();
-        const root = v_flex().id("jig-context").size_full().min_h(0).bg(t.chrome).text_color(t.foreground);
-        if (!session) return root.child(this.empty(t));
+        const live = this.sessions.filter((s) => s.alive);
+        const root = v_flex()
+            .id("jig-context")
+            .size_full()
+            .min_h(0)
+            .bg(t.chrome)
+            .text_color(t.foreground)
+            .on_size_change((size, cx) => {
+                if (Math.round(size.width) === Math.round(this.width)) return;
+                this.width = size.width;
+                cx.notify();
+            });
+        if (!session)
+            return root
+                .child(
+                    h_flex()
+                        .h(42)
+                        .flex_none()
+                        .px(12)
+                        .gap(7)
+                        .items_center()
+                        .border_b(1)
+                        .border_color(t.border)
+                        .child(div().flex_none().text_color(t.accent).font_semibold().child("π"))
+                        .child(div().flex_1().min_w(0).truncate().font_semibold().child("Context")),
+                )
+                .child(this.empty(t));
         const st = session.status;
         const detail = st.contextDetail;
-        const body = v_flex().id("jc-body").flex_1().min_h(0).pb(12).overflow_y_scrollbar();
-        if (!detail || typeof detail !== "object")
-            return root
-                .child(this.header(t, session, by))
-                .child(
-                    div()
-                        .p(14)
-                        .text_size(12)
-                        .text_color(t.dim)
-                        .child(
-                            "This session writes no context figures: its jig-session is older. Update Jig, then /reload.",
-                        ),
-                );
         const answer = this.answer(t, st);
-        return root.child(this.header(t, session, by)).child(
-            body
-                .child(this.summary(t, detail))
-                .when(answer !== null, (el) => el.child(answer))
-                .child(this.tools(t, session, detail))
-                .child(this.skills(t, session, detail))
-                .child(this.files(t, detail)),
-        );
+        const body = v_flex().id("jc-body").flex_1().min_h(0).pb(12).overflow_y_scrollbar();
+        return root
+            .child(this.topBar(t, cx, session, by))
+            .child(this.infoBar(t, session, by))
+            .when(this.pickerOpen && live.length > 1, (el) => el.child(this.picker(t, live, session)))
+            .child(
+                detail && typeof detail === "object"
+                    ? body
+                          .child(this.summary(t, detail))
+                          .when(answer !== null, (el) => el.child(answer))
+                          .child(this.tools(t, session, detail))
+                          .child(this.skills(t, session, detail))
+                          .child(this.files(t, detail))
+                    : div()
+                          .p(14)
+                          .text_size(12)
+                          .text_color(t.dim)
+                          .child(
+                              "This session writes no context figures: its jig-session is older. Update Jig, then /reload.",
+                          ),
+            );
     }
 }
