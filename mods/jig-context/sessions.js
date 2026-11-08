@@ -62,7 +62,9 @@ done`;
 // SCRIPT/READ output as [{ file, alive, status }]; a file that is not a status of schema 1 is left out.
 export function parseSessions(stdout) {
     const sessions = [];
-    for (const part of String(stdout ?? "").split(/\n@@file /).slice(1)) {
+    for (const part of String(stdout ?? "")
+        .split(/\n@@file /)
+        .slice(1)) {
         const nl = part.indexOf("\n");
         const head = nl < 0 ? part : part.slice(0, nl);
         const body = nl < 0 ? "" : part.slice(nl + 1);
