@@ -63,14 +63,12 @@ function iconButton(t, id, icon, tip, onClick, busy = false) {
         .child(svg(icon).size(13));
 }
 
-const execD = (cmd, args, opts) => withDeadline(exec(cmd, args, opts));
-
 const PER_FOLDER = 500,
     TOTAL = 5000;
 
 async function directory(path, on) {
     if (!on && window()?.platform === "windows") {
-        const r = await execD("powershell", [
+        const r = await this.execD("powershell", [
             "-NoProfile",
             "-Command",
             "& { param($p) @(Get-ChildItem -LiteralPath $p -Force -ErrorAction Stop | Where-Object Name -ne '.git' | Select-Object -First 501 | ForEach-Object { @{ name=$_.Name; dir=($_.PSIsContainer -and -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint)) } }) | ConvertTo-Json -Compress } '" +
@@ -82,7 +80,7 @@ async function directory(path, on) {
         return Array.isArray(result) ? result : [result];
     }
     const script = `n=0; for p in "$1"/* "$1"/.[!.]* "$1"/..?*; do [ -e "$p" ] || [ -L "$p" ] || continue; name=\${p##*/}; [ "$name" = .git ] && continue; if [ -d "$p" ] && [ ! -L "$p" ]; then kind=d; else kind=f; fi; printf "%s\\0%s\\0" "$kind" "$name"; n=$((n+1)); [ "$n" -gt 500 ] && break; done; test -d "$1"`;
-    const r = await execD("sh", ["-c", script, "files", path], { on });
+    const r = await this.execD("sh", ["-c", script, "files", path], { on });
     if (r.code !== 0) throw new Error(r.stderr || "Cannot list this folder");
     const fields = r.stdout.split("\0"),
         out = [];
@@ -126,6 +124,10 @@ export default class Files extends View {
         cx.timer.every(1000, (cx) => this.tick(cx));
         cx.timer.every(500, () => this.claim());
         this.refresh(cx, false);
+    }
+
+    execD(cmd, args, opts) {
+        return withDeadline(exec(cmd, args, opts), (ms, fn) => this.cx.timer.after(ms, fn));
     }
 
     watch(root, cx) {
@@ -217,7 +219,7 @@ export default class Files extends View {
             context = this.context;
         cx.spawn(async (cx) => {
             try {
-                const r = await execD("sh", ["-c", FIND, "sh", root], { on }).catch(() => null);
+                const r = await this.execD("sh", ["-c", FIND, "sh", root], { on }).catch(() => null);
                 if (context !== this.context || query !== this.filter) return;
                 this.matches = r?.code === 0 ? filterPaths(r.stdout, root, query) : [];
             } finally {
@@ -259,12 +261,12 @@ export default class Files extends View {
                     if (!this.current(context)) return;
                     await this.loadFolder(path, context);
                 }
-                const top = await execD("git", ["rev-parse", "--show-toplevel"], { cwd, on }).catch(() => null);
+                const top = await this.execD("git", ["rev-parse", "--show-toplevel"], { cwd, on }).catch(() => null);
                 const marks = {};
                 let deleted = [];
                 if (top?.code === 0) {
                     // Writes nothing under .git (index lock, fsmonitor cookie): the folder watch would refresh again.
-                    const status = await execD(
+                    const status = await this.execD(
                         "git",
                         [
                             "--no-optional-locks",

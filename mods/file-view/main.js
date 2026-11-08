@@ -266,7 +266,7 @@ export default class FileView extends View {
                             }),
                         ),
                     )
-                    .when(Boolean(this.code), (el) =>
+                    .when(Boolean(this.code) && !(narrow && this.width > 0 && this.width < 340), (el) =>
                         el.child(
                             this.button(
                                 t,

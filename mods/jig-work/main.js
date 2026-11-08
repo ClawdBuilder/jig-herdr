@@ -115,9 +115,6 @@ function readFolds() {
     }
 }
 
-// Every command gets the same deadline, so a hung sh/git/gh cannot hold the panel's loading state and scheduler.
-const execD = (cmd, args, opts) => withDeadline(exec(cmd, args, opts));
-
 const readCache = () => {
     try {
         return JSON.parse(localStorage.getItem("prs") ?? "{}");
@@ -127,14 +124,18 @@ const readCache = () => {
 };
 
 // The app may run on Windows with Pi in a Linux subsystem: a link opens on this computer, so no `on`.
-function openUrl(url) {
+function openUrl(url, cx) {
     if (!url) return;
     const platform = window()?.platform;
-    execD(platform === "windows" ? "explorer.exe" : platform === "macos" ? "open" : "xdg-open", [url]).catch(() => {});
+    withDeadline(
+        exec(platform === "windows" ? "explorer.exe" : platform === "macos" ? "open" : "xdg-open", [url]),
+        (ms, fn) => cx.timer.after(ms, fn),
+    ).catch(() => {});
 }
 
 export default class JigWork extends View {
     init(_props, cx) {
+        this.cx = cx;
         this.config = parseConfig(null);
         this.sessions = [];
         this.dir = null;
@@ -173,6 +174,11 @@ export default class JigWork extends View {
         this.lastRenderAt = Date.now();
         cx.timer.every(1000, (cx) => this.tick(cx));
         this.readAll(cx, false);
+    }
+
+    // Every command gets the same deadline, so a hung sh/git/gh cannot hold the panel's loading state and scheduler.
+    execD(cmd, args, opts) {
+        return withDeadline(exec(cmd, args, opts), (ms, fn) => this.cx.timer.after(ms, fn));
     }
 
     warn(message) {
@@ -242,15 +248,15 @@ export default class JigWork extends View {
         this.started = true;
         this.refreshScheduler.sweep();
         this.loading = true;
-        const on = this.machine();
         cx.spawn(async (cx) => {
             try {
                 const config = parseConfig(await readTextFile(`${appHome()}/mods/jig-work/config.json`));
                 for (const problem of config.problems) this.warn(problem);
                 this.config = config;
                 this.refreshScheduler.setSeconds(refreshSeconds(config));
+                const on = this.machine(); // after the config: a first read with no config must not run `sh` locally
                 const before = await this.readMtimes();
-                const r = await execD("sh", ["-c", SCRIPT, "sh", config.stateDir ?? ""], { on });
+                const r = await this.execD("sh", ["-c", SCRIPT, "sh", config.stateDir ?? ""], { on });
                 if (r.code !== 0) throw new Error((r.stderr || `exit ${r.code}`).trim().split("\n")[0]);
                 this.raw = r.stdout;
                 this.dir = /^@@dir (.*)$/m.exec(r.stdout)?.[1] ?? null;
@@ -259,7 +265,7 @@ export default class JigWork extends View {
                 this.loaded = true;
                 this.mtimes = before; // the mtimes from the pass whose bodies were just read
                 if (this.home === null) {
-                    const h = await execD("sh", ["-c", 'printf %s "$HOME"'], { on }).catch(() => null);
+                    const h = await this.execD("sh", ["-c", 'printf %s "$HOME"'], { on }).catch(() => null);
                     this.home = h?.stdout ?? "";
                 }
             } catch (e) {
@@ -274,9 +280,9 @@ export default class JigWork extends View {
     }
 
     async readMtimes() {
-        const r = await execD("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], { on: this.machine() }).catch(
-            () => null,
-        );
+        const r = await this.execD("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], {
+            on: this.machine(),
+        }).catch(() => null);
         return r?.code === 0 ? parseMtimes(r.stdout) : {};
     }
 
@@ -290,12 +296,14 @@ export default class JigWork extends View {
         const on = this.machine();
         cx.spawn(async (cx) => {
             try {
-                const r = await execD("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], { on }).catch(() => null);
+                const r = await this.execD("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], { on }).catch(
+                    () => null,
+                );
                 if (r?.code !== 0) return;
                 const next = parseMtimes(r.stdout),
                     files = changedSince(this.mtimes, next);
                 if (files.length === 0) return;
-                const read = await execD("sh", ["-c", READ, "sh", ...files], { on }).catch(() => null);
+                const read = await this.execD("sh", ["-c", READ, "sh", ...files], { on }).catch(() => null);
                 if (read?.code !== 0) return;
                 this.mtimes = next; // only the pass whose bodies were read
                 this.sessions = mergeSessions(this.sessions, parseSessions(read.stdout), Object.keys(next));
@@ -318,7 +326,7 @@ export default class JigWork extends View {
         this.repoKey = key;
         cx.spawn(async (cx) => {
             try {
-                const r = await execD("sh", ["-c", REPO_SCRIPT, "sh", ...files], { on: this.machine() });
+                const r = await this.execD("sh", ["-c", REPO_SCRIPT, "sh", ...files], { on: this.machine() });
                 this.repoInfo = { ...this.repoInfo, ...parseRepoInfo(r.stdout) };
                 cx.notify();
             } catch {
@@ -347,13 +355,13 @@ export default class JigWork extends View {
             try {
                 let urls = known;
                 if (urls.length === 0) {
-                    const r = await execD("gh", search, { on });
+                    const r = await this.execD("gh", search, { on });
                     if (r.code !== 0) throw new Error((r.stderr || "gh search failed").trim().split("\n")[0]);
                     entry.searched = JSON.parse(r.stdout || "[]");
                     urls = entry.searched.map((p) => p.url);
                 }
                 for (const url of urls.slice(0, 4)) {
-                    const r = await execD("gh", ["pr", "view", url, "--json", VIEW], { on });
+                    const r = await this.execD("gh", ["pr", "view", url, "--json", VIEW], { on });
                     if (r.code === 0) entry.details[url] = JSON.parse(r.stdout || "{}");
                 }
             } catch (e) {
@@ -697,7 +705,7 @@ export default class JigWork extends View {
                                     .cursor_pointer()
                                     .tooltip("Open in the browser")
                                     .hover((s) => s.underline())
-                                    .on_click(() => openUrl(k.url)),
+                                    .on_click(() => openUrl(k.url, this.cx)),
                             )
                             .child(k.key),
                     )
@@ -810,7 +818,7 @@ export default class JigWork extends View {
                     .cursor_pointer()
                     .hover((s) => s.bg(t.hover))
                     .tooltip(r.url)
-                    .on_click(() => openUrl(r.url))
+                    .on_click(() => openUrl(r.url, this.cx))
                     .child(
                         svg(ICON("git-branch"))
                             .size(13)
@@ -877,7 +885,7 @@ export default class JigWork extends View {
                             el
                                 .cursor_pointer()
                                 .hover((s) => s.bg(t.hover))
-                                .on_click(() => openUrl(f.url)),
+                                .on_click(() => openUrl(f.url, this.cx)),
                         )
                         .child(div().truncate().child(`✗ ${f.name}`)),
                 ),

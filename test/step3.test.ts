@@ -9,7 +9,10 @@ import type { TestContext } from "node:test";
 import { test } from "node:test";
 import { load } from "./support.ts";
 
-type Deadline = { EXEC_DEADLINE_MS: number; withDeadline<T>(p: Promise<T>, ms?: number): Promise<T> };
+type Deadline = {
+    EXEC_DEADLINE_MS: number;
+    withDeadline<T>(p: Promise<T>, timer: (ms: number, fn: () => void) => unknown, ms?: number): Promise<T>;
+};
 type Sessions = {
     MTIMES: string;
     READ: string;
@@ -58,11 +61,25 @@ test("2: Context, Files and file-view read once on mount too", () => {
 test("3: an exec has a deadline and the panels use it", async () => {
     const deadline = await load<Deadline>("mods/jig-work/deadline.js");
     assert.equal(deadline.EXEC_DEADLINE_MS, 20_000);
-    await assert.rejects(deadline.withDeadline(new Promise(() => {}), 20), /timed out/);
-    assert.equal(await deadline.withDeadline(Promise.resolve(7), 1000), 7);
+    const timer = (ms: number, fn: () => void) => setTimeout(fn, ms);
+    await assert.rejects(deadline.withDeadline(new Promise(() => {}), timer, 20), /timed out/);
+    assert.equal(await deadline.withDeadline(Promise.resolve(7), timer, 1000), 7);
+    const deadlineSource = source("jig-work/deadline.js");
+    assert.match(deadlineSource, /timer\(ms,/, "the deadline uses Herdr's timer, not setTimeout");
+    assert.doesNotMatch(deadlineSource, /\b(?:clearTimeout|setTimeout)\s*\(/, "the mod shell has neither");
     for (const mod of ["jig-work", "jig-context", "jig-files"]) {
         const src = source(`${mod}/main.js`);
         assert.match(src, /withDeadline\(exec\(|execD\(/, `${mod}: exec calls go through the deadline`);
+    }
+    // The first read must take its machine from the config it just read, not the empty config from init.
+    for (const mod of ["jig-work", "jig-context"]) {
+        const src = source(`${mod}/main.js`);
+        assert.ok(
+            src.indexOf("const on = this.machine(); // after the config") > src.indexOf("parseConfig(text)") ||
+                src.indexOf("const on = this.machine(); // after the config") >
+                    src.indexOf("parseConfig(await readTextFile"),
+            `${mod}: the machine is chosen after the config`,
+        );
     }
 });
 

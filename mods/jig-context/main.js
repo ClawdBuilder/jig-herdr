@@ -43,7 +43,7 @@ const MTIME_MS = 3000; // while the followed session works: a cheap mtime check
 const ANSWER_MS = 10000; // how long a request may wait before the panel says the session does not answer
 
 const ICON = (name) => `mods/workspace-chrome/${name}.svg`;
-const execD = (cmd, args, opts) => withDeadline(exec(cmd, args, opts));
+
 const OWN = (name) => `mods/jig-context/${name}.svg`;
 
 function iconButton(t, id, icon, tip, onClick, busy = false) {
@@ -90,6 +90,7 @@ function clock(iso) {
 
 export default class JigContext extends View {
     init(_props, cx) {
+        this.cx = cx;
         this.config = parseConfig(null);
         this.sessions = [];
         this.raw = null;
@@ -123,6 +124,10 @@ export default class JigContext extends View {
         this.seq = 0;
         cx.timer.every(1000, (cx) => this.tick(cx));
         this.readAll(cx, false);
+    }
+
+    execD(cmd, args, opts) {
+        return withDeadline(exec(cmd, args, opts), (ms, fn) => this.cx.timer.after(ms, fn));
     }
 
     machine() {
@@ -177,14 +182,14 @@ export default class JigContext extends View {
         this.started = true;
         this.refreshScheduler.sweep();
         this.loading = true;
-        const on = this.machine();
         cx.spawn(async (cx) => {
             try {
                 const text = await readTextFile(`${appHome()}/mods/jig-work/config.json`, { on: null });
                 this.config = parseConfig(text);
                 this.refreshScheduler.setSeconds(refreshSeconds(this.config));
+                const on = this.machine(); // after the config: a first read with no config must not run `sh` locally
                 const before = await this.readMtimes();
-                const r = await execD("sh", ["-c", SCRIPT, "sh", this.config.stateDir ?? ""], { on });
+                const r = await this.execD("sh", ["-c", SCRIPT, "sh", this.config.stateDir ?? ""], { on });
                 if (r.code !== 0) throw new Error((r.stderr || `exit ${r.code}`).trim().split("\n")[0]);
                 this.raw = r.stdout;
                 this.dir = /^@@dir (.*)$/m.exec(r.stdout)?.[1] ?? null;
@@ -193,7 +198,7 @@ export default class JigContext extends View {
                 this.loaded = true;
                 this.mtimes = before; // the mtimes from the pass whose bodies were just read
                 if (this.home === null) {
-                    const h = await execD("sh", ["-c", 'printf %s "$HOME"'], { on }).catch(() => null);
+                    const h = await this.execD("sh", ["-c", 'printf %s "$HOME"'], { on }).catch(() => null);
                     this.home = h?.stdout ?? "";
                 }
             } catch (e) {
@@ -209,9 +214,9 @@ export default class JigContext extends View {
     }
 
     async readMtimes() {
-        const r = await execD("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], { on: this.machine() }).catch(
-            () => null,
-        );
+        const r = await this.execD("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], {
+            on: this.machine(),
+        }).catch(() => null);
         return r?.code === 0 ? parseMtimes(r.stdout) : {};
     }
 
@@ -224,12 +229,14 @@ export default class JigContext extends View {
         const on = this.machine();
         cx.spawn(async (cx) => {
             try {
-                const r = await execD("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], { on }).catch(() => null);
+                const r = await this.execD("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], { on }).catch(
+                    () => null,
+                );
                 if (r?.code !== 0) return;
                 const next = parseMtimes(r.stdout),
                     files = changedSince(this.mtimes, next);
                 if (files.length === 0) return;
-                const read = await execD("sh", ["-c", READ, "sh", ...files], { on }).catch(() => null);
+                const read = await this.execD("sh", ["-c", READ, "sh", ...files], { on }).catch(() => null);
                 if (read?.code !== 0) return;
                 this.mtimes = next; // only the pass whose bodies were read
                 this.sessions = mergeSessions(this.sessions, parseSessions(read.stdout), Object.keys(next));
@@ -267,7 +274,7 @@ export default class JigContext extends View {
         const machine = this.machine();
         cx.spawn(async (cx) => {
             try {
-                const r = await execD("sh", ["-c", WRITE, "sh", file, json], { on: machine });
+                const r = await this.execD("sh", ["-c", WRITE, "sh", file, json], { on: machine });
                 if (r.code !== 0) this.sendError = (r.stderr || "could not write the request").trim().split("\n")[0];
             } catch (e) {
                 this.sendError = String(e?.message ?? e);
