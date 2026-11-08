@@ -10,6 +10,7 @@
 import { h_flex, Input, InputState, v_flex } from "gpui-base";
 import { div, svg, View } from "gpui-kit";
 import {
+    appHome,
     exec,
     focused,
     layout,

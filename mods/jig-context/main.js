@@ -32,6 +32,7 @@ import {
     SCRIPT,
     segments,
     short,
+    shownAgain,
     shownOn,
     splitPath,
     terminalStateChanged,
