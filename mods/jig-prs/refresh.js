@@ -5,6 +5,14 @@ export const BUSY_AFTER_MS = 400;
 export const DEBOUNCE_MS = 500;
 export const MIN_REFRESH_SECONDS = 15;
 export const DEFAULT_REFRESH_SECONDS = 60;
+
+/** A shell argv for a command under coreutils `timeout`, GNU `gtimeout` on macOS, or with no wrapper. */
+export function timedCommand(program, args, seconds = 20) {
+    const wrapper =
+        `if command -v timeout >/dev/null 2>&1; then exec timeout ${seconds} "$@"; ` +
+        `elif command -v gtimeout >/dev/null 2>&1; then exec gtimeout ${seconds} "$@"; fi; exec "$@"`;
+    return ["sh", ["-c", wrapper, "sh", program, ...args]];
+}
 /** `refreshSeconds` from a config object or number, clamped to at least 15 s. */
 export function refreshSeconds(value, fallback = DEFAULT_REFRESH_SECONDS) {
     const wanted = typeof value === "object" && value !== null ? value.refreshSeconds : value;

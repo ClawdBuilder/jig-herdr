@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
@@ -10,6 +11,7 @@ import {
     RefreshState,
     refreshSeconds,
     terminalFinished,
+    timedCommand,
 } from "../mods/jig-repos/refresh.js";
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -55,6 +57,12 @@ test("a click during a refresh queues exactly one more run", () => {
     assert.equal(state.finish(), false);
 });
 
+test("timedCommand runs without timeout or gtimeout", () => {
+    const [program, args] = timedCommand("/bin/echo", ["portable"]);
+    const output = execFileSync("/bin/sh", args, { encoding: "utf8", env: { PATH: "/definitely/missing" } });
+    assert.equal(output.trim(), "portable");
+});
+
 test("every panel calls the shared refresh helper, with no inline copy", () => {
     const root = new URL("../mods/", import.meta.url);
     for (const mod of ["jig-repos", "jig-history", "jig-prs", "jig-worktrees"]) {
@@ -67,7 +75,7 @@ test("every panel calls the shared refresh helper, with no inline copy", () => {
         assert.match(source, /this\.refreshScheduler\.trigger\(/, `${mod}: trigger`);
         assert.match(source, /this\.refreshScheduler\.due\(/, `${mod}: due`);
         assert.match(source, /refreshSeconds\(this\.config/, `${mod}: config`);
-        assert.match(source, /timeout/, `${mod}: shell timeout`);
+        assert.match(source, /timeout|timedCommand/, `${mod}: shell timeout`);
         assert.match(source, /refreshState\.finish\(\)/, `${mod}: finish`);
         const finish = source.indexOf("refreshState.finish()");
         assert.ok(source.indexOf("refreshScheduler.trigger()", finish) > finish, `${mod}: queued trigger`);

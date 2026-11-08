@@ -31,6 +31,24 @@ The mods read Jig's published contracts (`contracts/requests.js` and `contracts/
 - **Review** — read-only files and patches.
 - **Keep awake** — holds off idle sleep while agents work, with an explicit On switch.
 
+## Development
+
+```sh
+npm ci
+npm run check
+npm test
+```
+
+`npm run check` includes `scripts/check-commit-emails.mjs`. It checks author and committer emails in `origin/main..HEAD`
+(or the PR range) against the private word list in `JIG_SCAN_WORDS` or `~/.config/jig/scan-words.txt`; with no list, as in
+public CI, it skips.
+
+To check before pushing, opt in to the hook:
+
+```sh
+git config core.hooksPath .githooks
+```
+
 ## Licence
 
 MIT. The `tabs` and `files` mods are derived from Herdr's own (Apache-2.0); their headers stay.

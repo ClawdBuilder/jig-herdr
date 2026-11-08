@@ -42,7 +42,14 @@ import {
     since,
     terminalsInsideWorktree,
 } from "./lib.js";
-import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds, terminalFinished } from "./refresh.js";
+import {
+    focusRegained,
+    RefreshScheduler,
+    RefreshState,
+    refreshSeconds,
+    terminalFinished,
+    timedCommand,
+} from "./refresh.js";
 
 const onScreen = () => isOnScreen(layout(), "jig-worktrees");
 const WORKING = new Set(["working", "blocked"]);
@@ -238,7 +245,7 @@ export default class RepoWorktrees extends View {
         cx.spawn(async (cx) => {
             try {
                 const work = (async () => {
-                    const result = await exec("timeout", ["20", "sh", "-c", SCRIPT, "sh", root], { on });
+                    const result = await exec(...timedCommand("sh", ["-c", SCRIPT, "sh", root]), { on });
                     if (run !== this.readGeneration || contextKey !== this.contextKey) return;
                     if (result.code !== 0)
                         throw new Error((result.stderr || `exit ${result.code}`).trim().split("\n")[0]);

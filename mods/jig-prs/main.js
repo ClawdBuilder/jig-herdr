@@ -43,7 +43,14 @@ import {
     since,
     watchdog,
 } from "./lib.js";
-import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds, terminalFinished } from "./refresh.js";
+import {
+    focusRegained,
+    RefreshScheduler,
+    RefreshState,
+    refreshSeconds,
+    terminalFinished,
+    timedCommand,
+} from "./refresh.js";
 
 const onScreen = () => isOnScreen(layout(), "jig-prs");
 const GH_AT_ONCE = 4;
@@ -280,7 +287,7 @@ export default class RepoPullRequests extends View {
         cx.spawn(async (cx) => {
             try {
                 const work = (async () => {
-                    const found = await exec("timeout", ["20", "sh", "-c", SCRIPT, "sh", root], { on });
+                    const found = await exec(...timedCommand("sh", ["-c", SCRIPT, "sh", root]), { on });
                     if (run !== this.readGeneration) return;
                     if (found.code !== 0) throw new Error((found.stderr || `exit ${found.code}`).trim().split("\n")[0]);
                     if (contextKey !== this.contextKey) return;

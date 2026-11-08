@@ -968,7 +968,7 @@ test("the live panel files call the tested seams, not inline copies", () => {
     ])
         assert.ok(wt.includes(seam), seam);
     assert.doesNotMatch(wt, /list\.some\(\s*\(entry\)\s*=>\s*entry\.contextKey/);
-    assert.match(read("jig-prs"), /exec\("timeout",/);
+    assert.match(read("jig-prs"), /timedCommand\(/);
 });
 
 test("a fresh branch from base and one from origin/develop are not ready; a merged one is", async () => {
