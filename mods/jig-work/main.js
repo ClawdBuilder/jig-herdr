@@ -162,7 +162,9 @@ export default class JigWork extends View {
         this.width = 0;
         this.folds = readFolds();
         this.recentAll = false;
+        this.lastRenderAt = Date.now();
         cx.timer.every(1000, (cx) => this.tick(cx));
+        this.readAll(cx, false);
     }
 
     warn(message) {
@@ -192,7 +194,11 @@ export default class JigWork extends View {
     // Herdr status), the backstop, and a cheap mtime check while the session works. No 2 s body polling.
     tick(cx) {
         this.claim();
-        if (!this.lastRenderAt || Date.now() - this.lastRenderAt > 2500) return;
+        if (!this.lastRenderAt || Date.now() - this.lastRenderAt > 2500) {
+            // A hidden view does not render, so it stays quiet; a visible one renders and the next tick reads.
+            if (this.current().session?.status.state === "busy" || this.refreshScheduler.due()) cx.notify();
+            return;
+        }
         const now = Date.now();
         if (now - this.modsAt > MODS_MS) this.checkMods(cx);
         const current = this.current(),

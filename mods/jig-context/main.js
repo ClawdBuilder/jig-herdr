@@ -138,7 +138,10 @@ export default class JigContext extends View {
     // Once a second: focus/session change, window focus and the followed terminal's status trigger a read; the backstop
     // covers the rest; while the session works, a cheap mtime check every 3 s reads only the files that moved.
     tick(cx) {
-        if (!this.lastRenderAt || Date.now() - this.lastRenderAt > 2500) return;
+        if (!this.lastRenderAt || Date.now() - this.lastRenderAt > 2500) {
+            if (this.current().session?.status.state === "busy" || this.refreshScheduler.due()) cx.notify();
+            return;
+        }
         const current = this.current(),
             id = current.session?.status.session ?? null;
         if (id !== this.selectedId) {
@@ -357,7 +360,7 @@ export default class JigContext extends View {
                     .hover((s) => s.bg(t.hover).text_color(t.foreground))
                     .tooltip("Reload Pi's extensions, skills, prompts and context files once the agent is idle")
                     .on_click((_e, cx) => this.send(cx, session, "reload"))
-                    .child(reloading ? "Reloading…" : busy ? "Reload when idle" : "Reload"),
+                    .child(narrow ? "Reload" : reloading ? "Reloading…" : busy ? "Reload when idle" : "Reload"),
             )
             .child(
                 iconButton(

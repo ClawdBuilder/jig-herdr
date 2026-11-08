@@ -108,6 +108,7 @@ export default class Files extends View {
         this.windowActive = window()?.active === true;
         this.seen = false;
         this.width = 0;
+        this.lastRenderAt = Date.now();
         this.input = InputState.new({ placeholder: "Filter files" });
         this.input.on("change", (_e, cx) => {
             this.filter = this.input.value();
@@ -157,6 +158,7 @@ export default class Files extends View {
     tick(cx) {
         const shown = Boolean(this.lastRenderAt) && Date.now() - this.lastRenderAt < 2500;
         if (!shown) {
+            if (this.refreshScheduler.due()) cx.notify();
             this.seen = false;
             return;
         }
