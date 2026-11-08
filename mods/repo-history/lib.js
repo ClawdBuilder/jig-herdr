@@ -203,8 +203,22 @@ export function parseCommitDetail(stdout) {
     for (const line of stat.split("\n")) {
         if (!line) continue;
         const [added, removed, ...path] = line.split("\t");
+        const text = path.join("\t");
+        const rename = /^(.*?)\{([^{}]*) => ([^{}]*)\}(.*)$/.exec(text) ?? /^(.*?) => (.*)$/.exec(text);
+        const oldPath = rename
+            ? rename.length === 5
+                ? `${rename[1]}${rename[2]}${rename[4]}`.replace(/\s+/g, "")
+                : rename[1]
+            : null;
+        const filePath = rename
+            ? rename.length === 5
+                ? `${rename[1]}${rename[3]}${rename[4]}`.replace(/\s+/g, "")
+                : rename[2]
+            : text;
         files.push({
-            path: path.join("\t"),
+            path: filePath,
+            oldPath,
+            binary: added === "-" && removed === "-",
             add: added === "-" ? null : Number(added),
             del: removed === "-" ? null : Number(removed),
         });
@@ -259,3 +273,31 @@ export function isOnScreen(root, mod) {
         return (node.active ?? node.children?.[0]?.id) === chain[i + 1]?.id;
     });
 }
+
+/** `git for-each-ref` output: name<TAB>ref. Remote branches are marked, and the checked-out one is current. */
+export function parseBranches(stdout) {
+    return stdout
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => {
+            const [name, ref = ""] = line.split("\t");
+            return { name, remote: ref.startsWith("refs/remotes/"), current: ref === "refs/heads/HEAD" };
+        });
+}
+
+/** How many lane columns a row may draw: the subject keeps at least 60% of a 300 px row. */
+export function laneColumns(width, row = 300, lanePx = 14, cap = 4) {
+    return Math.max(0, Math.min(width, cap, Math.floor((row * 0.4) / lanePx)));
+}
+
+/** Branch names with a filter; the current branch stays in the list, local branches before remotes. */
+export function filterBranches(branches, text, current) {
+    const needle = (text ?? "").trim().toLowerCase();
+    return branches
+        .filter((b) => !needle || b.name.toLowerCase().includes(needle))
+        .map((b) => ({ ...b, current: b.name === current }))
+        .sort((a, b) => Number(a.remote) - Number(b.remote));
+}
+
+/** The branch header's click: open the list, or close it. Kept pure so the handler has a test. */
+export const toggleBranchPicker = (open) => !open;
