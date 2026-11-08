@@ -52,8 +52,9 @@ export interface Report {
     skipped: { file: string; reason: string }[];
     /** Files an earlier version installed that this one no longer has, removed. */
     removed: string[];
-    /** keys.json: keys added, and keys kept because the file already binds that key to something else. */
-    keys: { added: string[]; kept: string[]; error?: string };
+    /** keys.json: keys added, keys migrated from an old mod action, and keys kept because the file binds that key to
+     *  something else. */
+    keys: { added: string[]; migrated: string[]; kept: string[]; error?: string };
     /** Old mod configs copied to their new names (the default values fill anything missing). */
     migrated: string[];
     /** Old mod folders left in place, because they still hold the person's config.json. */
@@ -96,6 +97,16 @@ function readManifest(target: string): Manifest {
     return { version: 1, files: {} };
 }
 
+/** The new action when `action` is an old mod action this installer wrote, and only then. */
+function migratedAction(action: string, wanted: string): string | undefined {
+    for (const [oldName, newName] of RENAMED) {
+        if (action !== oldName && !action.startsWith(`${oldName}.`)) continue;
+        const candidate = `${newName}${action.slice(oldName.length)}`;
+        if (candidate === wanted) return candidate;
+    }
+    return undefined;
+}
+
 /** Merges the sections of source/keys.json into target/keys.json; every other section and key is left as it is. */
 function mergeKeys(source: string, target: string, options: Options, report: Report): void {
     const from = path.join(source, "keys.json");
@@ -119,6 +130,13 @@ function mergeKeys(source: string, target: string, options: Options, report: Rep
             const label = `${section} ${key}`;
             if (have[key] === action) continue;
             if (have[key] !== undefined && !options.force) {
+                const migrated = migratedAction(have[key], action);
+                if (migrated !== undefined) {
+                    report.keys.migrated.push(`${label} (${have[key]} -> ${migrated})`);
+                    have[key] = migrated;
+                    changed = true;
+                    continue;
+                }
                 report.keys.kept.push(`${label} (yours: ${have[key]})`);
                 continue;
             }
@@ -192,7 +210,7 @@ export function install(target: string, options: Options = {}): Report {
         replaced: [],
         skipped: [],
         removed: [],
-        keys: { added: [], kept: [] },
+        keys: { added: [], migrated: [], kept: [] },
         migrated: [],
         oldKept: [],
     };
@@ -289,6 +307,7 @@ function main(argv: string[]): number {
     if (report.oldKept.length)
         console.log(`old mod folders kept (their config.json is yours): ${report.oldKept.join(", ")}`);
     say("keys.json, added", report.keys.added);
+    say("keys.json, migrated", report.keys.migrated);
     say("keys.json, kept as yours", report.keys.kept);
     for (const s of report.skipped) console.log(`LEFT ALONE ${s.file}: ${s.reason}`);
     if (report.keys.error) console.log(`keys.json NOT MERGED: ${report.keys.error}`);
