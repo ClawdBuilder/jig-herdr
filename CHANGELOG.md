@@ -23,6 +23,9 @@
 
 ### Fixed
 
+- Keep awake can start its Windows helper again: the script is installed as `jig-keep-awake.ps1`, and the mod still
+  recognises and stops a helper left running under the old `keep-awake.ps1` name. The installer keeps that old script
+  while a helper may still be using it.
 - The Work, Context, Files and jig-file-view panels read once when their view mounts, so a Herdr session whose mod timers stall
   no longer leaves them on their loading line; Work and Context read again when their panel is shown after being hidden.
   Every command they run has a 20 s deadline, so a hung `sh`/`git`/`gh` cannot hold the loading state. The status check

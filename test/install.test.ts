@@ -122,6 +122,15 @@ test("a file that was already there is left alone, and replaced only with force"
     assert.notEqual(read(target, "mods/jig-repos/main.js"), "// my own");
 });
 
+test("the old keep-awake helper file is kept for a running helper", (t) => {
+    const target = folder(t);
+    mkdirSync(path.join(target, "mods/jig-keep-awake"), { recursive: true });
+    writeFileSync(path.join(target, "mods/jig-keep-awake/keep-awake.ps1"), "# old helper\n");
+    const report = install(target);
+    assert.ok(existsSync(path.join(target, "mods/jig-keep-awake/keep-awake.ps1")));
+    assert.deepEqual(report.preserved, ["mods/jig-keep-awake/keep-awake.ps1"]);
+});
+
 test("config.json is yours: written once, and kept even with force", (t) => {
     const target = folder(t);
     install(target);

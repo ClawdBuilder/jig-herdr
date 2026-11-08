@@ -29,6 +29,8 @@ const RENAMED: ReadonlyArray<[string, string]> = [
 const SOURCE = path.resolve(import.meta.dirname, "..");
 /** Files the Herdr app writes into every mod folder for editors. A folder left with only these is a removed mod's. */
 const APP_WRITTEN = new Set(["gpui-kit.d.ts", "jsconfig.json"]);
+/** A helper from the previous release may still be running from this file; keep it until the person restarts. */
+const PRESERVED = new Set(["mods/jig-keep-awake/keep-awake.ps1"]);
 
 export interface Options {
     /** Replace files that are not this script's (never a config.json), and take over keys.json keys that differ. */
@@ -63,6 +65,8 @@ export interface Report {
     oldKept: string[];
     /** Old mod folders removed with --remove-old after their config was fully carried over. */
     oldRemoved: string[];
+    /** Old helper files kept because a running helper may still be using them. */
+    preserved: string[];
 }
 
 type Manifest = { version: 1; files: Record<string, string> };
@@ -234,6 +238,7 @@ export function install(target: string, options: Options = {}): Report {
         migrated: [],
         oldKept: [],
         oldRemoved: [],
+        preserved: [],
     };
     const manifest = readManifest(target);
     const next: Manifest = { version: 1, files: { ...manifest.files } };
@@ -284,12 +289,19 @@ export function install(target: string, options: Options = {}): Report {
     // A file an earlier version installed, that this version no longer has: removed if you did not change it.
     for (const [rel, was] of Object.entries(manifest.files)) {
         if (files.includes(rel)) continue;
+        if (PRESERVED.has(rel)) {
+            if (existsSync(path.join(target, rel))) report.preserved.push(rel);
+            continue;
+        }
         const dest = path.join(target, rel);
         if (existsSync(dest) && hash(readFileSync(dest)) === was) {
             if (!options.dryRun) rmSync(dest);
             report.removed.push(rel);
         }
         delete next.files[rel];
+    }
+    for (const rel of PRESERVED) {
+        if (existsSync(path.join(target, rel)) && !report.preserved.includes(rel)) report.preserved.push(rel);
     }
     if (!options.dryRun) removeEmptiedMods(target, report.removed);
 
@@ -332,6 +344,7 @@ function main(argv: string[]): number {
     if (report.oldKept.length)
         console.log(`old mod folders kept (their config.json is yours): ${report.oldKept.join(", ")}`);
     say(dryRun ? "would remove old mod folder" : "removed old mod folder", report.oldRemoved);
+    say(dryRun ? "would keep old helper" : "kept old helper (a running helper may use it)", report.preserved);
     say("keys.json, added", report.keys.added);
     say("keys.json, migrated", report.keys.migrated);
     say("keys.json, kept as yours", report.keys.kept);
