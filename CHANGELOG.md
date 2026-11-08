@@ -23,6 +23,9 @@
 
 ### Fixed
 
+- The commit-email guard also runs in CI: the workflow passes the private word list as `JIG_SCAN_WORDS_TEXT`, scoped to
+  that step. Forks still get no secret and only see warnings for non-public addresses, never a failure.
+
 - Network actions in Repos get the configured `networkTimeoutSeconds` again on Herdr 0.1.14: both wrappers pass Herdr an
   `exec` timeout five seconds past their shell watchdog, with the shell clamped to 595 seconds at the 600-second edge.
   Older Herdr ignores the option and still stops at 30 seconds. Jig-work's CI reads and the worktree scan also carry
