@@ -20,6 +20,19 @@
             "formatter": {
                 "indentWidth": 2
             }
+        },
+        {
+            "includes": ["mods/**"],
+            "linter": {
+                "rules": {
+                    "correctness": {
+                        "noUndeclaredVariables": "error"
+                    }
+                }
+            },
+            "javascript": {
+                "globals": ["localStorage"]
+            }
         }
     ]
 }

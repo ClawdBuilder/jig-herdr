@@ -43,7 +43,15 @@ import {
     since,
     watchdog,
 } from "./lib.js";
-import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds, terminalFinished } from "./refresh.js";
+import {
+    focusRegained,
+    RefreshScheduler,
+    RefreshState,
+    readDeadline,
+    readTimeoutSeconds,
+    refreshSeconds,
+    terminalFinished,
+} from "./refresh.js";
 
 const onScreen = () => isOnScreen(layout(), "repo-prs");
 const GH_AT_ONCE = 4;
