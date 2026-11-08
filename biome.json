@@ -27,6 +27,20 @@
                 "rules": {
                     "correctness": {
                         "noUndeclaredVariables": "error"
+                    },
+                    "style": {
+                        "noRestrictedGlobals": {
+                            "level": "error",
+                            "options": {
+                                "deniedGlobals": {
+                                    "setTimeout": "Use cx.timer.after or cx.timer.every",
+                                    "setInterval": "Use cx.timer.every",
+                                    "clearTimeout": "Use the cx.timer task",
+                                    "clearInterval": "Use the cx.timer task",
+                                    "setImmediate": "Use cx.timer.after"
+                                }
+                            }
+                        }
                     }
                 }
             },

@@ -8,44 +8,41 @@ import {
     MIN_REFRESH_SECONDS,
     RefreshScheduler,
     RefreshState,
-    readDeadline,
-    readTimeoutSeconds,
     refreshSeconds,
     terminalFinished,
 } from "../mods/repo-changes/refresh.js";
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-test("a background refresh never shows its busy state", async () => {
+test("a background refresh never shows its busy state", () => {
     const state = new RefreshState();
     let notices = 0;
-    assert.equal(state.start({ notify: () => notices++ }), true);
+    assert.equal(state.start(), true);
     assert.equal(state.busy, false);
-    await wait(BUSY_AFTER_MS + 50);
+    state.tick(Date.now() + BUSY_AFTER_MS + 50, () => notices++);
     assert.equal(state.busy, false);
     assert.equal(notices, 0);
     assert.equal(state.finish(), false);
 });
 
-test("a user refresh shows busy only after the delay", async () => {
+test("a user refresh shows busy only after the delay", () => {
     const state = new RefreshState();
     state.start({ user: true });
     assert.equal(state.busy, false);
-    await wait(BUSY_AFTER_MS - 100);
+    state.tick(state.startedAt + BUSY_AFTER_MS - 1);
     assert.equal(state.busy, false);
-    await wait(150);
+    state.tick(state.startedAt + BUSY_AFTER_MS);
     assert.equal(state.busy, true);
     state.finish();
     assert.equal(state.busy, false);
 });
 
-test("a user refresh shorter than the delay never shows busy", async () => {
+test("a user refresh shorter than the delay never shows busy", () => {
     const state = new RefreshState();
     state.start({ user: true });
-    await wait(BUSY_AFTER_MS / 2);
+    state.tick(state.startedAt + BUSY_AFTER_MS / 2);
     assert.equal(state.busy, false);
     state.finish();
-    await wait(BUSY_AFTER_MS);
     assert.equal(state.busy, false);
 });
 
@@ -70,8 +67,6 @@ test("every panel calls the shared refresh helper, with no inline copy", () => {
         assert.match(source, /this\.refreshScheduler\.trigger\(/, `${mod}: trigger`);
         assert.match(source, /this\.refreshScheduler\.due\(/, `${mod}: due`);
         assert.match(source, /refreshSeconds\(this\.config/, `${mod}: config`);
-        assert.match(source, /readDeadline\(/, `${mod}: deadline`);
-        assert.match(source, /readTimeoutSeconds\(this\.config/, `${mod}: read timeout`);
         assert.match(source, /timeout/, `${mod}: shell timeout`);
         assert.match(source, /refreshState\.finish\(\)/, `${mod}: finish`);
         const finish = source.indexOf("refreshState.finish()");
@@ -88,17 +83,6 @@ test("every panel starts its first read from the constructor, not the timer", ()
         assert.match(source, /initialRead\(cx\)\s*\{[\s\S]*?cx\.spawn\(/, `${mod}: spawn`);
         assert.match(source, /this\.seen = true;/, `${mod}: no second shown trigger`);
     }
-});
-
-test("a hung read ends at its deadline and the panel can start another", async () => {
-    const state = new RefreshState();
-    assert.equal(state.start(), true);
-    await assert.rejects(readDeadline(new Promise(() => {}), 0.01), /Reading timed out after 0.01 s/);
-    assert.equal(state.finish(), false);
-    assert.equal(state.start(), true);
-    state.finish();
-    assert.equal(readTimeoutSeconds(0), 1);
-    assert.equal(readTimeoutSeconds({ readTimeoutSeconds: 20 }), 20);
 });
 
 test("every panel starts its first read from the constructor, not the timer", () => {

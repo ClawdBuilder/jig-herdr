@@ -481,7 +481,6 @@ const DEFAULTS = {
     networkTimeoutSeconds: 60,
     rowDetail: "compact",
     refreshSeconds: 60,
-    readTimeoutSeconds: 20,
 };
 
 /** config.json next to the mod: `{ newBranchPrefix, baseBranch, remote, networkTimeoutSeconds, rowDetail,
@@ -523,11 +522,6 @@ export function parseConfig(text) {
     if (raw.rowDetail != null) {
         if (raw.rowDetail === "compact" || raw.rowDetail === "full") config.rowDetail = raw.rowDetail;
         else config.problems.push('"rowDetail" must be "compact" or "full"');
-    }
-    if (raw.readTimeoutSeconds != null) {
-        if (Number.isInteger(raw.readTimeoutSeconds) && raw.readTimeoutSeconds >= 1 && raw.readTimeoutSeconds <= 600)
-            config.readTimeoutSeconds = raw.readTimeoutSeconds;
-        else config.problems.push('"readTimeoutSeconds" must be a whole number from 1 to 600');
     }
     if (raw.refreshSeconds != null) {
         if (Number.isInteger(raw.refreshSeconds) && raw.refreshSeconds >= 15 && raw.refreshSeconds <= 86_400)

@@ -81,15 +81,7 @@ import {
 } from "./lib.js";
 import { BranchPicker, DONE } from "./picker.js";
 import { PushConfirm } from "./push.js";
-import {
-    focusRegained,
-    RefreshScheduler,
-    RefreshState,
-    readDeadline,
-    readTimeoutSeconds,
-    refreshSeconds,
-    terminalFinished,
-} from "./refresh.js";
+import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds, terminalFinished } from "./refresh.js";
 
 // Herdr can only watch folders on this computer, so a space on another machine is polled. All repos
 // take well under a second, so poll often, and at once when a terminal or agent changes state
@@ -228,7 +220,6 @@ export default class RepoChanges extends View {
         this.targetsLoading = false;
         this.refreshState = new RefreshState();
         this.refreshScheduler = new RefreshScheduler({ seconds: refreshSeconds(this.config) });
-        this.readTimeoutSeconds = readTimeoutSeconds(this.config);
         this.readGeneration = 0;
         this.lastTerminals = terminals();
         this.windowActive = window()?.active === true;
@@ -306,7 +297,6 @@ export default class RepoChanges extends View {
             const text = await readTextFile(`${appHome()}/mods/repo-changes/config.json`).catch(() => null);
             this.config = parseConfig(text);
             this.refreshScheduler.setSeconds(refreshSeconds(this.config));
-            this.readTimeoutSeconds = readTimeoutSeconds(this.config);
             cx.notify();
         });
     }
@@ -314,6 +304,7 @@ export default class RepoChanges extends View {
     // Cheap check every second; the git work only runs while the panel is in view.
     // Not from render: refresh notifies, and render may not.
     tick(cx) {
+        this.refreshState.tick(Date.now(), () => cx.notify());
         const done = shared(DONE);
         if (done && done.at > this.done) {
             // The branch picker or a push finished: say so under it, and read again now.
@@ -399,13 +390,11 @@ export default class RepoChanges extends View {
         this.refreshScheduler.sweep();
         this.loading = true;
         const run = ++this.readGeneration;
-        const seconds = this.readTimeoutSeconds;
         const targets = full ? "" : this.visibleTargets();
-        const command = `if command -v timeout >/dev/null 2>&1; then exec timeout ${seconds} sh -c "$1" sh "$2" "$3"; fi; exec sh -c "$1" sh "$2" "$3"`;
+        const command = `if command -v timeout >/dev/null 2>&1; then exec timeout 20 sh -c "$1" sh "$2" "$3"; fi; exec sh -c "$1" sh "$2" "$3"`;
         cx.spawn(async (cx) => {
-            let timedOut = false;
             try {
-                const r = await readDeadline(exec("sh", ["-c", command, "sh", SCRIPT, root, targets], { on }), seconds);
+                const r = await exec("sh", ["-c", command, "sh", SCRIPT, root, targets], { on });
                 if (run !== this.readGeneration || context !== this.context) return;
                 if (r.code !== 0) throw new Error((r.stderr || `exit ${r.code}`).trim().split("\n")[0]);
                 this.repos = parseRepos(r.stdout, root);
@@ -414,12 +403,10 @@ export default class RepoChanges extends View {
                 this.switching = false;
                 badge(this.repos.filter((x) => x.files.length).length);
             } catch (e) {
-                if (run !== this.readGeneration) return;
-                timedOut = String(e?.message ?? e).includes("Reading timed out");
-                if (timedOut) this.readGeneration++;
-                else if (context === this.context) this.error = String(e?.message ?? e).split("\n")[0];
+                if (run === this.readGeneration && context === this.context)
+                    this.error = String(e?.message ?? e).split("\n")[0];
             } finally {
-                if (run === this.readGeneration || timedOut) {
+                if (run === this.readGeneration) {
                     this.loading = false;
                     const again = this.refreshState.finish();
                     this.last = again ? 0 : Date.now();
