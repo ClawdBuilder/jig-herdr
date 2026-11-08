@@ -5,15 +5,36 @@
 
 import { h_flex, Input, InputState, v_flex } from "gpui-base";
 import { div, svg, View } from "gpui-kit";
-import { exec, focused, layout, panes, run, settings, spaces, theme } from "herdr";
+import {
+    appHome,
+    exec,
+    focused,
+    layout,
+    openOverlay,
+    panes,
+    readTextFile,
+    run,
+    setShared,
+    settings,
+    shared,
+    spaces,
+    terminals,
+    theme,
+    window,
+} from "herdr";
+import { location, readFollow, writeFollow } from "./follow.js";
+import { followReload } from "./follow-state.js";
 import {
     colourSeed,
     commitMatches,
     FORMAT,
+    filterBranches,
     initialsOf,
     isOnScreen,
+    laneColumns,
     layoutGraph,
     matchRepos,
+    parseBranches,
     parseCommitDetail,
     parseLog,
     parseRepos,
@@ -21,7 +42,9 @@ import {
     relName,
     SCRIPT,
     since,
+    toggleBranchPicker,
 } from "./lib.js";
+import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds, terminalFinished } from "./refresh.js";
 
 const onScreen = () => isOnScreen(layout(), "repo-history");
 const PAGE = 100; // commits per page
@@ -33,7 +56,6 @@ const STROKE = 2;
 const DOT = 10;
 const FILES_SHOWN = 12;
 const REPOS_EVERY_MS = 60000;
-const LOG_EVERY_MS = 10000;
 
 /** Colours for lanes, authors and chips. A theme's ANSI colours are tuned for text on a terminal, not for lines that run
  * next to each other, so the graph has its own. */
@@ -63,16 +85,48 @@ const storage = {
     },
 };
 
+/** Git's raw failures as a line a person can act on. */
+function friendly(text) {
+    const line = String(text ?? "")
+        .trim()
+        .split("\n")[0];
+    if (/does not have any commits yet/i.test(line))
+        return "This repository has no commits yet — make the first commit.";
+    if (/not a git repository/i.test(line)) return "Not a git repository here — cd into one, or pick another folder.";
+    return line;
+}
+
 /** The folder to look at and the machine it is on: the shown space's folder, else where its first terminal is. */
 function whereToLook() {
     const space = spaces().find((s) => s.active);
-    const here = focused();
-    let machine = space?.machine ?? null;
-    if (here?.pane === null) machine = here.terminal?.includes("/") ? here.terminal.split("/")[0] : null;
-    const tabIds = new Set((space?.tabs ?? []).map((tab) => tab.id));
-    const firstCwd = panes().find((p) => tabIds.has(p.tab) && p.cwd)?.cwd;
-    const focusedPane = here?.pane ? panes().find((p) => p.pane === here.pane) : null;
-    return { root: space?.folder || firstCwd || focusedPane?.cwd || here?.cwd, on: machine };
+    return location(readFollow(space?.id));
+}
+
+/** The Terminal/Space switch: what this panel follows, per space. */
+function followButton(t, reload) {
+    const space = spaces().find((s) => s.active);
+    const follow = readFollow(space?.id);
+    return div()
+        .id("follow")
+        .ml(4)
+        .text_size(11)
+        .text_color(t.muted)
+        .cursor_pointer()
+        .hover((st) => st.text_color(t.foreground))
+        .tooltip(
+            follow
+                ? "Following the focused terminal — click to use the space folder"
+                : "Using the space folder — click to follow the focused terminal",
+        )
+        .on_click((_e, cx) => {
+            followReload(
+                follow,
+                space?.id,
+                (id, value) => writeFollow(id, value),
+                () => reload(cx),
+            );
+        })
+        .child(follow ? "Terminal" : "Space");
 }
 
 /** A pill of text: a branch, a tag, a pull request number or a commit type. */
@@ -126,13 +180,23 @@ function elbow(fromLane, toLane, color, outgoing) {
 }
 
 export default class RepoHistory extends View {
-    init(_props, cx) {
+    init(props, cx) {
+        props = props ?? {};
         this.scope = storage.read("scope") === "all" ? "all" : "branch";
         this.picking = false;
         this.pickBox = InputState.new({ placeholder: "Find a repo" });
         this.pickBox.on("change", (_e, cx) => cx.notify());
+        this.branchOpen = false;
+        this.branchBox = InputState.new({ placeholder: "Find a branch" });
+        this.branchBox.on("change", (_e, cx) => cx.notify());
         this.filterBox = InputState.new({ placeholder: "Filter by message, author, hash or branch" });
         this.filterBox.on("change", (_e, cx) => cx.notify());
+        this.refreshState = new RefreshState();
+        this.configAt = 0;
+        this.refreshScheduler = new RefreshScheduler({ seconds: refreshSeconds(this.config) });
+        this.seen = false;
+        this.lastTerminals = terminals();
+        this.windowActive = window()?.active === true;
         this.enter(whereToLook());
         cx.timer.every(1000, (cx) => this.tick(cx));
     }
@@ -141,6 +205,7 @@ export default class RepoHistory extends View {
     enter(where) {
         this.where = where;
         this.contextKey = JSON.stringify([where.root, where.on]);
+        this.generation = (this.generation ?? 0) + 1;
         this.repos = null;
         this.single = false;
         this.reposAt = 0;
@@ -164,15 +229,36 @@ export default class RepoHistory extends View {
     /** Runs every second and is cheap; the git work only starts while the panel is on screen. Not called from `render`,
      * since loading notifies and `render` may not. */
     tick(cx) {
+        const chosen = shared("repo-history.branch");
+        if (chosen?.at && chosen.at !== this.branchAt) {
+            this.branchAt = chosen.at;
+            if (this.branches?.some((b) => b.name === chosen.branch)) {
+                this.branchFilter = chosen.branch;
+                this.clearLog();
+            }
+            this.loadLog(cx, true);
+        }
         const where = whereToLook();
         if (JSON.stringify([where.root, where.on]) !== this.contextKey) {
             this.enter(where);
+            this.refreshScheduler.trigger();
             cx.notify();
         }
-        if (!onScreen() || !this.where.root) return;
+        const seen = onScreen();
+        const appeared = seen && !this.seen;
+        this.seen = seen;
+        if (!seen || !this.where.root) return;
+        if (appeared) this.refreshScheduler.trigger();
+        this.loadConfig(cx);
+        this.refreshScheduler.setSeconds(refreshSeconds(this.config));
+        const active = window()?.active === true;
+        if (focusRegained(this.windowActive, active)) this.refreshScheduler.trigger();
+        this.windowActive = active;
+        const currentTerminals = terminals();
+        if (terminalFinished(this.lastTerminals, currentTerminals, this.where.root)) this.refreshScheduler.trigger();
+        this.lastTerminals = currentTerminals;
         if (!this.loadingRepos && Date.now() - this.reposAt > REPOS_EVERY_MS) this.loadRepos(cx);
-        const stale = this.logFor !== this.logKey() || Date.now() - this.logAt > LOG_EVERY_MS;
-        if (this.repo && !this.loading && stale) this.loadLog(cx);
+        if (this.repo && !this.loading && this.refreshScheduler.due()) this.loadLog(cx);
     }
 
     logKey() {
@@ -207,7 +293,10 @@ export default class RepoHistory extends View {
                     repos.find((r) => r.dirty)?.path ??
                     repos[0]?.path ??
                     null;
-                if (choice !== this.repo) this.show(choice, false);
+                if (choice !== this.repo) {
+                    this.show(choice, false);
+                    this.refreshScheduler.trigger();
+                }
             } catch (e) {
                 if (contextKey === this.contextKey) this.reposError = String(e?.message ?? e).split("\n")[0];
             } finally {
@@ -225,8 +314,119 @@ export default class RepoHistory extends View {
         this.clearLog();
     }
 
-    loadLog(cx) {
-        if (this.loading || !this.repo) return;
+    /** Toggles the filterable branch list under the header; it only changes which branch the log shows. */
+    openBranchPicker(cx) {
+        this.branchOpen = toggleBranchPicker(this.branchOpen);
+        if (this.branchOpen && !this.branches) {
+            cx.spawn(async (cx) => {
+                const result = await exec(
+                    "git",
+                    [
+                        "--no-optional-locks",
+                        "for-each-ref",
+                        "--format=%(refname:short)%09%(refname)",
+                        "refs/heads",
+                        "refs/remotes",
+                    ],
+                    { cwd: this.repo, on: this.where.on },
+                );
+                this.branches = parseBranches(result.stdout ?? "");
+                cx.notify();
+            });
+        }
+        cx.notify();
+    }
+
+    /** The branch list, filtered: local first, remotes marked, current ticked. */
+    branchList(t) {
+        const query = this.branchBox.value().trim().toLowerCase();
+        const rows = filterBranches(this.branches ?? [], query, this.branchFilter ?? this.headBranch ?? null);
+        return v_flex()
+            .id("branch-list-panel")
+            .flex_none()
+            .max_h(240)
+            .mx(8)
+            .mb(4)
+            .gap(1)
+            .rounded(8)
+            .border_1()
+            .border_color(t.border)
+            .p(6)
+            .child(Input.new(this.branchBox).h(26).w_full().text_size(11.5))
+            .children(
+                rows.map((b) =>
+                    h_flex()
+                        .id(`br-${b.name}`)
+                        .h(22)
+                        .px(6)
+                        .gap(6)
+                        .items_center()
+                        .rounded(5)
+                        .cursor_pointer()
+                        .hover((s) => s.bg(t.hover))
+                        .on_click((_e, cx) => {
+                            this.branchFilter = b.name;
+                            this.branchOpen = false;
+                            this.clearLog();
+                            this.loadLog(cx, true);
+                        })
+                        .child(
+                            div()
+                                .w(10)
+                                .text_color(t.done)
+                                .child(b.current ? "✓" : ""),
+                        )
+                        .child(div().flex_1().min_w(0).truncate().child(b.name))
+                        .when(b.remote, (el) => el.child(div().text_size(9.5).text_color(t.dim).child("remote"))),
+                ),
+            );
+    }
+
+    /** Fallback cycle, kept for a branch list that is already loaded. */
+    cycleBranch(cx) {
+        if (this.branches) {
+            const names = this.branches.map((b) => b.name);
+            const at = this.branchFilter ? names.indexOf(this.branchFilter) : -1;
+            this.branchFilter = at + 1 >= names.length ? null : names[at + 1];
+            this.clearLog();
+            this.loadLog(cx, true);
+            return;
+        }
+        cx.spawn(async (cx) => {
+            const result = await exec(
+                "git",
+                [
+                    "--no-optional-locks",
+                    "for-each-ref",
+                    "--format=%(refname:short)%09%(refname)",
+                    "refs/heads",
+                    "refs/remotes",
+                ],
+                { cwd: this.repo, on: this.where.on },
+            );
+            this.branches = parseBranches(result.stdout ?? "");
+            cx.notify();
+        });
+        cx.notify();
+    }
+
+    loadConfig(cx) {
+        if (this.configAt && Date.now() - this.configAt < 60000) return;
+        this.configAt = Date.now();
+        cx.spawn(async (cx) => {
+            const text = await readTextFile(`${appHome()}/mods/repo-history/config.json`).catch(() => null);
+            try {
+                this.config = text ? JSON.parse(text) : {};
+            } catch {
+                this.config = {};
+            }
+            this.refreshScheduler.setSeconds(refreshSeconds(this.config));
+            cx.notify();
+        });
+    }
+
+    loadLog(cx, user = false) {
+        if (!this.repo) return;
         const cwd = this.repo;
         const on = this.where.on;
         const key = this.logKey();
@@ -237,10 +437,14 @@ export default class RepoHistory extends View {
             "--decorate=full",
             `-n${this.limit}`,
             `--format=${FORMAT}`,
+            ...(this.branchFilter ? ["--end-of-options", this.branchFilter] : []),
             ...SCOPE_ARGS[this.scope],
         ];
         const statusArgs = ["--no-optional-locks", "-c", "core.fsmonitor=false", "status", "--porcelain"];
+        if (!this.refreshState.start({ user, first: this.commits === null, notify: () => cx.notify() })) return;
+        this.refreshScheduler.sweep();
         this.loading = true;
+        const generation = ++this.generation;
         cx.spawn(async (cx) => {
             try {
                 const [log, status] = await Promise.all([
@@ -250,7 +454,7 @@ export default class RepoHistory extends View {
                 if (key !== this.logKey()) return;
                 if (log.code !== 0) {
                     this.commits = null;
-                    this.error = (log.stderr ?? "").trim().split("\n")[0] || "git log failed.";
+                    this.error = friendly(log.stderr) || "git log failed.";
                     return;
                 }
                 this.error = null;
@@ -265,6 +469,10 @@ export default class RepoHistory extends View {
                 this.logFor = key;
             } finally {
                 this.loading = false;
+                if (this.refreshState.finish()) {
+                    this.logAt = 0;
+                    this.refreshScheduler.trigger();
+                }
                 cx.notify();
             }
         });
@@ -280,7 +488,7 @@ export default class RepoHistory extends View {
         cx.spawn(async (cx) => {
             const result = await exec(
                 "git",
-                ["--no-optional-locks", "show", "--numstat", "--format=%B%x1e", commit.hash],
+                ["--no-optional-locks", "show", "--numstat", "--find-renames", "--format=%B%x1e", commit.hash],
                 { cwd, on },
             );
             this.details[commit.hash] =
@@ -471,7 +679,18 @@ export default class RepoHistory extends View {
                     .text_size(11)
                     .text_color(t.dim)
                     .child(div().font_semibold().text_color(t.muted).child(commit.hash.slice(0, 10)))
-                    .child(`${commit.author} · ${new Date(commit.date).toLocaleString()}`),
+                    .child(
+                        div()
+                            .id(`copy-${commit.hash}`)
+                            .cursor_pointer()
+                            .text_color(t.dim)
+                            .hover((st) => st.text_color(t.foreground))
+                            .tooltip("Copy the full hash")
+                            .on_click((_e, cx) => cx.write_to_clipboard(commit.hash))
+                            .child("copy"),
+                    )
+                    .child(`${commit.author} · ${new Date(commit.date).toLocaleString()}`)
+                    .when(commit.parents.length > 1, (el) => el.child(`${commit.parents.length} parents`)),
             )
             .child(div().text_color(t.foreground).child(commit.subject))
             .when(Boolean(detail?.body), (el) => el.child(div().text_size(11.5).text_color(t.muted).child(detail.body)))
@@ -650,12 +869,17 @@ export default class RepoHistory extends View {
                     .child(svg("mods/workspace-chrome/branch.svg").size(13).flex_none().text_color(t.muted))
                     .child(
                         div()
+                            .id("branch-name")
                             .min_w(0)
                             .truncate()
                             .font_semibold()
-                            .child(headBranch ?? (this.commits ? "Detached HEAD" : "")),
+                            .cursor_pointer()
+                            .hover((st) => st.text_color(t.accent))
+                            .on_click((_e, cx) => this.openBranchPicker(cx))
+                            .child(this.branchFilter ?? headBranch ?? (this.commits ? "Detached HEAD" : "")),
                     )
                     .child(div().flex_1())
+                    .child(followButton(t, (cx) => this.loadLog(cx, true)))
                     .child(scopeButton("branch", "Branch"))
                     .child(scopeButton("all", "All"))
                     .child(
@@ -670,9 +894,9 @@ export default class RepoHistory extends View {
                             .on_click((_e, cx) => {
                                 this.logAt = 0;
                                 this.reposAt = 0;
-                                this.loadLog(cx);
+                                this.loadLog(cx, true);
                             })
-                            .child(this.loading ? "Loading…" : "Refresh"),
+                            .child(this.refreshState.busy ? "Loading…" : "Refresh"),
                     ),
             )
             .child(
@@ -771,11 +995,10 @@ export default class RepoHistory extends View {
                                 .cursor_pointer()
                                 .hover((s) => s.text_color(t.foreground))
                                 .on_click((_e, cx) => {
-                                    if (this.loading) return;
                                     this.limit += PAGE;
-                                    this.loadLog(cx);
+                                    this.loadLog(cx, true);
                                 })
-                                .child(this.loading ? "Loading…" : "Load more"),
+                                .child(this.refreshState.busy ? "Loading…" : "Load more"),
                         ),
                     ),
             );
@@ -786,7 +1009,7 @@ export default class RepoHistory extends View {
         const palette = HUES[settings()?.dark === false ? "light" : "dark"];
         const hue = (i) => (i === null ? t.muted : palette[i % palette.length]);
         const query = this.filterBox.value();
-        const width = Math.min(Math.max(1, ...(this.rows ?? []).map((r) => r.width)), MAX_LANES);
+        const width = laneColumns(Math.max(1, ...(this.rows ?? []).map((r) => r.width)));
         const hasChooser = !this.single && (this.repos?.length ?? 0) > 0;
         const choosing = hasChooser && this.picking;
         const banner = h_flex()
@@ -815,8 +1038,11 @@ export default class RepoHistory extends View {
             .text_color(t.foreground)
             .text_size(13)
             .child(this.header(t, hue, hasChooser))
+            .when(this.branchOpen, (el) => el.child(this.branchList(t)))
             .when(choosing, (el) => el.child(this.repoList(t, hue)))
             .when(!choosing && this.uncommitted > 0, (el) => el.child(banner))
-            .when(!choosing, (el) => el.child(this.commitList(t, { width, hue, flat: query.trim() !== "" }, query)));
+            .when(!choosing && !this.branchOpen, (el) =>
+                el.child(this.commitList(t, { width, hue, flat: query.trim() !== "" }, query)),
+            );
     }
 }

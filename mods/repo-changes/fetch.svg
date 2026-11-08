@@ -8,8 +8,7 @@
   stroke-width="2"
   stroke-linecap="round"
   stroke-linejoin="round"
->
-  <title>Fetch</title>
+><title>Fetch</title>
   <path d="M21 12a9 9 0 1 1-2.64-6.36" />
   <path d="M21 3v6h-6" />
 </svg>

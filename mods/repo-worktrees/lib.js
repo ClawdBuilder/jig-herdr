@@ -51,8 +51,10 @@ stat() {
     set -- $(git -C "$p" rev-list --left-right --count "$up...$ref" 2>/dev/null); behind=\${1:-0}; ahead=\${2:-0}
   fi
   un=$(git -C "$p" rev-list --count "$ref" --not --remotes 2>/dev/null)
-  lc=$(git -C "$p" log -1 --format='%cI%x09%s' "$ref" 2>/dev/null)
-  printf 'W\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' "$main" "$p" "$b" "$(printf %s "$h" | cut -c1-8)" "$l" "$d" "$ahead" "$behind" "$ba" "$up" "$gone" "$un" "$base" "$lc"
+  lc=$(git -C "$p" log -1 --format='%cI' "$ref" 2>/dev/null)
+  sub=$(git -C "$p" log -1 --pretty=%s "$ref" 2>/dev/null)
+  cr=$(git -C "$p" reflog show --format=%H "$ref" 2>/dev/null | tail -1)
+  printf 'W\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' "$main" "$p" "$b" "$(printf %s "$h" | cut -c1-8)" "$l" "$d" "$ahead" "$behind" "$ba" "$up" "$gone" "$un" "$base" "$lc" "$cr" "$sub"
 }
 tmp=$(mktemp -d) || exit 1
 trap 'rm -rf "$tmp"' EXIT
@@ -81,7 +83,7 @@ while IFS= read -r r; do
         else if ($i ~ /^locked/) l = 1
         else if ($i ~ /^prunable/) pr = 1
       }
-      if (NR == 1) main = p
+      if (NR == 1) { main = p; print main, p, h, b, l, base }
       else if (!pr) print main, p, h, b, l, base }' >> "$tmp/jobs"
 done < "$tmp/repos"
 n=0
@@ -119,6 +121,7 @@ export function parseTrees(stdout) {
                 unpushed,
                 base,
                 date,
+                created,
                 ...subject
             ] = line.split("\t");
             return {
@@ -136,6 +139,7 @@ export function parseTrees(stdout) {
                 unpushed: num(unpushed),
                 base,
                 date: date || null,
+                created: created || null,
                 subject: subject.join("\t"),
             };
         });
@@ -147,9 +151,14 @@ export function parseTrees(stdout) {
  * exists on no remote branch, and a base to compare with. Then it is ready when its work is already in the base, or
  * when its remote branch was deleted (what a merged pull request leaves). Anything git could not tell (a null) is not ready. */
 export function readiness(tree, busy) {
-    if (busy || tree.locked || tree.dirty !== 0 || tree.unpushed !== 0 || !tree.base) return null;
-    if (tree.baseAhead === 0) return "in base";
-    return tree.gone ? "upstream gone" : null;
+    if (tree.path === tree.main || busy || tree.locked || tree.dirty !== 0 || !tree.base) return null;
+    if (tree.unpushed === null) return null;
+    const ownWork = Boolean(
+        tree.created && /^[0-9a-f]{40}$/.test(tree.created) && tree.head && !tree.created.startsWith(tree.head),
+    );
+
+    if (tree.baseAhead === 0 && (ownWork || tree.gone)) return "in base";
+    return tree.gone && tree.unpushed === 0 ? "upstream gone" : null;
 }
 
 export const REASON = { "in base": "merged into base", "upstream gone": "remote branch deleted" };
@@ -199,4 +208,153 @@ export function isOnScreen(root, mod) {
         if (node.type !== "stack") return true;
         return (node.active ?? node.children?.[0]?.id) === chain[i + 1]?.id;
     });
+}
+
+/** The worktrees the header's Prune merged (N) would remove: ready, and never the main checkout. */
+export function pruneCandidates(rows) {
+    return (rows ?? []).filter((tree) => tree.ready && tree.path !== tree.main);
+}
+
+/** The per-row action labels, so a narrow panel can put them in one menu and a test can keep them stable. */
+export function rowActions(tree) {
+    return [...(tree.open ? [] : ["Open"]), ...(tree.ready && tree.path !== tree.main ? ["Remove"] : [])];
+}
+
+/** Ignored paths a removal would delete, except build output that a checkout can regenerate. */
+export function dangerousIgnored(output) {
+    return (output ?? "")
+        .split("\n")
+        .filter((line) => line.startsWith("!! "))
+        .map((line) => line.slice(3).trim())
+        .filter((path) => {
+            if (!path) return false;
+            if (/(^|\/)\.env([.][^/]*)?$/.test(path)) return true;
+            return !/^(node_modules|dist|build|target)\//.test(path);
+        });
+}
+
+/** `git worktree list --porcelain -z`, as one entry per worktree: path, head, branch, locked. */
+export function parseWorktreeListZ(stdout) {
+    const entries = [];
+    for (const block of (stdout ?? "").split("\0\0")) {
+        if (!block.trim()) continue;
+        const lines = block.split("\0");
+        const entry = { path: "", head: "", branch: "", locked: false };
+        for (const line of lines) {
+            if (line.startsWith("worktree ")) entry.path = line.slice(9);
+            else if (line.startsWith("HEAD ")) entry.head = line.slice(5);
+            else if (line.startsWith("branch ")) entry.branch = line.slice(7).replace(/^refs\/heads\//, "");
+            else if (line === "locked" || line.startsWith("locked ")) entry.locked = true;
+        }
+        if (entry.path) entries.push(entry);
+    }
+    return entries;
+}
+
+/** Why a removal must be refused now, or null. It re-checks the live worktree list, not the cached row. */
+export function removalRefusal(row, entries) {
+    if (row.path === row.main) return "the main checkout is never removed";
+    const live = entries.find((entry) => entry.path === row.path);
+    if (!live) return "the worktree is gone";
+    if (live.path === row.main) return "the main checkout is never removed";
+    if (live.locked) return "the worktree is locked";
+    if (live.branch !== (row.branch ?? "")) return "the branch changed";
+    if (row.head && live.head && !live.head.startsWith(row.head)) return "the head changed";
+    return null;
+}
+
+/** The Prune click: the list in order, or a refusal when the folder/machine changed after the banner opened. */
+export function prunePlan(entries, contextKey, on) {
+    const list = entries ?? [];
+    if (list.length === 0) return { list: [] };
+    if (list.some((entry) => entry.contextKey !== contextKey || entry.on !== on))
+        return { refused: "The folder or machine changed; nothing was removed." };
+    return { list };
+}
+
+/** Cancel closes the banner and runs nothing. */
+export function cancelPrune() {
+    return null;
+}
+
+/** The follow toggle: reload only after the choice is written. */
+export function followReload(follow, spaceId, write, reload) {
+    write(spaceId, !follow);
+    reload();
+    return !follow;
+}
+
+/** A watchdog: after `after` ms, run `timeout` unless `done()` was called. The clock is injected for tests. */
+export function watchdog(after, timeout) {
+    let done = false;
+    after(() => {
+        if (!done) timeout();
+    });
+    return () => {
+        done = true;
+    };
+}
+
+/** Whether `cwd` is `path` or below it, after resolving symlinks with the supplied canonicaliser. */
+export function sameOrInside(path, cwd, canonical = (p) => p) {
+    if (!path || !cwd) return false;
+    const target = canonical(path).replace(/\/+$/, "");
+    const here = canonical(cwd);
+    return here === target || here.startsWith(`${target}/`);
+}
+
+/** A terminal cwd inside a worktree, after canonicalising both sides. */
+export function terminalInside(realTree, cwds, canonical = (p) => p) {
+    return (cwds ?? []).some((cwd) => Boolean(cwd) && sameOrInside(realTree, cwd, canonical));
+}
+
+/** Resolve each path with `pwd -P` through the injected exec; a failure keeps the original path. */
+export async function canonicalPaths(exec, paths) {
+    const out = {};
+    await Promise.all(
+        [...new Set(paths.filter(Boolean))].map(async (path) => {
+            const result = await exec("sh", ["-c", 'cd "$1" && pwd -P', "sh", path]);
+            out[path] = result.code === 0 ? (result.stdout ?? "").trim() || path : path;
+        }),
+    );
+    return out;
+}
+
+/** True when any pane cwd really lies inside the worktree, after canonicalising both. */
+export async function terminalsInsideWorktree(exec, tree, cwds) {
+    const wanted = [tree, ...cwds.filter(Boolean)];
+    const map = await canonicalPaths(exec, wanted);
+    for (const cwd of cwds.filter(Boolean)) {
+        const result = await exec("sh", ["-c", 'cd "$1" && pwd -P', "sh", cwd]);
+        if (result.code !== 0) return true;
+    }
+    return terminalInside(
+        map[tree],
+        cwds.map((cwd) => map[cwd]),
+    );
+}
+
+/** A stale load may not write: only the current generation wins. */
+export const currentGeneration = (started, current) => started === current;
+
+/** The live removal gate: the same readiness decision as the row, from freshly read facts. */
+export function liveReady(row, facts) {
+    return readiness({ ...row, ...facts }, false);
+}
+
+/** The Prune chain: entries in order, stopping at a stale context, calling remove for each. */
+export async function pruneAll(entries, contextKey, on, remove) {
+    const key = typeof contextKey === "function" ? contextKey : () => contextKey;
+    const machine = typeof on === "function" ? on : () => on;
+    const plan = prunePlan(entries, key(), machine());
+    if (plan.refused) return { refused: plan.refused, removed: 0 };
+    let removed = 0;
+    for (const entry of plan.list) {
+        if (entry.contextKey !== key() || entry.on !== machine())
+            return { refused: "The folder or machine changed; the rest were not removed.", removed };
+        const problem = await remove(entry.tree, entry);
+        if (problem) return { refused: problem, removed };
+        removed++;
+    }
+    return { removed };
 }

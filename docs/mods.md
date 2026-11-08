@@ -140,7 +140,7 @@ checkboxes and the buttons that appear on hover run [the git actions](#the-git-a
 - **Follow the terminal.** The header's toggle picks the folder: the focused terminal's (`Terminal`, the default) or the
   space's (`Space`). The header names the folder it lists, with its full path on hover, and how many checkouts it found.
   The choice is kept per space in the mod's `localStorage`. Following the terminal means `cd`ing a tab switches the panel
-  at the next refresh (within 5 seconds), without clearing the filter; a terminal with no folder falls back to the space's.
+  at the next trigger (the focused folder change is one), without clearing the filter; a terminal with no folder falls back to the space's.
 - **Inside a checkout** it shows that checkout, and its linked worktrees when it is the main one. Outside one, folders with
   a `.git` up to three levels down, so `worktrees/PROJ-123/orders-api` is found, plus the linked worktrees of every main
   checkout found; `node_modules` is skipped.
@@ -163,7 +163,7 @@ checkboxes and the buttons that appear on hover run [the git actions](#the-git-a
   carrying an arrow. A parent tag appears only for two visible rows that really share a name and is the shortest folder
   suffix that tells them apart, never on every row. The full path is in the tooltip.
 - **Ahead and behind** are its upstream's (`↑2 ↓1`), read from the branch line of `git status --porcelain=v1 -b`: no
-  network on the 5-second refresh. A diverged branch shows the same numbers in the warning colour with a `⇅` whose tooltip
+  network on a background refresh. A diverged branch shows the same numbers in the warning colour with a `⇅` whose tooltip
   says to rebase or merge in a terminal — never an extra line.
 - **The right-hand slot is reserved**, empty when idle; on hover the action buttons replace it (stage all, pull,
   push/publish, fetch; unstage all and a terminal when the panel is wide enough), so nothing is drawn over the text or the row
@@ -187,12 +187,15 @@ checkboxes and the buttons that appear on hover run [the git actions](#the-git-a
 - **What it runs:** one `sh -c` script on that machine (`exec` with `on`), reading each checkout's `git status` with no
   locks and no fsmonitor, 8 at a time, at most 200 files each, plus its origin, its upstream and its last commit, and
   `git worktree list` of each main checkout. Fetch, pull and push run only when their button is pressed.
-- **When:** every 5 seconds while the panel is on screen, when you open it, when an agent or terminal changes state, when
-  the folder it follows changes, and at once after an action.
+- **When:** when the panel is shown, when the focused folder changes, when the Herdr window regains focus, when a
+  terminal inside the panel's folder goes working to idle or done, at once after an action, and on Refresh. Triggers are
+  debounced for 500 ms; a backstop reads every `refreshSeconds` (60 by default, at least 15) while shown. Folded
+  repositories are read when unfolded and by that backstop.
 - **Sets** `shared("badge.repo-changes")`: the number of checkouts (main or worktree) with changes, each counted once;
   `shared("repo-changes.done")` after a branch switch or a push, so the panel says so and reads again; and
   `shared("repo-changes.running")`, one `{ what, at }` entry per checkout, so the panel and its dialog never run two actions
   in the same checkout (an entry older than 15 minutes is stale).
+- **Settings:** `refreshSeconds` in `config.json` sets the backstop (60 by default, at least 15).
 - **Files:** `main.js` (the panel), `picker.js` (the branch picker), `push.js` (the push confirm), `lib.js` (the script,
   the parsing, the grouping and the git actions), `layout.js`, `config.json`, and its own icons.
 
@@ -319,9 +322,10 @@ repositories and worktrees whose folder name or branch holds the typed text, suc
 - **Where it looks:** the space's folder on the space's machine; inside a repository, only that one. Otherwise folders with a
   `.git` up to three levels down, skipping `node_modules`. The picker lists them with their branch and a dot for uncommitted
   changes, and the choice is remembered per folder in the mod's `localStorage`.
-- **What it runs:** one `sh -c` script every 60 seconds for the repository list; `git log` (100 commits at a time, `Load
-  more` for the next page, `Branch` or `All` for the scope) and `git status --porcelain` every 10 seconds while shown; `git
-  show --numstat` for an opened commit. All with `--no-optional-locks`.
+- **What it runs:** one `sh -c` script for the repository list, refreshed with the same event triggers and backstop;
+  `git log` (100 commits at a time, `Load more` for the next page, `Branch` or `All` for the scope) and `git status
+  --porcelain` on those triggers; `git show --numstat` for an opened commit. `refreshSeconds` sets the backstop (60 by
+  default, at least 15). All with `--no-optional-locks`.
 - **Props:** none. **Shared state:** none.
 - **Files:** `main.js`, `lib.js` (the script, the log parsing, the lane layout, the subject and numstat readers).
 
@@ -333,8 +337,9 @@ into a group. The `Mine` tab lists your open pull requests by repository. Inside
 A click on a pull request or a check opens it in the browser; the summary row opens the full check list.
 
 - **What it runs:** one `sh -c` script (branch, remote url and default branch of each repository, no network), then `gh pr
-  view`, `gh pr list` and `gh search prs`, four at a time, on the space's machine. Results are cached for 5 minutes in the
-  mod's `localStorage`; `Refresh` asks again. Nothing else is called, so nothing can change a pull request.
+  view`, `gh pr list` and `gh search prs`, four at a time, on the space's machine. Results are cached in the mod's
+  `localStorage`; the panel refreshes on the same triggers, with a 180-second backstop set by `refreshSeconds` (at least 15),
+  and `Refresh` asks again. Nothing else is called, so nothing can change a pull request.
 - **Checks:** `FAILURE`, `ERROR`, `TIMED_OUT`, `ACTION_REQUIRED` and `STARTUP_FAILURE` are failed; `CANCELLED`, `SKIPPED`,
   `NEUTRAL` and `STALE` are skipped (a cancelled run is usually one that a newer push replaced); no result yet is pending.
 - **Sign-in:** `gh` is signed in by you. When it is not, or the network is down, the panel says so once and stops asking.
@@ -354,8 +359,9 @@ opens the space at that folder or a new tab there.
 - **Remove** appears on a ready row and asks once more. It then checks again (no changes, no unpushed commits, nobody working
   there), runs `git worktree remove` **without `--force`**, and `git branch -d` **never `-D`**, so git refuses to lose a
   branch that is not merged and the panel says so. It never deletes a remote branch and never fetches.
-- **What it runs:** one `sh -c` script every 30 seconds while shown, reading each repository once (`git worktree list
-  --porcelain`, `rev-list`, `for-each-ref`, `status`), eight at a time.
+- **What it runs:** one `sh -c` script on the event triggers, with a 60-second backstop set by `refreshSeconds` (at least
+  15), reading each repository once (`git worktree list --porcelain`, `rev-list`, `for-each-ref`, `status`), eight at a
+  time.
 - **Sets** `shared("badge.repo-worktrees")`: the number of ready worktrees, shown on its button.
 - **Props:** none. **Files:** `main.js`, `lib.js`.
 

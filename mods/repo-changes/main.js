@@ -26,6 +26,7 @@ import {
     spaces,
     terminals,
     theme,
+    window,
 } from "herdr";
 import { shown } from "./layout.js";
 import {
@@ -80,11 +81,11 @@ import {
 } from "./lib.js";
 import { BranchPicker, DONE } from "./picker.js";
 import { PushConfirm } from "./push.js";
+import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds, terminalFinished } from "./refresh.js";
 
 // Herdr can only watch folders on this computer, so a space on another machine is polled. All repos
 // take well under a second, so poll often, and at once when a terminal or agent changes state
 // (an agent finishing a turn, a command ending): that's when files change.
-const EVERY = 5000; // refresh period while the panel is in view
 const NOTE_MS = 12000; // how long an action's result stays under its checkout
 const CONFIG_MS = 60000; // how long config.json is trusted before it is read again
 const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -131,7 +132,7 @@ function badge(count) {
 }
 
 /** A small square icon or glyph button that stops the click from reaching the row under it. */
-function iconButton(t, id, content, tip, onClick, disabled = false) {
+function iconButton(t, id, content, tip, onClick, disabled = false, busy = false) {
     return div()
         .id(id)
         .flex_none()
@@ -141,8 +142,8 @@ function iconButton(t, id, content, tip, onClick, disabled = false) {
         .items_center()
         .justify_center()
         .rounded(5)
-        .text_color(disabled ? t.dim : t.muted)
-        .when(disabled, (el) => el.opacity(0.45))
+        .text_color(disabled || busy ? t.dim : t.muted)
+        .when(disabled || busy, (el) => el.opacity(0.45))
         .when(!disabled, (el) =>
             el
                 .cursor_pointer()
@@ -217,6 +218,10 @@ export default class RepoChanges extends View {
         this.claimed = new Map(); // path -> { on, token }: what this copy holds, to release on close
         this.targetsAt = 0;
         this.targetsLoading = false;
+        this.refreshState = new RefreshState();
+        this.refreshScheduler = new RefreshScheduler({ seconds: refreshSeconds(this.config) });
+        this.lastTerminals = terminals();
+        this.windowActive = window()?.active === true;
         this.width = 0;
         this.keys = cx.focus_handle();
         this.done = Number(shared(DONE)?.at ?? 0);
@@ -259,7 +264,6 @@ export default class RepoChanges extends View {
             this.targets = new Map();
             this.targetsAt = 0;
             this.last = 0;
-            this.again = false;
             this.switching = true;
         }
         this.loc = loc;
@@ -270,6 +274,7 @@ export default class RepoChanges extends View {
         this.follow = follow;
         localStorage.setItem(`follow.${this.spaceId ?? "none"}`, follow ? "terminal" : "space");
         this.last = 0;
+        this.refreshScheduler.trigger();
         cx.notify();
     }
 
@@ -279,6 +284,7 @@ export default class RepoChanges extends View {
         cx.spawn(async (cx) => {
             const text = await readTextFile(`${appHome()}/mods/repo-changes/config.json`).catch(() => null);
             this.config = parseConfig(text);
+            this.refreshScheduler.setSeconds(refreshSeconds(this.config));
             cx.notify();
         });
     }
@@ -307,18 +313,23 @@ export default class RepoChanges extends View {
         this.makeCommitBoxes(cx);
         const previous = this.context;
         this.locate();
-        if (this.context !== previous) cx.notify();
+        if (this.context !== previous) {
+            this.refreshScheduler.trigger();
+            cx.notify();
+        }
         this.loadConfig(cx);
         const seen = Boolean(this.loc?.root) && visible(),
             appeared = seen && !this.seen;
         this.seen = seen;
         if (!seen) return;
-        const states = terminals()
-            .map((t) => `${t.address}:${t.status}`)
-            .join(" ");
-        const changed = this.states !== undefined && states !== this.states;
-        this.states = states;
-        if (!this.loaded || appeared || changed || now - this.last >= EVERY) this.refresh(cx);
+        if (appeared) this.refreshScheduler.trigger();
+        const active = window()?.active === true;
+        if (focusRegained(this.windowActive, active)) this.refreshScheduler.trigger();
+        this.windowActive = active;
+        const currentTerminals = terminals();
+        if (terminalFinished(this.lastTerminals, currentTerminals, this.loc?.root)) this.refreshScheduler.trigger();
+        this.lastTerminals = currentTerminals;
+        if (!this.loading && this.refreshScheduler.due()) this.refresh(cx, false, this.refreshScheduler.isBackstop());
         if (this.loaded) this.loadTargets(cx);
     }
 
@@ -346,21 +357,29 @@ export default class RepoChanges extends View {
         if (made) cx.notify();
     }
 
-    refresh(cx) {
-        if (this.loading) {
-            this.again = true;
-            return;
-        }
+    /** The main checkouts on screen and the worktrees that are unfolded; folded worktrees wait for the backstop. */
+    visibleTargets() {
+        if (!this.loaded || !this.repos) return "";
+        return groupRepos(this.repos)
+            .flatMap((group) => [group.main, ...(this.foldedGroup(group) ? [] : group.worktrees)])
+            .map((repo) => repo.path)
+            .join("\n");
+    }
+
+    refresh(cx, user = false, full = false) {
         const { root, on } = this.loc,
             context = this.context;
         if (!root) {
             this.error = "No folder";
             return;
         }
+        if (!this.refreshState.start({ user, first: !this.repos, notify: () => cx.notify() })) return;
+        this.refreshScheduler.sweep();
         this.loading = true;
+        const targets = full ? "" : this.visibleTargets();
         cx.spawn(async (cx) => {
             try {
-                const r = await exec("sh", ["-c", SCRIPT, "sh", root], { on });
+                const r = await exec("sh", ["-c", SCRIPT, "sh", root, targets], { on });
                 if (context !== this.context) return;
                 if (r.code !== 0) throw new Error((r.stderr || `exit ${r.code}`).trim().split("\n")[0]);
                 this.repos = parseRepos(r.stdout, root);
@@ -372,8 +391,9 @@ export default class RepoChanges extends View {
                 if (context === this.context) this.error = String(e?.message ?? e).split("\n")[0];
             } finally {
                 this.loading = false;
-                this.last = this.again ? 0 : Date.now();
-                this.again = false;
+                const again = this.refreshState.finish();
+                this.last = again ? 0 : Date.now();
+                if (again) this.refreshScheduler.trigger();
                 cx.notify();
             }
         });
@@ -477,7 +497,7 @@ export default class RepoChanges extends View {
                     this.targetsAt = 0;
                 }
                 this.last = 0;
-                this.refresh(cx);
+                this.refresh(cx, false, true);
                 if (r.ok && after) after(cx);
             }
             cx.notify();
@@ -668,8 +688,10 @@ export default class RepoChanges extends View {
 
     /** The chevron on a main checkout: fold or unfold its worktrees, and remember it for this repo path. */
     foldGroup(group, cx) {
-        this.folds = withFold(this.folds, group, !this.foldedGroup(group));
+        const folded = this.foldedGroup(group);
+        this.folds = withFold(this.folds, group, !folded);
         setShared(FOLD_KEY, this.folds);
+        if (folded) this.refreshScheduler.trigger();
         cx.notify();
     }
 
@@ -1591,12 +1613,13 @@ export default class RepoChanges extends View {
                             t,
                             "repos-refresh",
                             OWN("refresh"),
-                            this.loading ? "Reading the checkouts…" : "Read the checkouts again",
+                            this.refreshState.busy ? "Reading the checkouts…" : "Read the checkouts again",
                             (cx) => {
                                 this.last = 0;
-                                this.refresh(cx);
+                                this.refresh(cx, true, true);
                             },
-                            this.loading,
+                            false,
+                            this.refreshState.busy,
                         ),
                     ),
             )
@@ -1688,7 +1711,7 @@ export default class RepoChanges extends View {
                     at: Date.now(),
                 };
                 this.last = 0;
-                this.refresh(cx);
+                this.refresh(cx, false, true);
             }
             cx.notify();
         });
