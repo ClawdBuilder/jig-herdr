@@ -146,6 +146,7 @@ export default class JigContext extends View {
     // Once a second: focus/session change, window focus and the followed terminal's status trigger a read; the backstop
     // covers the rest; while the session works, a cheap mtime check every 3 s reads only the files that moved.
     tick(cx) {
+        this.refreshState.tick(Date.now(), () => cx.notify());
         const seen = Boolean(this.lastRenderAt) && Date.now() - this.lastRenderAt <= 2500;
         if (!seen) {
             this.wasSeen = false;
@@ -176,7 +177,7 @@ export default class JigContext extends View {
     }
 
     readAll(cx, user = false) {
-        if (!this.refreshState.start({ user, first: !this.started, notify: () => cx.notify() })) return;
+        if (!this.refreshState.start({ user, first: !this.started })) return;
         this.started = true;
         this.refreshScheduler.sweep();
         this.loading = true;

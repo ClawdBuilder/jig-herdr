@@ -96,6 +96,7 @@ export default class FileView extends View {
 
     // Once a second: read when the tab comes back, on focus/session change, on the backstop, or when clicked. No 5 s loop.
     tick(cx) {
+        this.refreshState.tick(Date.now(), () => cx.notify());
         const shown = this.shown(),
             back = shown && !this.wasShown;
         this.wasShown = shown;
@@ -119,7 +120,7 @@ export default class FileView extends View {
 
     load(cx, user = false) {
         if (!this.path) return;
-        if (!this.refreshState.start({ user, first: !this.started, notify: () => cx.notify() })) return;
+        if (!this.refreshState.start({ user, first: !this.started })) return;
         this.started = true;
         this.refreshScheduler.sweep();
         this.loading = true;

@@ -201,6 +201,7 @@ export default class JigWork extends View {
     // Once a second: the events that make the panel read (focus/session change, window focus, the followed terminal's
     // Herdr status), the backstop, and a cheap mtime check while the session works. No 2 s body polling.
     tick(cx) {
+        this.refreshState.tick(Date.now(), () => cx.notify());
         this.claim();
         const now = Date.now(),
             seen = Boolean(this.lastRenderAt) && now - this.lastRenderAt <= 2500;
@@ -238,7 +239,7 @@ export default class JigWork extends View {
 
     /** A full read of every status file: an event, the backstop, or a click. Background runs are silent. */
     readAll(cx, user = false) {
-        if (!this.refreshState.start({ user, first: !this.started, notify: () => cx.notify() })) return;
+        if (!this.refreshState.start({ user, first: !this.started })) return;
         this.started = true;
         this.refreshScheduler.sweep();
         this.loading = true;

@@ -145,6 +145,7 @@ export default class Files extends View {
     }
 
     tick(cx) {
+        this.refreshState.tick(Date.now(), () => cx.notify());
         const shown = Boolean(this.lastRenderAt) && Date.now() - this.lastRenderAt < 2500;
         if (!shown) {
             if (this.refreshScheduler.due()) cx.notify();
@@ -226,7 +227,7 @@ export default class Files extends View {
             this.loading = false;
         }
         if (!cwd) return;
-        if (!this.refreshState.start({ user, first: !this.started, notify: () => cx.notify() })) return;
+        if (!this.refreshState.start({ user, first: !this.started })) return;
         this.started = true;
         this.refreshScheduler.sweep();
         this.limited = false;
