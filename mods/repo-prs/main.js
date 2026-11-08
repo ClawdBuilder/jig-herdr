@@ -3,22 +3,22 @@
 // second tab, all of yours. Read-only: only `gh` reads and `git config` reads. Everything runs on the space's machine
 // (`on`), except opening a link, which goes to this computer's browser.
 
-import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
+import { div, svg, View } from "gpui-kit";
 import { exec, focused, layout, panes, setShared, shared, spaces, theme, window } from "herdr";
 import {
+    checksOf,
     countOf,
     ghError,
     inParallel,
     isOnScreen,
     parseRepos,
-    relName,
     REVIEW,
+    relName,
     remember,
     SCRIPT,
     shapePr,
     since,
-    checksOf,
 } from "./lib.js";
 
 const onScreen = () => isOnScreen(layout(), "repo-prs");

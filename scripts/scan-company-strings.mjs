@@ -3,15 +3,22 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
+
 const ROOT = path.resolve(import.meta.dirname, "..");
 const wordFile = process.env.JIG_SCAN_WORDS || path.join(homedir(), ".config", "jig", "scan-words.txt");
 let words = [];
 let note = "secrets only (no word file)";
 try {
-    words = readFileSync(wordFile, "utf8").split("\n").map((line) => line.trim()).filter(Boolean);
+    words = readFileSync(wordFile, "utf8")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
     note = `${words.length} private words`;
 } catch {}
-const BANNED = words.length === 0 ? undefined : new RegExp(`\\b(?:${words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`, "i");
+const BANNED =
+    words.length === 0
+        ? undefined
+        : new RegExp(`\\b(?:${words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`, "i");
 const SECRET = /(?:AKIA|ASIA)[A-Z0-9]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----/;
 let bad = 0;
 function walk(dir) {

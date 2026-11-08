@@ -7,8 +7,8 @@
 // above it read as a group. A child whose mod is not installed has no button.
 // A mod puts a count on its button with setShared("badge.<mod>", { count, tone }), tone a theme colour.
 
-import { View, div, svg } from "gpui-kit";
 import { v_flex } from "gpui-base";
+import { div, svg, View } from "gpui-kit";
 import { appHome, layout, props, readTextFile, run, shared, theme } from "herdr";
 import { buttons, find, initial } from "./lib.js";
 

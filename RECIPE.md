@@ -136,15 +136,15 @@ The layout is `layouts/jig.json`, rewritten from Herdr's shipped `main` layout. 
 
 Each child of `panel-body` is a block with a `title` and a mod, and its `content.props.activity` holds `{ icon, end? }`:
 
-| id | title | mod | icon |
-|---|---|---|---|
-| `jig-work` | Jig · Work | `jig-work` | `mods/jig-activity/icons/jig.svg` |
-| `jig-context` | Jig · Context | `jig-context` | `mods/jig-activity/icons/context.svg` (a gauge), `divider: true` |
-| `changes` | Changes | `repo-changes` | `mods/workspace-chrome/git-compare.svg` |
-| `history` | History | `repo-history` | `mods/workspace-chrome/clock.svg` |
-| `pr` | PR & CI | `repo-prs` | `mods/jig-activity/icons/pr.svg` |
-| `worktrees` | Worktrees | `repo-worktrees` | `mods/jig-activity/icons/worktree.svg` |
-| `files` | Files | `jig-files` | `mods/workspace-chrome/files.svg` |
+| id            | title         | mod              | icon                                                             |
+| ------------- | ------------- | ---------------- | ---------------------------------------------------------------- |
+| `jig-work`    | Jig · Work    | `jig-work`       | `mods/jig-activity/icons/jig.svg`                                |
+| `jig-context` | Jig · Context | `jig-context`    | `mods/jig-activity/icons/context.svg` (a gauge), `divider: true` |
+| `changes`     | Changes       | `repo-changes`   | `mods/workspace-chrome/git-compare.svg`                          |
+| `history`     | History       | `repo-history`   | `mods/workspace-chrome/clock.svg`                                |
+| `pr`          | PR & CI       | `repo-prs`       | `mods/jig-activity/icons/pr.svg`                                 |
+| `worktrees`   | Worktrees     | `repo-worktrees` | `mods/jig-activity/icons/worktree.svg`                           |
+| `files`       | Files         | `jig-files`      | `mods/workspace-chrome/files.svg`                                |
 
 The mods, all in `mods/`, each with `mod.json` `{ "place": "none", "title": "..." }`:
 

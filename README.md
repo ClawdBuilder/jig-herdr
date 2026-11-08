@@ -18,8 +18,8 @@ what would happen; `--force` replaces files this script did not write.
   and the palette file.
 - Herdr, for the app. Node 22.19 or later for the installer and the tests.
 
-**TODO (before the first release):** `@clawdbuilder/jig` is pinned to a local tarball that CI cannot see. Switch to
-`@clawdbuilder/jig@0.5.1` when that release carries `contracts/requests.js` and `contracts/palettes.json`.
+The mods read Jig's published contracts (`contracts/requests.js` and `contracts/palettes.json`) from
+`@clawdbuilder/jig` 0.5.2 or later, the package's own copy; nothing here imports Jig's `src/`.
 
 `jig-herdr` shows and comments. It never approves: approval stays with the passkey page or `y` in Pi.
 

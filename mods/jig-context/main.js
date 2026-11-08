@@ -9,12 +9,10 @@
 // (`lastRequest`). A request can only switch a tool or a skill for that session, or reload it when idle: it approves
 // nothing, and jig-core's rules still decide every call of a tool switched on.
 
-import { View, div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
+import { div, View } from "gpui-kit";
 import { appHome, exec, focused, layout, readTextFile, spaces, theme } from "herdr";
 import {
-    SCRIPT,
-    WRITE,
     addSwitch,
     folderName,
     headline,
@@ -25,10 +23,12 @@ import {
     pickSession,
     requestJson,
     requestPath,
+    SCRIPT,
     segments,
     short,
     shownOn,
     splitPath,
+    WRITE,
 } from "./lib.js";
 
 const EVERY_MS = 2000; // status files, while on screen

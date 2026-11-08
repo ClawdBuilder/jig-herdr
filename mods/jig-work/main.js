@@ -9,8 +9,8 @@
 // with changes in a git repository can open in the `repo-review` tab. Links open in this computer's browser. It approves
 // nothing and writes nothing on that machine.
 
-import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
+import { div, svg, View } from "gpui-kit";
 import {
     appHome,
     exec,
@@ -27,9 +27,6 @@ import {
     window,
 } from "herdr";
 import {
-    REPO_SCRIPT,
-    REVIEW,
-    SCRIPT,
     addressOf,
     clock,
     decisionText,
@@ -40,8 +37,11 @@ import {
     parseSessions,
     pickSession,
     prRows,
+    REPO_SCRIPT,
+    REVIEW,
     reposLine,
     reviewTarget,
+    SCRIPT,
     searchArgs,
     short,
     splitOutputs,

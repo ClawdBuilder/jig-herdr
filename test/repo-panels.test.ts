@@ -487,7 +487,7 @@ test("repo-history reads git log's decorations, so a branch called a/b is not mi
             { name: "v1.0.0", kind: "tag" },
         ],
     );
-    assert.equal(first.author, "Test");
+    assert.equal(first.author, "Jig Tests");
     assert.deepEqual(parseLog(""), []);
 });
 

@@ -29,7 +29,7 @@ as `div()`, `h_flex()` and `v_flex()`: there is no DOM and no HTML; the script d
 
 ![On the agent's machine, Pi tells jig-session about its events and jig-session writes sessions/<id>.json by a rename; on your computer, the Herdr app's Work and Context panels run one sh script on that machine through Herdr's exec every 2 seconds while shown](../../docs/img/session-file.svg)
 
-*The app and Pi may run on different machines. The panels run their scripts where the files are.*
+_The app and Pi may run on different machines. The panels run their scripts where the files are._
 
 The app can run on Windows while Pi runs in WSL. A mod never reads the other machine's files directly: it asks Herdr, which
 runs the call there through herdr-core.
@@ -112,20 +112,20 @@ table of cases and how to take it out.
 
 Start with `jig-work`; the others follow the same pattern. In each, `main.js` is the view and `lib.js` the tested pure part.
 
-| Mod | What it does | Who uses it |
-|---|---|---|
-| `jig-work` | Reads the status files, picks the session, draws ticket, PRs, outputs, recent calls | the stack's `jig-work` child |
-| `jig-context` | Same read; draws the context bar and lists; writes the request file | the stack's `jig-context` child |
-| `jig-activity` | The icon bar: buttons from the stack's children, badges from shared values | the `activity` block |
-| `jig-tabs` | Herdr's tab bar with `Panel` and `Jig` buttons | the `tabs` block |
-| `jig-theme-sync` | Follows Pi's palette | the 0 px `jig-theme` block |
-| `repo-changes` | Checkouts and their files; `picker.js` the branch picker; `lib.js` the git actions | the stack's `changes` child |
-| `repo-review` | A repository's changed files and a diff, in a tab; stage, unstage, discard | `tab.new` from Changes and Work |
-| `repo-history` | Repository picker and commit graph | the stack's `history` child |
-| `repo-prs` | Pull requests and checks through `gh` | the stack's `pr` child |
-| `repo-worktrees` | Linked worktrees, ready or in progress, and their removal | the stack's `worktrees` child |
-| `jig-files` | The file tree; a click opens `file-view` | the stack's `files` child |
-| `file-view` | One file, read-only; Markdown rendered with a `Source` button | `tab.new` from Work and Files |
+| Mod              | What it does                                                                        | Who uses it                     |
+| ---------------- | ----------------------------------------------------------------------------------- | ------------------------------- |
+| `jig-work`       | Reads the status files, picks the session, draws ticket, PRs, outputs, recent calls | the stack's `jig-work` child    |
+| `jig-context`    | Same read; draws the context bar and lists; writes the request file                 | the stack's `jig-context` child |
+| `jig-activity`   | The icon bar: buttons from the stack's children, badges from shared values          | the `activity` block            |
+| `jig-tabs`       | Herdr's tab bar with `Panel` and `Jig` buttons                                      | the `tabs` block                |
+| `jig-theme-sync` | Follows Pi's palette                                                                | the 0 px `jig-theme` block      |
+| `repo-changes`   | Checkouts and their files; `picker.js` the branch picker; `lib.js` the git actions  | the stack's `changes` child     |
+| `repo-review`    | A repository's changed files and a diff, in a tab; stage, unstage, discard          | `tab.new` from Changes and Work |
+| `repo-history`   | Repository picker and commit graph                                                  | the stack's `history` child     |
+| `repo-prs`       | Pull requests and checks through `gh`                                               | the stack's `pr` child          |
+| `repo-worktrees` | Linked worktrees, ready or in progress, and their removal                           | the stack's `worktrees` child   |
+| `jig-files`      | The file tree; a click opens `file-view`                                            | the stack's `files` child       |
+| `file-view`      | One file, read-only; Markdown rendered with a `Source` button                       | `tab.new` from Work and Files   |
 
 **One click followed through.** A click on an output in Work:
 

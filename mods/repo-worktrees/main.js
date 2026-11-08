@@ -4,8 +4,8 @@
 // is contacted. The one write is Remove, on a ready row, after an inline confirm: `git worktree remove` without --force,
 // then `git branch -d` (never -D), so git itself refuses to lose anything.
 
-import { View, div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
+import { div, View } from "gpui-kit";
 import { exec, focused, layout, panes, run, setShared, shared, spaces, theme } from "herdr";
 import { isOnScreen, nameOf, parseTrees, REASON, readiness, relName, SCRIPT, since } from "./lib.js";
 

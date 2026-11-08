@@ -5,9 +5,9 @@
 // A mod that opens these tabs may keep shared("file-view.tabs"), a map of "<on>|<path>" to the tab id, so that a second
 // click selects the tab instead of opening another, and so that this copy knows which tab is its own.
 
-import { View, div } from "gpui-kit";
-import { v_flex, h_flex, Editor, EditorState, TextView } from "gpui-base";
-import { spaces, panes, readTextFile, theme, settings, shared, props as modProps } from "herdr";
+import { Editor, EditorState, h_flex, TextView, v_flex } from "gpui-base";
+import { div, View } from "gpui-kit";
+import { props as modProps, panes, readTextFile, settings, shared, spaces, theme } from "herdr";
 
 // Same extension mapping and limits as the shipped Files preview.
 const LANG = {

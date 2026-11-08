@@ -7,7 +7,7 @@
 // jig-theme), then in themeFolders, then among the themes this plugin installed (the six
 // built-in ones). Pi's own themes (dark, light) have no palette and are left alone.
 
-import { View, div } from "gpui-kit";
+import { div, View } from "gpui-kit";
 import { appHome, exec, home, notify, readTextFile, run, writeTextFile } from "herdr";
 import { themeText, toHerdr } from "./convert.js";
 import { agentFolder, inHome, parseConfig, themeName } from "./lib.js";
