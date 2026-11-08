@@ -1,6 +1,6 @@
 # jig-herdr
 
-Herdr panels for git work: what changed, the commit history, pull requests and CI, linked worktrees, a read-only review,
+Herdr panels for git work: what changed, the commit history, pull requests and CI, linked worktrees, a review of changed files,
 files, and a switch that keeps the computer awake. The generic panels and the **Jig Workbench** layout work without Jig.
 The Jig layout adds the Pi session panels.
 
@@ -23,8 +23,8 @@ node scripts/install.ts [herdr-folder]
 
 It copies `layouts/`, `mods/` and `themes/`, merges its key bindings, and leaves your `config.json` values alone.
 When an old `repo-changes`/`repo-history`/`repo-prs`/`repo-worktrees`/`repo-review`/`keep-awake`/`file-view` folder is
-present, it copies that `config.json` to the new name (old values win, an existing new value wins, defaults fill gaps) and
-keeps the old folder because the config is yours.
+present, it carries that `config.json` over to the new name once: a value already set in the new config stays, old values
+fill what it lacks, and defaults fill the rest. The old folder is kept because the config is yours.
 
 `--dry-run` shows what would happen. `--force` replaces files this script did not write, but never a `config.json`.
 `--remove-old` deletes an old renamed mod folder once its config has been fully carried over; it is off by default and
