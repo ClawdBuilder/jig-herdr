@@ -12,7 +12,7 @@
 import { h_flex, v_flex } from "gpui-base";
 import { div, svg, View } from "gpui-kit";
 import { appHome, exec, focused, layout, readTextFile, spaces, terminals, theme, window } from "herdr";
-import { withDeadline } from "./deadline.js";
+
 import {
     addressOf,
     addSwitch,
@@ -37,7 +37,14 @@ import {
     terminalStateChanged,
     WRITE,
 } from "./lib.js";
-import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds } from "./refresh.js";
+import {
+    focusRegained,
+    RefreshScheduler,
+    RefreshState,
+    readDeadline,
+    readTimeoutSeconds,
+    refreshSeconds,
+} from "./refresh.js";
 
 const MTIME_MS = 3000; // while the followed session works: a cheap mtime check
 const ANSWER_MS = 10000; // how long a request may wait before the panel says the session does not answer
@@ -90,7 +97,6 @@ function clock(iso) {
 
 export default class JigContext extends View {
     init(_props, cx) {
-        this.cx = cx;
         this.config = parseConfig(null);
         this.sessions = [];
         this.raw = null;
@@ -115,6 +121,8 @@ export default class JigContext extends View {
         this.selectedId = undefined;
         this.started = false;
         this.wasSeen = false;
+        this.readTimeoutSeconds = 20;
+        this.readGeneration = 0;
         this.width = 0;
         this.pending = null; // switches sent and not answered yet: { tools, skills, reload }
         this.pendingFor = null; // the session they were sent to
@@ -127,7 +135,9 @@ export default class JigContext extends View {
     }
 
     execD(cmd, args, opts) {
-        return withDeadline(exec(cmd, args, opts), (ms, fn) => this.cx.timer.after(ms, fn));
+        const seconds = Math.max(1, Math.ceil(this.readTimeoutSeconds));
+        const wrapper = `if command -v timeout >/dev/null 2>&1; then exec timeout ${seconds} "$@"; fi; exec "$@"`;
+        return readDeadline(exec("sh", ["-c", wrapper, "sh", cmd, ...args], opts), this.readTimeoutSeconds);
     }
 
     machine() {
@@ -182,14 +192,20 @@ export default class JigContext extends View {
         this.started = true;
         this.refreshScheduler.sweep();
         this.loading = true;
+        const run = ++this.readGeneration;
         cx.spawn(async (cx) => {
+            let timedOut = false;
             try {
                 const text = await readTextFile(`${appHome()}/mods/jig-work/config.json`, { on: null });
+                if (run !== this.readGeneration) return;
                 this.config = parseConfig(text);
+                this.readTimeoutSeconds = readTimeoutSeconds(this.config);
                 this.refreshScheduler.setSeconds(refreshSeconds(this.config));
                 const on = this.machine(); // after the config: a first read with no config must not run `sh` locally
                 const before = await this.readMtimes();
+                if (run !== this.readGeneration) return;
                 const r = await this.execD("sh", ["-c", SCRIPT, "sh", this.config.stateDir ?? ""], { on });
+                if (run !== this.readGeneration) return;
                 if (r.code !== 0) throw new Error((r.stderr || `exit ${r.code}`).trim().split("\n")[0]);
                 this.raw = r.stdout;
                 this.dir = /^@@dir (.*)$/m.exec(r.stdout)?.[1] ?? null;
@@ -202,13 +218,18 @@ export default class JigContext extends View {
                     this.home = h?.stdout ?? "";
                 }
             } catch (e) {
-                this.error = String(e?.message ?? e).split("\n")[0];
+                if (run !== this.readGeneration) return;
+                timedOut = String(e?.message ?? e).includes("Reading timed out");
+                if (timedOut) this.readGeneration++;
+                else this.error = String(e?.message ?? e).split("\n")[0];
             } finally {
-                this.loading = false;
-                const again = this.refreshState.finish();
-                if (again) this.refreshScheduler.trigger();
-                this.loadedAt = Date.now();
-                cx.notify();
+                if (run === this.readGeneration || timedOut) {
+                    this.loading = false;
+                    const again = this.refreshState.finish();
+                    if (again) this.refreshScheduler.trigger();
+                    this.loadedAt = Date.now();
+                    cx.notify();
+                }
             }
         });
     }

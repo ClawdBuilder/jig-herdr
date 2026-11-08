@@ -240,7 +240,13 @@ test("the shipped config.json files name no machine, folder or palette of anyone
     const config = JSON.parse(readFileSync(path.join(HERDR, "mods/jig-theme-sync/config.json"), "utf8")) as unknown;
     assert.deepEqual(config, { machine: null, agentDir: null, themeFolders: [] });
     const work = JSON.parse(readFileSync(path.join(HERDR, "mods/jig-work/config.json"), "utf8")) as unknown;
-    assert.deepEqual(work, { machine: null, stateDir: null, prOwners: [], refreshSeconds: 60 });
+    assert.deepEqual(work, {
+        machine: null,
+        stateDir: null,
+        prOwners: [],
+        refreshSeconds: 60,
+        readTimeoutSeconds: 20,
+    });
     const changes = JSON.parse(readFileSync(path.join(HERDR, "mods/repo-changes/config.json"), "utf8")) as unknown;
     assert.deepEqual(changes, {
         newBranchPrefix: "feature/",

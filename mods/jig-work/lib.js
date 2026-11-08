@@ -22,7 +22,7 @@ export const REPO_SCRIPT = `for f in "$@"; do
   printf '%s\\t%s\\t%s\\n' "$f" "$top" "$st"
 done`;
 
-export const DEFAULTS = { machine: null, stateDir: null, prOwners: [], refreshSeconds: 60 };
+export const DEFAULTS = { machine: null, stateDir: null, prOwners: [], refreshSeconds: 60, readTimeoutSeconds: 20 };
 
 // config.json as { machine, stateDir, prOwners, refreshSeconds, problems }. Anything missing or of the wrong kind takes
 // its default.
@@ -49,6 +49,11 @@ export function parseConfig(text) {
         if (Number.isInteger(raw.refreshSeconds) && raw.refreshSeconds >= 15 && raw.refreshSeconds <= 86_400)
             config.refreshSeconds = raw.refreshSeconds;
         else config.problems.push('"refreshSeconds" must be a whole number from 15 to 86400');
+    }
+    if (raw.readTimeoutSeconds != null) {
+        if (Number.isInteger(raw.readTimeoutSeconds) && raw.readTimeoutSeconds >= 1 && raw.readTimeoutSeconds <= 600)
+            config.readTimeoutSeconds = raw.readTimeoutSeconds;
+        else config.problems.push('"readTimeoutSeconds" must be a whole number from 1 to 600');
     }
     if (raw.prOwners != null) {
         const ok =

@@ -27,7 +27,7 @@ import {
     theme,
     window,
 } from "herdr";
-import { withDeadline } from "./deadline.js";
+
 import {
     addressOf,
     changedSince,
@@ -62,7 +62,14 @@ import {
     stageSummary,
     terminalStateChanged,
 } from "./lib.js";
-import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds } from "./refresh.js";
+import {
+    focusRegained,
+    RefreshScheduler,
+    RefreshState,
+    readDeadline,
+    readTimeoutSeconds,
+    refreshSeconds,
+} from "./refresh.js";
 
 const MTIME_MS = 3000; // while the followed session works: a cheap mtime check
 const REPO_MS = 30000; // which outputs have changes in a repository
@@ -124,18 +131,17 @@ const readCache = () => {
 };
 
 // The app may run on Windows with Pi in a Linux subsystem: a link opens on this computer, so no `on`.
-function openUrl(url, cx) {
+function openUrl(url, seconds) {
     if (!url) return;
     const platform = window()?.platform;
-    withDeadline(
+    readDeadline(
         exec(platform === "windows" ? "explorer.exe" : platform === "macos" ? "open" : "xdg-open", [url]),
-        (ms, fn) => cx.timer.after(ms, fn),
+        seconds,
     ).catch(() => {});
 }
 
 export default class JigWork extends View {
     init(_props, cx) {
-        this.cx = cx;
         this.config = parseConfig(null);
         this.sessions = [];
         this.dir = null;
@@ -171,14 +177,19 @@ export default class JigWork extends View {
         this.started = false;
         this.wasSeen = false;
         this.prUser = false;
+        this.readTimeoutSeconds = 20;
+        this.readGeneration = 0;
         this.lastRenderAt = Date.now();
         cx.timer.every(1000, (cx) => this.tick(cx));
         this.readAll(cx, false);
     }
 
-    // Every command gets the same deadline, so a hung sh/git/gh cannot hold the panel's loading state and scheduler.
+    // Every command gets the same deadline (and coreutils timeout where the machine has it), so a hung sh/git/gh cannot
+    // hold the panel's loading state and scheduler.
     execD(cmd, args, opts) {
-        return withDeadline(exec(cmd, args, opts), (ms, fn) => this.cx.timer.after(ms, fn));
+        const seconds = Math.max(1, Math.ceil(this.readTimeoutSeconds));
+        const wrapper = `if command -v timeout >/dev/null 2>&1; then exec timeout ${seconds} "$@"; fi; exec "$@"`;
+        return readDeadline(exec("sh", ["-c", wrapper, "sh", cmd, ...args], opts), this.readTimeoutSeconds);
     }
 
     warn(message) {
@@ -248,15 +259,21 @@ export default class JigWork extends View {
         this.started = true;
         this.refreshScheduler.sweep();
         this.loading = true;
+        const run = ++this.readGeneration;
         cx.spawn(async (cx) => {
+            let timedOut = false;
             try {
                 const config = parseConfig(await readTextFile(`${appHome()}/mods/jig-work/config.json`));
+                if (run !== this.readGeneration) return;
                 for (const problem of config.problems) this.warn(problem);
                 this.config = config;
+                this.readTimeoutSeconds = readTimeoutSeconds(this.config);
                 this.refreshScheduler.setSeconds(refreshSeconds(config));
                 const on = this.machine(); // after the config: a first read with no config must not run `sh` locally
                 const before = await this.readMtimes();
+                if (run !== this.readGeneration) return;
                 const r = await this.execD("sh", ["-c", SCRIPT, "sh", config.stateDir ?? ""], { on });
+                if (run !== this.readGeneration) return;
                 if (r.code !== 0) throw new Error((r.stderr || `exit ${r.code}`).trim().split("\n")[0]);
                 this.raw = r.stdout;
                 this.dir = /^@@dir (.*)$/m.exec(r.stdout)?.[1] ?? null;
@@ -269,12 +286,17 @@ export default class JigWork extends View {
                     this.home = h?.stdout ?? "";
                 }
             } catch (e) {
-                this.error = String(e?.message ?? e).split("\n")[0];
+                if (run !== this.readGeneration) return;
+                timedOut = String(e?.message ?? e).includes("Reading timed out");
+                if (timedOut) this.readGeneration++;
+                else this.error = String(e?.message ?? e).split("\n")[0];
             } finally {
-                this.loading = false;
-                const again = this.refreshState.finish();
-                if (again) this.refreshScheduler.trigger();
-                cx.notify();
+                if (run === this.readGeneration || timedOut) {
+                    this.loading = false;
+                    const again = this.refreshState.finish();
+                    if (again) this.refreshScheduler.trigger();
+                    cx.notify();
+                }
             }
         });
     }
@@ -705,7 +727,7 @@ export default class JigWork extends View {
                                     .cursor_pointer()
                                     .tooltip("Open in the browser")
                                     .hover((s) => s.underline())
-                                    .on_click(() => openUrl(k.url, this.cx)),
+                                    .on_click(() => openUrl(k.url, this.readTimeoutSeconds)),
                             )
                             .child(k.key),
                     )
@@ -818,7 +840,7 @@ export default class JigWork extends View {
                     .cursor_pointer()
                     .hover((s) => s.bg(t.hover))
                     .tooltip(r.url)
-                    .on_click(() => openUrl(r.url, this.cx))
+                    .on_click(() => openUrl(r.url, this.readTimeoutSeconds))
                     .child(
                         svg(ICON("git-branch"))
                             .size(13)
@@ -885,7 +907,7 @@ export default class JigWork extends View {
                             el
                                 .cursor_pointer()
                                 .hover((s) => s.bg(t.hover))
-                                .on_click(() => openUrl(f.url, this.cx)),
+                                .on_click(() => openUrl(f.url, this.readTimeoutSeconds)),
                         )
                         .child(div().truncate().child(`✗ ${f.name}`)),
                 ),

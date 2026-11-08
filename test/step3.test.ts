@@ -9,10 +9,6 @@ import type { TestContext } from "node:test";
 import { test } from "node:test";
 import { load } from "./support.ts";
 
-type Deadline = {
-    EXEC_DEADLINE_MS: number;
-    withDeadline<T>(p: Promise<T>, timer: (ms: number, fn: () => void) => unknown, ms?: number): Promise<T>;
-};
 type Sessions = {
     MTIMES: string;
     READ: string;
@@ -58,18 +54,21 @@ test("2: Context, Files and file-view read once on mount too", () => {
     }
 });
 
-test("3: an exec has a deadline and the panels use it", async () => {
-    const deadline = await load<Deadline>("mods/jig-work/deadline.js");
-    assert.equal(deadline.EXEC_DEADLINE_MS, 20_000);
-    const timer = (ms: number, fn: () => void) => setTimeout(fn, ms);
-    await assert.rejects(deadline.withDeadline(new Promise(() => {}), timer, 20), /timed out/);
-    assert.equal(await deadline.withDeadline(Promise.resolve(7), timer, 1000), 7);
-    const deadlineSource = source("jig-work/deadline.js");
-    assert.match(deadlineSource, /timer\(ms,/, "the deadline uses Herdr's timer, not setTimeout");
-    assert.doesNotMatch(deadlineSource, /\b(?:clearTimeout|setTimeout)\s*\(/, "the mod shell has neither");
-    for (const mod of ["jig-work", "jig-context", "jig-files"]) {
+test("3: a read has a deadline and the panels use the shared one", async () => {
+    const refresh = await load<{
+        readTimeoutSeconds(v: unknown): number;
+        readDeadline<T>(p: Promise<T>, s?: number): Promise<T>;
+    }>("mods/jig-work/refresh.js");
+    assert.equal(refresh.readTimeoutSeconds(0), 1);
+    assert.equal(refresh.readTimeoutSeconds({ readTimeoutSeconds: 20 }), 20);
+    await assert.rejects(refresh.readDeadline(new Promise(() => {}), 0.01), /Reading timed out/);
+    assert.equal(await refresh.readDeadline(Promise.resolve(7), 1), 7);
+    for (const mod of ["jig-work", "jig-context", "jig-files", "file-view"]) {
         const src = source(`${mod}/main.js`);
-        assert.match(src, /withDeadline\(exec\(|execD\(/, `${mod}: exec calls go through the deadline`);
+        assert.match(src, /readDeadline\(/, `${mod}: the shared deadline`);
+        assert.match(src, /readTimeoutSeconds\(this\.config/, `${mod}: the config setting`);
+        assert.match(src, /timeout/, `${mod}: coreutils timeout or its comment`);
+        assert.doesNotMatch(src, /deadline\.js/, `${mod}: no private deadline helper`);
     }
     // The first read must take its machine from the config it just read, not the empty config from init.
     for (const mod of ["jig-work", "jig-context"]) {

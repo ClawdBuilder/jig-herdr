@@ -23,9 +23,16 @@ import {
     watchFolder,
     window,
 } from "herdr";
-import { withDeadline } from "./deadline.js";
+
 import { deletedPaths, FIND, filterPaths, parseConfig, searchDue } from "./lib.js";
-import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds } from "./refresh.js";
+import {
+    focusRegained,
+    RefreshScheduler,
+    RefreshState,
+    readDeadline,
+    readTimeoutSeconds,
+    refreshSeconds,
+} from "./refresh.js";
 
 function location() {
     const space = spaces().find((s) => s.active),
@@ -101,6 +108,8 @@ export default class Files extends View {
         this.loaded = false;
         this.started = false;
         this.filterDirty = false;
+        this.readTimeoutSeconds = 20;
+        this.readGeneration = 0;
         this.deleted = [];
         this.filter = "";
         this.matches = null;
@@ -127,7 +136,9 @@ export default class Files extends View {
     }
 
     execD(cmd, args, opts) {
-        return withDeadline(exec(cmd, args, opts), (ms, fn) => this.cx.timer.after(ms, fn));
+        const seconds = Math.max(1, Math.ceil(this.readTimeoutSeconds));
+        const wrapper = `if command -v timeout >/dev/null 2>&1; then exec timeout ${seconds} "$@"; fi; exec "$@"`;
+        return readDeadline(exec("sh", ["-c", wrapper, "sh", cmd, ...args], opts), this.readTimeoutSeconds);
     }
 
     watch(root, cx) {
@@ -202,6 +213,7 @@ export default class Files extends View {
         cx.spawn(async (cx) => {
             const text = await readTextFile(`${appHome()}/mods/jig-files/config.json`).catch(() => null);
             this.config = parseConfig(text);
+            this.readTimeoutSeconds = readTimeoutSeconds(this.config);
             this.refreshScheduler.setSeconds(refreshSeconds(this.config));
             cx.notify();
         });
@@ -253,9 +265,11 @@ export default class Files extends View {
         this.started = true;
         this.refreshScheduler.sweep();
         this.limited = false;
-        const context = this.context;
+        const context = this.context,
+            run = ++this.readGeneration;
         this.loading = true;
         cx.spawn(async (cx) => {
+            let timedOut = false;
             try {
                 for (const path of ["", ...this.folders]) {
                     if (!this.current(context)) return;
@@ -290,7 +304,7 @@ export default class Files extends View {
                         }
                     }
                 }
-                if (!this.current(context)) return;
+                if (run !== this.readGeneration || !this.current(context)) return;
                 this.marks = marks;
                 this.deleted = deleted;
                 this.error = null;
@@ -301,12 +315,17 @@ export default class Files extends View {
                 }
                 this.watch(cwd, cx);
             } catch (e) {
-                if (this.current(context)) this.error = String(e);
+                if (run !== this.readGeneration) return;
+                timedOut = String(e?.message ?? e).includes("Reading timed out");
+                if (timedOut) this.readGeneration++;
+                else if (this.current(context)) this.error = String(e);
             } finally {
-                if (this.context === context) this.loading = false;
-                const again = this.refreshState.finish();
-                if (again) this.refreshScheduler.trigger();
-                cx.notify();
+                if (run === this.readGeneration || timedOut) {
+                    this.loading = false;
+                    const again = this.refreshState.finish();
+                    if (again) this.refreshScheduler.trigger();
+                    cx.notify();
+                }
             }
         });
     }

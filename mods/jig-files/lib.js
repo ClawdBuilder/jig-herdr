@@ -3,7 +3,7 @@
 
 import { refreshSeconds } from "./refresh.js";
 
-export const DEFAULTS = { refreshSeconds: 60 };
+export const DEFAULTS = { refreshSeconds: 60, readTimeoutSeconds: 20 };
 
 /** config.json as { refreshSeconds, problems }. Images and order are not settings. */
 export function parseConfig(text) {
@@ -19,6 +19,11 @@ export function parseConfig(text) {
     if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
         config.problems.push("config.json must hold an object");
         return config;
+    }
+    if (raw.readTimeoutSeconds != null) {
+        if (Number.isInteger(raw.readTimeoutSeconds) && raw.readTimeoutSeconds >= 1 && raw.readTimeoutSeconds <= 600)
+            config.readTimeoutSeconds = raw.readTimeoutSeconds;
+        else config.problems.push('"readTimeoutSeconds" must be a whole number from 1 to 600');
     }
     if (raw.refreshSeconds != null) {
         if (Number.isInteger(raw.refreshSeconds) && raw.refreshSeconds >= 15 && raw.refreshSeconds <= 86_400)

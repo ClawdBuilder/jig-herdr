@@ -19,6 +19,7 @@ type Context = {
         machine: string | null;
         stateDir: string | null;
         refreshSeconds: number;
+        readTimeoutSeconds: number;
         problems: string[];
     };
     parseSessions(stdout: string): { file: string; alive: boolean; status: Record<string, unknown> }[];
@@ -102,6 +103,7 @@ test("jig-context finds sessions as jig-work does: the same script and the same 
         machine: "dev-box",
         stateDir: "~/state",
         refreshSeconds: 60,
+        readTimeoutSeconds: 20,
         problems: [],
     });
     assert.equal(ctx.parseConfig("{").problems.length, 1);
@@ -201,7 +203,7 @@ test("jig-context writes only the request file, and approves nothing", () => {
     assert.deepEqual([...new Set(programs)], ["sh"]);
     assert.doesNotMatch(code, /writeTextFile|\brun\(|\bhc\(|setShared\(/);
     for (const m of code.matchAll(/(?<![.\w])(?:exec|readTextFile)\([^;]*;/gs)) {
-        if (m[0].startsWith("exec(cmd, args, opts)")) continue; // the deadline wrapper passes its options through
+        if (m[0].startsWith("exec(cmd, args, opts)") || m[0].includes("wrapper")) continue; // the command wrappers pass opts
         assert.match(m[0], /\{ on/, m[0]);
     }
 });

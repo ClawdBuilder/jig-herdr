@@ -2,5 +2,6 @@
     "machine": null,
     "stateDir": null,
     "prOwners": [],
-    "refreshSeconds": 60
+    "refreshSeconds": 60,
+    "readTimeoutSeconds": 20
 }
