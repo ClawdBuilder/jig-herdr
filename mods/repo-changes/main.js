@@ -239,7 +239,18 @@ export default class RepoChanges extends View {
             cx.notify();
         });
         this.loadConfig(cx);
+        this.initialRead(cx);
         cx.timer.every(1000, (cx) => this.tick(cx));
+    }
+
+    /** A first read that does not wait for the one-second timer; the timer only handles later triggers. */
+    initialRead(cx) {
+        this.locate();
+        if (!this.loc?.root) return;
+        this.seen = true;
+        cx.spawn(async (cx) => {
+            if (this.loc?.root) this.refresh(cx);
+        });
     }
 
     /** The mode and folder to show. A space keeps its own choice in the mod's localStorage. */

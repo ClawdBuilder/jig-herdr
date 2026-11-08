@@ -72,6 +72,16 @@ test("every panel calls the shared refresh helper, with no inline copy", () => {
     }
 });
 
+test("every panel starts its first read from the constructor, not the timer", () => {
+    const root = new URL("../mods/", import.meta.url);
+    for (const mod of ["repo-changes", "repo-history", "repo-prs", "repo-worktrees"]) {
+        const source = readFileSync(new URL(`${mod}/main.js`, root), "utf8");
+        assert.match(source, /this\.initialRead\(cx\);/, `${mod}: constructor call`);
+        assert.match(source, /initialRead\(cx\)\s*\{[\s\S]*?cx\.spawn\(/, `${mod}: spawn`);
+        assert.match(source, /this\.seen = true;/, `${mod}: no second shown trigger`);
+    }
+});
+
 test("every panel carries the same checked copy of the refresh helper", () => {
     const root = new URL("../mods/", import.meta.url);
     const source = readFileSync(new URL("repo-changes/refresh.js", root), "utf8");

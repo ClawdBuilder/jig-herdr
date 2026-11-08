@@ -198,7 +198,17 @@ export default class RepoHistory extends View {
         this.lastTerminals = terminals();
         this.windowActive = window()?.active === true;
         this.enter(whereToLook());
+        this.initialRead(cx);
         cx.timer.every(1000, (cx) => this.tick(cx));
+    }
+
+    /** A first read that does not wait for the one-second timer. */
+    initialRead(cx) {
+        if (!this.where?.root) return;
+        this.seen = true;
+        cx.spawn(async (cx) => {
+            if (this.where?.root) this.loadRepos(cx, true);
+        });
     }
 
     /** A new folder or machine: forget what was shown. */
@@ -269,7 +279,7 @@ export default class RepoHistory extends View {
         return `repo|${this.where.on}|${this.where.root}`;
     }
 
-    loadRepos(cx) {
+    loadRepos(cx, initial = false) {
         if (this.loadingRepos || !this.where?.root) return;
         const { root, on } = this.where;
         const contextKey = this.contextKey;
@@ -297,6 +307,7 @@ export default class RepoHistory extends View {
                     this.show(choice, false);
                     this.refreshScheduler.trigger();
                 }
+                if (initial && this.repo) this.loadLog(cx);
             } catch (e) {
                 if (contextKey === this.contextKey) this.reposError = String(e?.message ?? e).split("\n")[0];
             } finally {

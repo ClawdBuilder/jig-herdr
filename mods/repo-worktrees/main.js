@@ -152,7 +152,17 @@ export default class RepoWorktrees extends View {
         this.lastTerminals = terminals();
         this.windowActive = window()?.active === true;
         this.enter(whereToLook());
+        this.initialRead(cx);
         cx.timer.every(1000, (cx) => this.tick(cx));
+    }
+
+    /** A first read that does not wait for the one-second timer. */
+    initialRead(cx) {
+        if (!this.where?.root) return;
+        this.seen = true;
+        cx.spawn(async (cx) => {
+            if (this.where?.root) this.load(cx);
+        });
     }
 
     /** A new folder or machine: forget what was shown. */
