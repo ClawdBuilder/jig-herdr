@@ -250,9 +250,45 @@ test("an old mod's config.json moves to its new name, and the old folder is kept
     const moved = JSON.parse(read(target, "mods/jig-repos/config.json")) as Record<string, unknown>;
     assert.equal(moved.newBranchPrefix, "old/");
     assert.equal(moved.rowDetail, "full");
-    assert.deepEqual(report.migrated, ["mods/repo-changes/config.json -> mods/jig-repos/config.json"]);
+    assert.deepEqual(report.migrated, [
+        "mods/repo-changes/config.json -> mods/jig-repos/config.json (newBranchPrefix, rowDetail)",
+    ]);
     assert.deepEqual(report.oldKept, ["mods/repo-changes"]);
     assert.ok(existsSync(path.join(target, "mods/repo-changes/config.json")), "the old file stays");
+    const again = install(target);
+    assert.deepEqual(again.migrated, []);
+    assert.deepEqual(again.oldKept, []);
+});
+
+test("a partial old config migrates only the missing keys", (t) => {
+    const target = folder(t);
+    install(target);
+    const newFile = path.join(target, "mods/jig-repos/config.json");
+    const before = JSON.parse(readFileSync(newFile, "utf8")) as Record<string, unknown>;
+    mkdirSync(path.join(target, "mods/repo-changes"), { recursive: true });
+    writeFileSync(
+        path.join(target, "mods/repo-changes/config.json"),
+        JSON.stringify({ onlyOld: "kept", newBranchPrefix: "old/" }),
+    );
+    const report = install(target);
+    const after = JSON.parse(readFileSync(newFile, "utf8")) as Record<string, unknown>;
+    assert.equal(after.onlyOld, "kept");
+    assert.equal(after.newBranchPrefix, before.newBranchPrefix, "the new file's value wins");
+    assert.deepEqual(report.migrated, ["mods/repo-changes/config.json -> mods/jig-repos/config.json (onlyOld)"]);
+});
+
+test("--remove-old removes only a fully carried-over old folder", (t) => {
+    const target = folder(t);
+    install(target);
+    mkdirSync(path.join(target, "mods/repo-changes"), { recursive: true });
+    writeFileSync(path.join(target, "mods/repo-changes/config.json"), JSON.stringify({ onlyOld: "carried" }));
+    const report = install(target, { removeOld: true });
+    assert.deepEqual(report.oldRemoved, ["mods/repo-changes"]);
+    assert.ok(!existsSync(path.join(target, "mods/repo-changes")));
+    assert.equal(readJson(target, "mods/jig-repos/config.json").onlyOld, "carried");
+
+    // A second run has no old folder to report.
+    assert.deepEqual(install(target, { removeOld: true }).oldRemoved, []);
 });
 
 test("an existing new config wins over the old file, which only fills gaps", (t) => {

@@ -10,7 +10,8 @@ node scripts/install.ts [herdr-folder]
 ```
 
 It copies `layouts/`, `mods/` and `themes/`, merges `keys.json`, and never touches your `config.json`. `--dry-run` shows
-what would happen; `--force` replaces files this script did not write.
+what would happen; `--force` replaces files this script did not write. `--remove-old` deletes an old renamed mod folder
+once its config has been fully carried over; it is off by default and never deletes one with keys still missing.
 
 ## What it needs
 
