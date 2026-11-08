@@ -9,14 +9,7 @@ import { Editor, EditorState, h_flex, TextView, v_flex } from "gpui-base";
 import { div, svg, View } from "gpui-kit";
 import { appHome, props as modProps, panes, readTextFile, settings, shared, spaces, theme, window } from "herdr";
 import { isMarkdown, parseConfig, splitPath, wrapDefault } from "./lib.js";
-import {
-    focusRegained,
-    RefreshScheduler,
-    RefreshState,
-    readDeadline,
-    readTimeoutSeconds,
-    refreshSeconds,
-} from "./refresh.js";
+import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds } from "./refresh.js";
 
 // Same extension mapping and limits as the shipped Files preview.
 const LANG = {
@@ -82,10 +75,10 @@ export default class FileView extends View {
         this.windowActive = window()?.active === true;
         this.loaded = false;
         this.started = false;
-        this.readTimeoutSeconds = 20;
         this.loadConfig(cx);
         this.refreshScheduler.trigger();
         this.load(cx);
+        this.wasShown = true; // the mount read is the shown read
         cx.timer.every(1000, (cx) => this.tick(cx));
     }
 
@@ -119,7 +112,6 @@ export default class FileView extends View {
         cx.spawn(async (cx) => {
             const text = await readTextFile(`${appHome()}/mods/file-view/config.json`).catch(() => null);
             this.config = parseConfig(text);
-            this.readTimeoutSeconds = readTimeoutSeconds(this.config);
             this.refreshScheduler.setSeconds(refreshSeconds(this.config));
             cx.notify();
         });
@@ -134,16 +126,7 @@ export default class FileView extends View {
         const seq = ++this.seq;
         cx.spawn(async (cx) => {
             try {
-                // No shell command here to guard with coreutils timeout; the read is bounded by readDeadline instead.
-                // A shell that cannot cancel its timer says so; the read ran, so try it once more without the deadline.
-                const read = () => readTextFile(this.path, { on: this.on });
-                let text;
-                try {
-                    text = await readDeadline(read(), this.readTimeoutSeconds);
-                } catch (e) {
-                    if (!String(e?.message ?? e).includes("clearTimeout")) throw e;
-                    text = await read();
-                }
+                const text = await readTextFile(this.path, { on: this.on });
                 if (seq !== this.seq) return;
                 if (text === null) {
                     this.setError("This file is no longer available");

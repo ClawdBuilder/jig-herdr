@@ -509,7 +509,6 @@ test("jig-work reads its config, words decisions, and knows when it is on screen
         stateDir: null,
         prOwners: [],
         refreshSeconds: 60,
-        readTimeoutSeconds: 20,
         problems: [],
     });
     assert.deepEqual(lib.parseConfig('{ "machine": "dev-box", "stateDir": "~/state", "prOwners": ["acme"] }'), {
@@ -517,7 +516,6 @@ test("jig-work reads its config, words decisions, and knows when it is on screen
         stateDir: "~/state",
         prOwners: ["acme"],
         refreshSeconds: 60,
-        readTimeoutSeconds: 20,
         problems: [],
     });
     assert.equal(lib.parseConfig('{ "prOwners": "acme" }').problems.length, 1);

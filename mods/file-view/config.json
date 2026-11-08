@@ -1,4 +1,3 @@
 {
-    "refreshSeconds": 60,
-    "readTimeoutSeconds": 20
+    "refreshSeconds": 60
 }

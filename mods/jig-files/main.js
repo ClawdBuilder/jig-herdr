@@ -25,15 +25,8 @@ import {
     window,
 } from "herdr";
 
-import { deletedPaths, FIND, filterPaths, parseConfig, searchDue } from "./lib.js";
-import {
-    focusRegained,
-    RefreshScheduler,
-    RefreshState,
-    readDeadline,
-    readTimeoutSeconds,
-    refreshSeconds,
-} from "./refresh.js";
+import { deletedPaths, FIND, filterPaths, listDirectory, parseConfig, searchDue } from "./lib.js";
+import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds } from "./refresh.js";
 
 function location() {
     const space = spaces().find((s) => s.active),
@@ -74,28 +67,6 @@ function iconButton(t, id, icon, tip, onClick, busy = false) {
 const PER_FOLDER = 500,
     TOTAL = 5000;
 
-async function directory(path, on) {
-    if (!on && window()?.platform === "windows") {
-        const r = await this.execD("powershell", [
-            "-NoProfile",
-            "-Command",
-            "& { param($p) @(Get-ChildItem -LiteralPath $p -Force -ErrorAction Stop | Where-Object Name -ne '.git' | Select-Object -First 501 | ForEach-Object { @{ name=$_.Name; dir=($_.PSIsContainer -and -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint)) } }) | ConvertTo-Json -Compress } '" +
-                path.replaceAll("'", "''") +
-                "'",
-        ]);
-        if (r.code !== 0) throw new Error(r.stderr || "Cannot list this folder");
-        const result = JSON.parse(r.stdout || "[]");
-        return Array.isArray(result) ? result : [result];
-    }
-    const script = `n=0; for p in "$1"/* "$1"/.[!.]* "$1"/..?*; do [ -e "$p" ] || [ -L "$p" ] || continue; name=\${p##*/}; [ "$name" = .git ] && continue; if [ -d "$p" ] && [ ! -L "$p" ]; then kind=d; else kind=f; fi; printf "%s\\0%s\\0" "$kind" "$name"; n=$((n+1)); [ "$n" -gt 500 ] && break; done; test -d "$1"`;
-    const r = await this.execD("sh", ["-c", script, "files", path], { on });
-    if (r.code !== 0) throw new Error(r.stderr || "Cannot list this folder");
-    const fields = r.stdout.split("\0"),
-        out = [];
-    for (let i = 0; i + 1 < fields.length; i += 2) out.push({ name: fields[i + 1], dir: fields[i] === "d" });
-    return out;
-}
-
 export default class Files extends View {
     init(_props, cx) {
         this.saved = new Map();
@@ -109,7 +80,6 @@ export default class Files extends View {
         this.loaded = false;
         this.started = false;
         this.filterDirty = false;
-        this.readTimeoutSeconds = 20;
         this.readGeneration = 0;
         this.deleted = [];
         this.filter = "";
@@ -134,26 +104,7 @@ export default class Files extends View {
         cx.timer.every(1000, (cx) => this.tick(cx));
         cx.timer.every(500, () => this.claim());
         this.refresh(cx, false);
-    }
-
-    execD(cmd, args, opts) {
-        const seconds = Math.max(1, Math.ceil(this.readTimeoutSeconds));
-        const wrapper = `if command -v timeout >/dev/null 2>&1; then exec timeout ${seconds} "$@"; fi; exec "$@"`;
-        const once = () => exec("sh", ["-c", wrapper, "sh", cmd, ...args], opts);
-        // Some Herdr shells cannot make or cancel a timer: readDeadline can throw before it returns (or reject with that
-        // instead of a result). The command itself is read-only, so run it once more without the deadline; the app still
-        // caps every command at 30 s.
-        let bounded;
-        try {
-            bounded = readDeadline(once(), this.readTimeoutSeconds);
-        } catch (e) {
-            if (String(e?.message ?? e).includes("clearTimeout")) return once();
-            throw e;
-        }
-        return bounded.catch((e) => {
-            if (String(e?.message ?? e).includes("clearTimeout")) return once();
-            throw e;
-        });
+        this.seen = true; // the mount read is the shown read
     }
 
     watch(root, cx) {
@@ -181,7 +132,7 @@ export default class Files extends View {
 
     async loadFolder(path, context) {
         const { on, cwd: root } = context;
-        const entries = await directory(path ? `${root}/${path}` : root, on);
+        const entries = await listDirectory(path ? `${root}/${path}` : root, on, exec, window()?.platform);
         if (!this.current(context) || (path && !this.folders.has(path))) return;
         const used = [...this.entries.entries()].filter(([p]) => p !== path).reduce((n, [, e]) => n + e.length, 0);
         this.entries.set(
@@ -228,7 +179,6 @@ export default class Files extends View {
         cx.spawn(async (cx) => {
             const text = await readTextFile(`${appHome()}/mods/jig-files/config.json`).catch(() => null);
             this.config = parseConfig(text);
-            this.readTimeoutSeconds = readTimeoutSeconds(this.config);
             this.refreshScheduler.setSeconds(refreshSeconds(this.config));
             cx.notify();
         });
@@ -246,7 +196,7 @@ export default class Files extends View {
             context = this.context;
         cx.spawn(async (cx) => {
             try {
-                const r = await this.execD("sh", ["-c", FIND, "sh", root], { on }).catch(() => null);
+                const r = await exec("sh", ["-c", FIND, "sh", root], { on }).catch(() => null);
                 if (context !== this.context || query !== this.filter) return;
                 this.matches = r?.code === 0 ? filterPaths(r.stdout, root, query) : [];
             } finally {
@@ -290,12 +240,12 @@ export default class Files extends View {
                     if (!this.current(context)) return;
                     await this.loadFolder(path, context);
                 }
-                const top = await this.execD("git", ["rev-parse", "--show-toplevel"], { cwd, on }).catch(() => null);
+                const top = await exec("git", ["rev-parse", "--show-toplevel"], { cwd, on }).catch(() => null);
                 const marks = {};
                 let deleted = [];
                 if (top?.code === 0) {
                     // Writes nothing under .git (index lock, fsmonitor cookie): the folder watch would refresh again.
-                    const status = await this.execD(
+                    const status = await exec(
                         "git",
                         [
                             "--no-optional-locks",

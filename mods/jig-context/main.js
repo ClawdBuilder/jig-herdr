@@ -38,14 +38,7 @@ import {
     terminalStateChanged,
     WRITE,
 } from "./lib.js";
-import {
-    focusRegained,
-    RefreshScheduler,
-    RefreshState,
-    readDeadline,
-    readTimeoutSeconds,
-    refreshSeconds,
-} from "./refresh.js";
+import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds } from "./refresh.js";
 
 const MTIME_MS = 3000; // while the followed session works: a cheap mtime check
 const ANSWER_MS = 10000; // how long a request may wait before the panel says the session does not answer
@@ -122,7 +115,6 @@ export default class JigContext extends View {
         this.selectedId = undefined;
         this.started = false;
         this.wasSeen = false;
-        this.readTimeoutSeconds = 20;
         this.readGeneration = 0;
         this.width = 0;
         this.pending = null; // switches sent and not answered yet: { tools, skills, reload }
@@ -133,26 +125,7 @@ export default class JigContext extends View {
         this.seq = 0;
         cx.timer.every(1000, (cx) => this.tick(cx));
         this.readAll(cx, false);
-    }
-
-    execD(cmd, args, opts) {
-        const seconds = Math.max(1, Math.ceil(this.readTimeoutSeconds));
-        const wrapper = `if command -v timeout >/dev/null 2>&1; then exec timeout ${seconds} "$@"; fi; exec "$@"`;
-        const once = () => exec("sh", ["-c", wrapper, "sh", cmd, ...args], opts);
-        // Some Herdr shells cannot make or cancel a timer: readDeadline can throw before it returns (or reject with that
-        // instead of a result). The command itself is read-only, so run it once more without the deadline; the app still
-        // caps every command at 30 s.
-        let bounded;
-        try {
-            bounded = readDeadline(once(), this.readTimeoutSeconds);
-        } catch (e) {
-            if (String(e?.message ?? e).includes("clearTimeout")) return once();
-            throw e;
-        }
-        return bounded.catch((e) => {
-            if (String(e?.message ?? e).includes("clearTimeout")) return once();
-            throw e;
-        });
+        this.wasSeen = true; // the mount read is the shown read; the first tick must not read again
     }
 
     machine() {
@@ -214,12 +187,11 @@ export default class JigContext extends View {
                 const text = await readTextFile(`${appHome()}/mods/jig-work/config.json`, { on: null });
                 if (run !== this.readGeneration) return;
                 this.config = parseConfig(text);
-                this.readTimeoutSeconds = readTimeoutSeconds(this.config);
                 this.refreshScheduler.setSeconds(refreshSeconds(this.config));
                 const on = this.machine(); // after the config: a first read with no config must not run `sh` locally
                 const before = await this.readMtimes();
                 if (run !== this.readGeneration) return;
-                const r = await this.execD("sh", ["-c", SCRIPT, "sh", this.config.stateDir ?? ""], { on });
+                const r = await exec("sh", ["-c", SCRIPT, "sh", this.config.stateDir ?? ""], { on });
                 if (run !== this.readGeneration) return;
                 if (r.code !== 0) throw new Error((r.stderr || `exit ${r.code}`).trim().split("\n")[0]);
                 this.raw = r.stdout;
@@ -229,7 +201,7 @@ export default class JigContext extends View {
                 this.loaded = true;
                 this.mtimes = before; // the mtimes from the pass whose bodies were just read
                 if (this.home === null) {
-                    const h = await this.execD("sh", ["-c", 'printf %s "$HOME"'], { on }).catch(() => null);
+                    const h = await exec("sh", ["-c", 'printf %s "$HOME"'], { on }).catch(() => null);
                     this.home = h?.stdout ?? "";
                 }
             } catch (e) {
@@ -250,7 +222,7 @@ export default class JigContext extends View {
     }
 
     async readMtimes() {
-        const r = await this.execD("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], {
+        const r = await exec("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], {
             on: this.machine(),
         }).catch(() => null);
         return r?.code === 0 ? parseMtimes(r.stdout) : {};
@@ -262,19 +234,18 @@ export default class JigContext extends View {
         if (now - this.mtimeAt < MTIME_MS) return;
         this.mtimeAt = now;
         this.checking = true;
+        const run = this.readGeneration;
         const on = this.machine();
         cx.spawn(async (cx) => {
             try {
-                const r = await this.execD("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], { on }).catch(
-                    () => null,
-                );
+                const r = await exec("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], { on }).catch(() => null);
                 if (r?.code !== 0) return;
                 const next = parseMtimes(r.stdout),
                     files = changedSince(this.mtimes, next);
                 if (files.length === 0) return;
-                const read = await this.execD("sh", ["-c", READ, "sh", ...files], { on }).catch(() => null);
-                if (read?.code !== 0) return;
-                this.mtimes = next; // only the pass whose bodies were read
+                const read = await exec("sh", ["-c", READ, "sh", ...files], { on }).catch(() => null);
+                if (read?.code !== 0 || run !== this.readGeneration) return;
+                this.mtimes = next; // only the pass whose bodies were read, and only if no full read took over
                 this.sessions = mergeSessions(this.sessions, parseSessions(read.stdout), Object.keys(next));
                 this.error = null;
                 cx.notify();
@@ -310,7 +281,7 @@ export default class JigContext extends View {
         const machine = this.machine();
         cx.spawn(async (cx) => {
             try {
-                const r = await this.execD("sh", ["-c", WRITE, "sh", file, json], { on: machine });
+                const r = await exec("sh", ["-c", WRITE, "sh", file, json], { on: machine });
                 if (r.code !== 0) this.sendError = (r.stderr || "could not write the request").trim().split("\n")[0];
             } catch (e) {
                 this.sendError = String(e?.message ?? e);

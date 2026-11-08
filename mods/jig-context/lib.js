@@ -23,7 +23,7 @@ import { refreshSeconds } from "./refresh.js";
 
 // The Work panel's config.json (mods/jig-work/config.json) as { machine, stateDir }: both panels show the same sessions.
 export function parseConfig(text) {
-    const config = { machine: null, stateDir: null, refreshSeconds: 60, readTimeoutSeconds: 20, problems: [] };
+    const config = { machine: null, stateDir: null, refreshSeconds: 60, problems: [] };
     if (text == null || text.trim() === "") return config;
     let raw;
     try {
@@ -34,11 +34,6 @@ export function parseConfig(text) {
     }
     if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return config;
     if (raw.refreshSeconds != null) config.refreshSeconds = refreshSeconds(raw.refreshSeconds);
-    if (raw.readTimeoutSeconds != null) {
-        if (Number.isInteger(raw.readTimeoutSeconds) && raw.readTimeoutSeconds >= 1 && raw.readTimeoutSeconds <= 600)
-            config.readTimeoutSeconds = raw.readTimeoutSeconds;
-        else config.problems.push('"readTimeoutSeconds" must be a whole number from 1 to 600');
-    }
     for (const key of ["machine", "stateDir"]) {
         if (typeof raw[key] === "string" && raw[key].trim() !== "") config[key] = raw[key].trim();
     }

@@ -245,7 +245,6 @@ test("the shipped config.json files name no machine, folder or palette of anyone
         stateDir: null,
         prOwners: [],
         refreshSeconds: 60,
-        readTimeoutSeconds: 20,
     });
     const changes = JSON.parse(readFileSync(path.join(HERDR, "mods/repo-changes/config.json"), "utf8")) as unknown;
     assert.deepEqual(changes, {

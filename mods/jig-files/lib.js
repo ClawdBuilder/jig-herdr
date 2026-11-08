@@ -3,7 +3,7 @@
 
 import { refreshSeconds } from "./refresh.js";
 
-export const DEFAULTS = { refreshSeconds: 60, readTimeoutSeconds: 20 };
+export const DEFAULTS = { refreshSeconds: 60 };
 
 /** config.json as { refreshSeconds, problems }. Images and order are not settings. */
 export function parseConfig(text) {
@@ -19,11 +19,6 @@ export function parseConfig(text) {
     if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
         config.problems.push("config.json must hold an object");
         return config;
-    }
-    if (raw.readTimeoutSeconds != null) {
-        if (Number.isInteger(raw.readTimeoutSeconds) && raw.readTimeoutSeconds >= 1 && raw.readTimeoutSeconds <= 600)
-            config.readTimeoutSeconds = raw.readTimeoutSeconds;
-        else config.problems.push('"readTimeoutSeconds" must be a whole number from 1 to 600');
     }
     if (raw.refreshSeconds != null) {
         if (Number.isInteger(raw.refreshSeconds) && raw.refreshSeconds >= 15 && raw.refreshSeconds <= 86_400)
@@ -53,8 +48,42 @@ export function isShown(root, mod) {
     });
 }
 
+/** The POSIX listing script: one NUL-separated kind/name pair per entry, `.git` skipped, 500 entries at most. */
+export const LIST_SCRIPT = `n=0; for p in "$1"/* "$1"/.[!.]* "$1"/..?*; do [ -e "$p" ] || [ -L "$p" ] || continue; name=\${p##*/}; [ "$name" = .git ] && continue; if [ -d "$p" ] && [ ! -L "$p" ]; then kind=d; else kind=f; fi; printf "%s\\0%s\\0" "$kind" "$name"; n=$((n+1)); [ "$n" -gt 500 ] && break; done; test -d "$1"`;
+
+/** Parse LIST_SCRIPT output as [{ name, dir }] (the order is the folder's). */
+export function parseDirectory(stdout) {
+    const fields = String(stdout ?? "").split("\0"),
+        out = [];
+    for (let i = 0; i + 1 < fields.length; i += 2) out.push({ name: fields[i + 1], dir: fields[i] === "d" });
+    return out;
+}
+
+/**
+ * List a folder through `run(cmd, args, opts)`. The runner is passed in: a module function has no view, and calling
+ * `view.exec` as `this.exec` was the Step 4 blocker. On Windows without a machine, PowerShell lists it; elsewhere the
+ * POSIX script runs on `on`.
+ */
+export async function listDirectory(path, on, run, platform = null) {
+    if (!on && platform === "windows") {
+        const r = await run("powershell", [
+            "-NoProfile",
+            "-Command",
+            "& { param($p) @(Get-ChildItem -LiteralPath $p -Force -ErrorAction Stop | Where-Object Name -ne '.git' | Select-Object -First 501 | ForEach-Object { @{ name=$_.Name; dir=($_.PSIsContainer -and -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint)) } }) | ConvertTo-Json -Compress } '" +
+                path.replaceAll("'", "''") +
+                "'",
+        ]);
+        if (r.code !== 0) throw new Error(r.stderr || "Cannot list this folder");
+        const result = JSON.parse(r.stdout || "[]");
+        return Array.isArray(result) ? result : [result];
+    }
+    const r = await run("sh", ["-c", LIST_SCRIPT, "files", path], { on });
+    if (r.code !== 0) throw new Error(r.stderr || "Cannot list this folder");
+    return parseDirectory(r.stdout);
+}
+
 /** Run with `sh -c FIND sh <root>`: every file under root (no .git, no node_modules, six levels), one path per line. */
-export const FIND = `find "$1" -mindepth 1 -maxdepth 6 \\( -name .git -o -name node_modules \\) -prune -o -type f -print 2>/dev/null | head -n 5000`;
+export const FIND = `if command -v timeout >/dev/null 2>&1; then F="timeout 10 find"; else F=find; fi; $F "$1" -mindepth 1 -maxdepth 6 \\( -name .git -o -name node_modules \\) -prune -o -type f -print 2>/dev/null | head -n 5000`;
 
 /**
  * Deleted paths from `git status --porcelain=v1 -z --no-renames` in `root`: the entries whose worktree or index side is

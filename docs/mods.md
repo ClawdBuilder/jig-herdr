@@ -38,16 +38,14 @@ headers:
   changing, the window regaining focus, the followed terminal's Herdr status changing (working ↔ idle/done), its own
   actions and the refresh button. While the followed session works, every 3 s one tiny `sh` prints only the status files'
   mtimes and sizes, and only the files that moved are read; while it is idle, nothing but events and the `refreshSeconds`
-  backstop (60 s by default, never under 15). Every command has a 20 s deadline, so a hung `sh`/`git`/`gh` does not hold
-  the loading state; the 2 s full read is gone. On the machine (config `machine`, else the shown space's machine); for listed outputs of an older
+  backstop (60 s by default, never under 15). Herdr caps every command at 30 s; the 2 s full read is gone. On the machine (config `machine`, else the shown space's machine); for listed outputs of an older
   status file one `git rev-parse`/`git status` script when the list changes and every 30 s; pull requests through `gh`,
   cached 5 minutes per ticket in `localStorage`. Background runs are silent; a clicked refresh shows its busy state only
   after 400 ms and queues one more click instead of blocking.
 - **Opens:** links with this computer's browser (`explorer.exe`, `open` or `xdg-open`); files with `tab.new` and `file-view`;
   diffs with `tab.new` and `repo-review`. A missing `file-view` gives a notification; a missing `repo-review` hides the button.
 - **Sets** `shared("file-view.tabs")`, the map of `<machine>|<path>` to the tab that shows it, so a second click selects it.
-- **Props:** none. Settings in `config.json`: `{ machine, stateDir, prOwners, refreshSeconds, readTimeoutSeconds }`
-  (`readTimeoutSeconds` is 20 by default: a read that runs longer shows a timed-out error and can be retried).
+- **Props:** none. Settings in `config.json`: `{ machine, stateDir, prOwners, refreshSeconds }`.
 
 ## jig-context: the Context panel
 
@@ -70,8 +68,7 @@ folder, picker, `Reload` and refresh; a second line carries the model, thinking,
   the model; jig-core still decides each call.
 - **When it reads:** the same reader and events as Work (a first read on mount, shown/shown again, focus/session change,
   window focus, the followed terminal's status, its own actions, a manual read), the same 3 s mtime-only check while the
-  session works, the same `refreshSeconds` backstop from `mods/jig-work/config.json` and the same 20 s command deadline; no
-  2 s full read. `Reload` says `Reload when idle` while the
+  session works and the same `refreshSeconds` backstop from `mods/jig-work/config.json`; no 2 s full read. `Reload` says `Reload when idle` while the
   agent works.
 - **Props:** none. **Files:** `main.js`, `lib.js` (a copy of Work's session finding, the bar, the request).
 
@@ -142,7 +139,7 @@ the name and folder (full path on hover) with the controls at the right; below 4
 all the controls fit. It reads with `readTextFile` (`on` for another machine) on mount, when the tab comes back or regains focus, on its
 backstop and on Refresh — no 5 s loop; a click during a read queues one more; hidden tabs read nothing, not even their
 config. A binary or missing file says so, and a tab without props says to open one from Files or Work. `wrap` starts on for Markdown and text and is remembered in `localStorage`; `config.json` has
-`refreshSeconds` and `readTimeoutSeconds`.
+`refreshSeconds`.
 
 A Markdown file (`.md`, `.markdown`, `.mdx`) opens rendered: headings, lists, tables, code blocks and links. `Source` in
 the header shows its text with syntax colours, and `Preview` goes back.
@@ -390,8 +387,8 @@ Herdr's shipped `files` mod (Apache-2.0; the file says so at its top), changed s
 `file-view` tab, as `jig-work` does, and a second click selects that tab. Folders open in place and files with uncommitted
 changes carry a letter. A filter runs one bounded `find` per change (500 ms after typing) and per refresh, never once per
 tick; watcher events go through the refresh scheduler, so they debounce and a read in progress queues one more. It reads
-the folder on the space's machine, with `readTimeoutSeconds` (20 by default) per command and coreutils `timeout` where it
-exists, and writes nothing. Its icons are Herdr's own, from
+the folder on the space's machine through one listing function, with the filter's `find` bounded to 10 s where coreutils
+`timeout` exists, and writes nothing. Its icons are Herdr's own, from
 `mods/workspace-chrome/`.
 
 ## jig-activity: the icon bar

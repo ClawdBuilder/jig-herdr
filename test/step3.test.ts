@@ -54,20 +54,11 @@ test("2: Context, Files and file-view read once on mount too", () => {
     }
 });
 
-test("3: a read has a deadline and the panels use the shared one", async () => {
-    const refresh = await load<{
-        readTimeoutSeconds(v: unknown): number;
-        readDeadline<T>(p: Promise<T>, s?: number): Promise<T>;
-    }>("mods/jig-work/refresh.js");
-    assert.equal(refresh.readTimeoutSeconds(0), 1);
-    assert.equal(refresh.readTimeoutSeconds({ readTimeoutSeconds: 20 }), 20);
-    await assert.rejects(refresh.readDeadline(new Promise(() => {}), 0.01), /Reading timed out/);
-    assert.equal(await refresh.readDeadline(Promise.resolve(7), 1), 7);
+test("3: the panels use exec and no timer-based deadline", async () => {
     for (const mod of ["jig-work", "jig-context", "jig-files", "file-view"]) {
         const src = source(`${mod}/main.js`);
-        assert.match(src, /readDeadline\(/, `${mod}: the shared deadline`);
-        assert.match(src, /readTimeoutSeconds\(this\.config/, `${mod}: the config setting`);
-        assert.match(src, /timeout/, `${mod}: coreutils timeout or its comment`);
+        assert.doesNotMatch(src, /readDeadline\(/, `${mod}: no readDeadline call`);
+        assert.doesNotMatch(src, /readTimeoutSeconds/, `${mod}: no read-timeout setting`);
         assert.doesNotMatch(src, /deadline\.js/, `${mod}: no private deadline helper`);
     }
     // The first read must take its machine from the config it just read, not the empty config from init.
@@ -121,7 +112,11 @@ test("5: mtime detection uses time and size, caps at 64, and keeps the old map w
     assert.equal(sessions.shownAgain(true, true), false);
     const work = source("jig-work/main.js");
     assert.match(work, /this\.mtimes = next/, "READ records the mtimes");
-    assert.match(work, /if \(read\?\.code !== 0\) return;[\s\S]{0,80}this\.mtimes = next/, "only after READ succeeds");
+    assert.match(
+        work,
+        /if \(read\?\.code !== 0(?: \|\| run !== this\.readGeneration)?\) return;[\s\S]{0,100}this\.mtimes = next/,
+        "only after READ succeeds",
+    );
 });
 
 test("6: Work and Context read again when the panel is shown after being hidden", () => {

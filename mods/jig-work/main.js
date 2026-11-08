@@ -63,14 +63,7 @@ import {
     stageSummary,
     terminalStateChanged,
 } from "./lib.js";
-import {
-    focusRegained,
-    RefreshScheduler,
-    RefreshState,
-    readDeadline,
-    readTimeoutSeconds,
-    refreshSeconds,
-} from "./refresh.js";
+import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds } from "./refresh.js";
 
 const MTIME_MS = 3000; // while the followed session works: a cheap mtime check
 const REPO_MS = 30000; // which outputs have changes in a repository
@@ -132,13 +125,10 @@ const readCache = () => {
 };
 
 // The app may run on Windows with Pi in a Linux subsystem: a link opens on this computer, so no `on`.
-function openUrl(url, seconds) {
+function openUrl(url) {
     if (!url) return;
     const platform = window()?.platform;
-    readDeadline(
-        exec(platform === "windows" ? "explorer.exe" : platform === "macos" ? "open" : "xdg-open", [url]),
-        seconds,
-    ).catch(() => {});
+    exec(platform === "windows" ? "explorer.exe" : platform === "macos" ? "open" : "xdg-open", [url]).catch(() => {});
 }
 
 export default class JigWork extends View {
@@ -178,33 +168,11 @@ export default class JigWork extends View {
         this.started = false;
         this.wasSeen = false;
         this.prUser = false;
-        this.readTimeoutSeconds = 20;
         this.readGeneration = 0;
         this.lastRenderAt = Date.now();
         cx.timer.every(1000, (cx) => this.tick(cx));
         this.readAll(cx, false);
-    }
-
-    // Every command gets the same deadline (and coreutils timeout where the machine has it), so a hung sh/git/gh cannot
-    // hold the panel's loading state and scheduler.
-    execD(cmd, args, opts) {
-        const seconds = Math.max(1, Math.ceil(this.readTimeoutSeconds));
-        const wrapper = `if command -v timeout >/dev/null 2>&1; then exec timeout ${seconds} "$@"; fi; exec "$@"`;
-        const once = () => exec("sh", ["-c", wrapper, "sh", cmd, ...args], opts);
-        // Some Herdr shells cannot make or cancel a timer: readDeadline can throw before it returns (or reject with that
-        // instead of a result). The command itself is read-only, so run it once more without the deadline; the app still
-        // caps every command at 30 s.
-        let bounded;
-        try {
-            bounded = readDeadline(once(), this.readTimeoutSeconds);
-        } catch (e) {
-            if (String(e?.message ?? e).includes("clearTimeout")) return once();
-            throw e;
-        }
-        return bounded.catch((e) => {
-            if (String(e?.message ?? e).includes("clearTimeout")) return once();
-            throw e;
-        });
+        this.wasSeen = true; // the mount read is the shown read; the first tick must not read again
     }
 
     warn(message) {
@@ -282,12 +250,11 @@ export default class JigWork extends View {
                 if (run !== this.readGeneration) return;
                 for (const problem of config.problems) this.warn(problem);
                 this.config = config;
-                this.readTimeoutSeconds = readTimeoutSeconds(this.config);
                 this.refreshScheduler.setSeconds(refreshSeconds(config));
                 const on = this.machine(); // after the config: a first read with no config must not run `sh` locally
                 const before = await this.readMtimes();
                 if (run !== this.readGeneration) return;
-                const r = await this.execD("sh", ["-c", SCRIPT, "sh", config.stateDir ?? ""], { on });
+                const r = await exec("sh", ["-c", SCRIPT, "sh", config.stateDir ?? ""], { on });
                 if (run !== this.readGeneration) return;
                 if (r.code !== 0) throw new Error((r.stderr || `exit ${r.code}`).trim().split("\n")[0]);
                 this.raw = r.stdout;
@@ -297,7 +264,7 @@ export default class JigWork extends View {
                 this.loaded = true;
                 this.mtimes = before; // the mtimes from the pass whose bodies were just read
                 if (this.home === null) {
-                    const h = await this.execD("sh", ["-c", 'printf %s "$HOME"'], { on }).catch(() => null);
+                    const h = await exec("sh", ["-c", 'printf %s "$HOME"'], { on }).catch(() => null);
                     this.home = h?.stdout ?? "";
                 }
             } catch (e) {
@@ -317,7 +284,7 @@ export default class JigWork extends View {
     }
 
     async readMtimes() {
-        const r = await this.execD("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], {
+        const r = await exec("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], {
             on: this.machine(),
         }).catch(() => null);
         return r?.code === 0 ? parseMtimes(r.stdout) : {};
@@ -330,19 +297,18 @@ export default class JigWork extends View {
         if (now - this.mtimeAt < MTIME_MS) return;
         this.mtimeAt = now;
         this.checking = true;
+        const run = this.readGeneration;
         const on = this.machine();
         cx.spawn(async (cx) => {
             try {
-                const r = await this.execD("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], { on }).catch(
-                    () => null,
-                );
+                const r = await exec("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], { on }).catch(() => null);
                 if (r?.code !== 0) return;
                 const next = parseMtimes(r.stdout),
                     files = changedSince(this.mtimes, next);
                 if (files.length === 0) return;
-                const read = await this.execD("sh", ["-c", READ, "sh", ...files], { on }).catch(() => null);
-                if (read?.code !== 0) return;
-                this.mtimes = next; // only the pass whose bodies were read
+                const read = await exec("sh", ["-c", READ, "sh", ...files], { on }).catch(() => null);
+                if (read?.code !== 0 || run !== this.readGeneration) return;
+                this.mtimes = next; // only the pass whose bodies were read, and only if no full read took over
                 this.sessions = mergeSessions(this.sessions, parseSessions(read.stdout), Object.keys(next));
                 this.error = null;
                 cx.notify();
@@ -363,7 +329,7 @@ export default class JigWork extends View {
         this.repoKey = key;
         cx.spawn(async (cx) => {
             try {
-                const r = await this.execD("sh", ["-c", REPO_SCRIPT, "sh", ...files], { on: this.machine() });
+                const r = await exec("sh", ["-c", REPO_SCRIPT, "sh", ...files], { on: this.machine() });
                 this.repoInfo = { ...this.repoInfo, ...parseRepoInfo(r.stdout) };
                 cx.notify();
             } catch {
@@ -392,13 +358,13 @@ export default class JigWork extends View {
             try {
                 let urls = known;
                 if (urls.length === 0) {
-                    const r = await this.execD("gh", search, { on });
+                    const r = await exec("gh", search, { on });
                     if (r.code !== 0) throw new Error((r.stderr || "gh search failed").trim().split("\n")[0]);
                     entry.searched = JSON.parse(r.stdout || "[]");
                     urls = entry.searched.map((p) => p.url);
                 }
                 for (const url of urls.slice(0, 4)) {
-                    const r = await this.execD("gh", ["pr", "view", url, "--json", VIEW], { on });
+                    const r = await exec("gh", ["pr", "view", url, "--json", VIEW], { on });
                     if (r.code === 0) entry.details[url] = JSON.parse(r.stdout || "{}");
                 }
             } catch (e) {
@@ -742,7 +708,7 @@ export default class JigWork extends View {
                                     .cursor_pointer()
                                     .tooltip("Open in the browser")
                                     .hover((s) => s.underline())
-                                    .on_click(() => openUrl(k.url, this.readTimeoutSeconds)),
+                                    .on_click(() => openUrl(k.url)),
                             )
                             .child(k.key),
                     )
@@ -855,7 +821,7 @@ export default class JigWork extends View {
                     .cursor_pointer()
                     .hover((s) => s.bg(t.hover))
                     .tooltip(r.url)
-                    .on_click(() => openUrl(r.url, this.readTimeoutSeconds))
+                    .on_click(() => openUrl(r.url))
                     .child(
                         svg(ICON("git-branch"))
                             .size(13)
@@ -922,7 +888,7 @@ export default class JigWork extends View {
                             el
                                 .cursor_pointer()
                                 .hover((s) => s.bg(t.hover))
-                                .on_click(() => openUrl(f.url, this.readTimeoutSeconds)),
+                                .on_click(() => openUrl(f.url)),
                         )
                         .child(div().truncate().child(`✗ ${f.name}`)),
                 ),
