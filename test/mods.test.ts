@@ -504,11 +504,18 @@ test("jig-work lists only outputs outside repositories, and counts the rest for 
 
 test("jig-work reads its config, words decisions, and knows when it is on screen", async () => {
     const lib = await load<Work>("mods/jig-work/lib.js");
-    assert.deepEqual(lib.parseConfig(null), { machine: null, stateDir: null, prOwners: [], problems: [] });
+    assert.deepEqual(lib.parseConfig(null), {
+        machine: null,
+        stateDir: null,
+        prOwners: [],
+        refreshSeconds: 60,
+        problems: [],
+    });
     assert.deepEqual(lib.parseConfig('{ "machine": "dev-box", "stateDir": "~/state", "prOwners": ["acme"] }'), {
         machine: "dev-box",
         stateDir: "~/state",
         prOwners: ["acme"],
+        refreshSeconds: 60,
         problems: [],
     });
     assert.equal(lib.parseConfig('{ "prOwners": "acme" }').problems.length, 1);
@@ -582,4 +589,47 @@ test("jig-activity draws a divider after a button that asks for one", async () =
             ["changes", false],
         ],
     );
+});
+
+test("jig-work's compact rows: stages, output folders, recent targets and decisions, missing PR details", async () => {
+    const lib = await load<Record<string, any>>("mods/jig-work/lib.js");
+    const workflow = {
+        name: "feature",
+        current: "build",
+        stages: [{ id: "understand" }, { id: "plan" }, { id: "build", goal: "Round the totals" }, { id: "test" }],
+    };
+    const summary = lib.stageSummary(workflow);
+    assert.equal(summary.text, "build · 3 of 4");
+    assert.match(summary.title, /▸ build — Round the totals/);
+    assert.equal(lib.stageSummary(null), null);
+    assert.equal(lib.stageSummary({ current: "build", stages: [] })?.text, "build · 1 of 1");
+
+    assert.equal(lib.shortFolder("/tmp/demo/work/acme/orders-api"), "acme/orders-api");
+    assert.equal(lib.shortFolder("C:\\Users\\me\\state"), "me/state");
+    assert.equal(lib.shortFolder(""), "");
+
+    assert.equal(lib.recentTarget({ tool: "edit", action: "/tmp/work/src/orders.ts" }), "orders.ts");
+    assert.equal(lib.recentTarget({ tool: "bash", action: "git status" }), "git status");
+    assert.equal(lib.recentTarget({ tool: "read" }), "");
+
+    assert.equal(lib.recentDecision({ decision: "allow", outcome: "ok" }), "", "allow is the default, not shown");
+    assert.equal(lib.recentDecision({ decision: "ask" }), "asked");
+    assert.equal(lib.recentDecision({ decision: "ask", answer: "allow" }), "asked · allow");
+    assert.equal(lib.recentDecision({ decision: "deny", outcome: "blocked" }), "denied");
+    assert.equal(lib.recentDecision({ decision: "allow", answer: "decline" }), "declined");
+    assert.equal(lib.recentDecision(null), "");
+
+    assert.match(
+        lib.recentTooltip({ tool: "edit", action: "orders.ts", decision: "ask", answer: "allow", outcome: "ok" }),
+        /edit orders\.ts · ask \(allow\) · ok/,
+    );
+    assert.equal(lib.missingDetails([{ url: "https://github.com/acme/a/pull/1" }], { at: 1, details: {} }), 1);
+    assert.equal(
+        lib.missingDetails([{ url: "https://github.com/acme/a/pull/1" }], {
+            at: 1,
+            details: { "https://github.com/acme/a/pull/1": {} },
+        }),
+        0,
+    );
+    assert.equal(lib.missingDetails([{ url: "u" }], null), 0);
 });

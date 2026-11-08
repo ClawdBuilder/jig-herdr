@@ -1,30 +1,18 @@
 // Pure helpers of jig-work, kept apart from main.js so they can be tested outside Herdr.
 
-// Run with `sh -c SCRIPT sh <state folder or "">` on the machine where Pi runs. Prints each status file jig-session wrote in
-// <state folder>/sessions with a line before it: "@@file <1 if its pid runs, else 0> <path>". With no folder it uses
-// jig-core's rule: $JIG_STATE_DIR, else ${XDG_STATE_HOME:-~/.local/state}/jig. Reads only; at most 64 files of 256 KiB.
-// (No dollar-brace in here except the escaped ones: this is a JS template string.)
-export const SCRIPT = `base=$1
-case $base in
-  "") base=\${JIG_STATE_DIR:-}
-      if [ -z "$base" ]; then
-        case \${XDG_STATE_HOME:-} in /*) base="$XDG_STATE_HOME/jig";; *) base="$HOME/.local/state/jig";; esac
-      fi;;
-  "~") base=$HOME;;
-  "~/"*) base="$HOME/\${base#\\~/}";;
-esac
-d="$base/sessions"
-printf '@@dir %s\\n' "$d"
-n=0
-for f in "$d"/*.json; do
-  [ -f "$f" ] || continue
-  n=$((n + 1)); [ $n -gt 64 ] && break
-  pid=$(sed -n 's/^ *"pid": *\\([0-9][0-9]*\\).*/\\1/p' "$f" | head -n 1)
-  alive=0
-  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then alive=1; fi
-  printf '\\n@@file %s %s\\n' "$alive" "$f"
-  head -c 262144 "$f"
-done`;
+export {
+    addressOf,
+    changedSince,
+    MTIMES,
+    mergeSessions,
+    parseMtimes,
+    parseSessions,
+    pickSession,
+    READ,
+    SCRIPT,
+    shownAgain,
+    terminalStateChanged,
+} from "./sessions.js";
 
 // Run with `sh -c REPO_SCRIPT sh <path>...`: for each path, a line "path<TAB>repository root<TAB>git status letters".
 // The root is empty outside a repository, the letters empty for a file without changes. Reads only, no locks.
@@ -35,9 +23,10 @@ export const REPO_SCRIPT = `for f in "$@"; do
   printf '%s\\t%s\\t%s\\n' "$f" "$top" "$st"
 done`;
 
-export const DEFAULTS = { machine: null, stateDir: null, prOwners: [] };
+export const DEFAULTS = { machine: null, stateDir: null, prOwners: [], refreshSeconds: 60 };
 
-// config.json as { machine, stateDir, problems }. Anything missing or of the wrong kind takes its default.
+// config.json as { machine, stateDir, prOwners, refreshSeconds, problems }. Anything missing or of the wrong kind takes
+// its default.
 export function parseConfig(text) {
     const config = { ...DEFAULTS, prOwners: [], problems: [] };
     if (text == null || text.trim() === "") return config;
@@ -57,6 +46,11 @@ export function parseConfig(text) {
         if (typeof raw[key] === "string" && raw[key].trim() !== "") config[key] = raw[key].trim();
         else config.problems.push(`"${key}" must be a non-empty string or null`);
     }
+    if (raw.refreshSeconds != null) {
+        if (Number.isInteger(raw.refreshSeconds) && raw.refreshSeconds >= 15 && raw.refreshSeconds <= 86_400)
+            config.refreshSeconds = raw.refreshSeconds;
+        else config.problems.push('"refreshSeconds" must be a whole number from 15 to 86400');
+    }
     if (raw.prOwners != null) {
         const ok =
             Array.isArray(raw.prOwners) && raw.prOwners.every((o) => typeof o === "string" && /^[\w.-]+$/.test(o));
@@ -67,50 +61,14 @@ export function parseConfig(text) {
 }
 
 // The script's output as [{ file, alive, status }]; a file that is not a status of schema 1 is left out.
-export function parseSessions(stdout) {
-    const sessions = [];
-    const parts = stdout.split(/\n@@file /);
-    for (const part of parts.slice(1)) {
-        const nl = part.indexOf("\n");
-        const head = nl < 0 ? part : part.slice(0, nl);
-        const body = nl < 0 ? "" : part.slice(nl + 1);
-        const [alive, ...file] = head.split(" ");
-        let status;
-        try {
-            status = JSON.parse(body);
-        } catch {
-            continue; // being written, or not ours
-        }
-        if (status?.schema !== 1 || typeof status.session !== "string") continue;
-        sessions.push({ file: file.join(" "), alive: alive === "1", status });
-    }
-    return sessions;
-}
 
 // The address Herdr gives the session's terminal: "t7" here, "<machine>/t7" on another machine. Only a terminal named by
 // herdr-core (`terminalFrom` HC_TERMINAL_ID) has one; a tmux pane inside it does not.
-export function addressOf(status, machine) {
-    if (typeof status?.terminal !== "string" || status.terminal === "") return null;
-    if (status.terminalFrom != null && status.terminalFrom !== "HC_TERMINAL_ID") return null;
-    return machine ? `${machine}/${status.terminal}` : status.terminal;
-}
 
 const updated = (s) => Date.parse(s.status.updatedAt ?? "") || 0;
 
 // The session to show: the one whose terminal is focused (or is the agent shown), else the one picked before while it
 // lives, else the one updated last. `live` sessions only; returns { session, by } with by "focus", "picked" or "recent".
-export function pickSession(sessions, { machine = null, focused = null, agent = null, picked = null } = {}) {
-    const live = sessions.filter((s) => s.alive);
-    if (live.length === 0) return { session: null, by: null };
-    for (const address of [focused, agent]) {
-        if (!address) continue;
-        const hit = live.find((s) => addressOf(s.status, machine) === address);
-        if (hit) return { session: hit, by: "focus" };
-    }
-    const kept = picked && live.find((s) => s.status.session === picked);
-    if (kept) return { session: kept, by: "picked" };
-    return { session: [...live].sort((a, b) => updated(b) - updated(a))[0], by: "recent" };
-}
 
 // The stages as a progress line: [{ id, goal, state: "done" | "current" | "todo" }]. A current stage the workflow does not
 // list is added at the end, so the line always shows where the work is.
@@ -227,6 +185,66 @@ export function parseRepoInfo(stdout) {
 // The status file's outputs split for the Outputs list: `files` are the ones outside any git repository (`repo` null), and
 // those of an older status file that has no `repo` field at all, which keep showing as before; `inRepos` counts the ones in a
 // repository, which belong to the Changes panel.
+
+/** The ticket's workflow as one compact chip at narrow widths: "build · 3 of 5", with every stage and goal in `title`. */
+export function stageSummary(workflow, line = stageLine(workflow)) {
+    if (!workflow || line.length === 0) return null;
+    const at = line.findIndex((s) => s.state === "current"),
+        current = line[at]?.id ?? workflow.current;
+    if (!current) return null;
+    const title = line
+        .map(
+            (s) =>
+                `${s.state === "done" ? "✓ " : s.state === "current" ? "▸ " : "  "}${s.id}${s.goal ? ` — ${s.goal}` : ""}`,
+        )
+        .join("\n");
+    return { text: `${current} · ${at + 1} of ${line.length}`, title };
+}
+
+/** The folder shown beside an Output: the last two segments of its parent (a full path would repeat and truncate). */
+export function shortFolder(dir) {
+    const parts = String(dir ?? "")
+        .split(/[\\/]+/)
+        .filter(Boolean);
+    return parts.slice(-2).join("/");
+}
+
+/** A Recent call's target, short: the last segment of a path or the first words of an action. */
+export function recentTarget(r, max = 32) {
+    const said = String(r?.action ?? "").trim();
+    if (!said) return "";
+    const base = said.split(/[\\/]+/).pop() ?? said;
+    return base.length > max ? `${base.slice(0, max - 1)}…` : base;
+}
+
+/** The decision to show on a Recent row: nothing for the default allow, else the ask/deny (and a declined answer). */
+export function recentDecision(r) {
+    if (!r) return "";
+    if (r.answer === "decline" || r.decision === "deny") return r.answer === "decline" ? "declined" : "denied";
+    if (r.decision === "ask") return r.answer ? `asked · ${r.answer}` : "asked";
+    return "";
+}
+
+/** A Recent row's full text for its tooltip: tool, target, decision/answer and outcome. */
+export function recentTooltip(r) {
+    let bits = [String(r?.tool ?? ""), String(r?.action ?? "")].filter(Boolean).join(" ");
+    if (r?.decision) bits += ` · ${r.decision}${r.answer ? ` (${r.answer})` : ""}`;
+    if (r?.outcome) bits += ` · ${r.outcome}`;
+    return bits;
+}
+
+/** The note under the pull requests when their details could not be read, in proper English. */
+export function detailsNote(count) {
+    return count === 1 ? "Details unavailable for 1 pull request." : `Details unavailable for ${count} pull requests.`;
+}
+
+/** How many of the ticket's pull requests have no details yet (the workflow listed them, gh did not answer). */
+export function missingDetails(workflowPrs, cached) {
+    const known = (workflowPrs ?? []).map((p) => p.url).filter(Boolean);
+    if (!cached?.at || known.length === 0) return 0;
+    return known.filter((url) => !cached.details?.[url]).length;
+}
+
 export function splitOutputs(outputs) {
     const files = [];
     let inRepos = 0;
