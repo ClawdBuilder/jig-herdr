@@ -968,7 +968,7 @@ test("the live panel files call the tested seams, not inline copies", () => {
     ])
         assert.ok(wt.includes(seam), seam);
     assert.doesNotMatch(wt, /list\.some\(\s*\(entry\)\s*=>\s*entry\.contextKey/);
-    assert.match(read("repo-prs"), /watchdog\(/);
+    assert.match(read("repo-prs"), /readDeadline\(/);
 });
 
 test("a fresh branch from base and one from origin/develop are not ready; a merged one is", async () => {

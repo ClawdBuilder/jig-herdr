@@ -8,6 +8,8 @@ import {
     MIN_REFRESH_SECONDS,
     RefreshScheduler,
     RefreshState,
+    readDeadline,
+    readTimeoutSeconds,
     refreshSeconds,
     terminalFinished,
 } from "../mods/repo-changes/refresh.js";
@@ -68,6 +70,12 @@ test("every panel calls the shared refresh helper, with no inline copy", () => {
         assert.match(source, /this\.refreshScheduler\.trigger\(/, `${mod}: trigger`);
         assert.match(source, /this\.refreshScheduler\.due\(/, `${mod}: due`);
         assert.match(source, /refreshSeconds\(this\.config/, `${mod}: config`);
+        assert.match(source, /readDeadline\(/, `${mod}: deadline`);
+        assert.match(source, /readTimeoutSeconds\(this\.config/, `${mod}: read timeout`);
+        assert.match(source, /timeout/, `${mod}: shell timeout`);
+        assert.match(source, /refreshState\.finish\(\)/, `${mod}: finish`);
+        const finish = source.indexOf("refreshState.finish()");
+        assert.ok(source.indexOf("refreshScheduler.trigger()", finish) > finish, `${mod}: queued trigger`);
         assert.doesNotMatch(source, /EVERY\s*=\s*5000|BUSY_AFTER_MS|setTimeout\([^)]*400/, `${mod}: inline timer`);
     }
 });
@@ -82,7 +90,18 @@ test("every panel starts its first read from the constructor, not the timer", ()
     }
 });
 
-test("every panel carries the same checked copy of the refresh helper", () => {
+test("a hung read ends at its deadline and the panel can start another", async () => {
+    const state = new RefreshState();
+    assert.equal(state.start(), true);
+    await assert.rejects(readDeadline(new Promise(() => {}), 0.01), /Reading timed out after 0.01 s/);
+    assert.equal(state.finish(), false);
+    assert.equal(state.start(), true);
+    state.finish();
+    assert.equal(readTimeoutSeconds(0), 1);
+    assert.equal(readTimeoutSeconds({ readTimeoutSeconds: 20 }), 20);
+});
+
+test("every panel starts its first read from the constructor, not the timer", () => {
     const root = new URL("../mods/", import.meta.url);
     const source = readFileSync(new URL("repo-changes/refresh.js", root), "utf8");
     for (const mod of ["repo-history", "repo-prs", "repo-worktrees"])
@@ -90,7 +109,7 @@ test("every panel carries the same checked copy of the refresh helper", () => {
 });
 
 test("no sweep happens without a trigger before the backstop, and the backstop sweeps once", () => {
-    let now = 0;
+    const now = 0;
     const scheduler = new RefreshScheduler({ seconds: 60, now: () => now });
     assert.equal(scheduler.due(59_000), false);
     assert.equal(scheduler.due(60_000), true);
@@ -99,7 +118,7 @@ test("no sweep happens without a trigger before the backstop, and the backstop s
 });
 
 test("a burst of five triggers inside the debounce makes one sweep", () => {
-    let now = 0;
+    const now = 0;
     const scheduler = new RefreshScheduler({ seconds: 60, now: () => now });
     for (const at of [0, 100, 200, 300, 400]) scheduler.trigger(at);
     assert.equal(scheduler.due(DEBOUNCE_MS - 1), false);

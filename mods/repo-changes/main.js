@@ -220,6 +220,8 @@ export default class RepoChanges extends View {
         this.targetsLoading = false;
         this.refreshState = new RefreshState();
         this.refreshScheduler = new RefreshScheduler({ seconds: refreshSeconds(this.config) });
+        this.readTimeoutSeconds = readTimeoutSeconds(this.config);
+        this.readGeneration = 0;
         this.lastTerminals = terminals();
         this.windowActive = window()?.active === true;
         this.width = 0;
@@ -296,6 +298,7 @@ export default class RepoChanges extends View {
             const text = await readTextFile(`${appHome()}/mods/repo-changes/config.json`).catch(() => null);
             this.config = parseConfig(text);
             this.refreshScheduler.setSeconds(refreshSeconds(this.config));
+            this.readTimeoutSeconds = readTimeoutSeconds(this.config);
             cx.notify();
         });
     }
@@ -387,11 +390,15 @@ export default class RepoChanges extends View {
         if (!this.refreshState.start({ user, first: !this.repos, notify: () => cx.notify() })) return;
         this.refreshScheduler.sweep();
         this.loading = true;
+        const run = ++this.readGeneration;
+        const seconds = this.readTimeoutSeconds;
         const targets = full ? "" : this.visibleTargets();
+        const command = `if command -v timeout >/dev/null 2>&1; then exec timeout ${seconds} sh -c "$1" sh "$2" "$3"; fi; exec sh -c "$1" sh "$2" "$3"`;
         cx.spawn(async (cx) => {
+            let timedOut = false;
             try {
-                const r = await exec("sh", ["-c", SCRIPT, "sh", root, targets], { on });
-                if (context !== this.context) return;
+                const r = await readDeadline(exec("sh", ["-c", command, "sh", SCRIPT, root, targets], { on }), seconds);
+                if (run !== this.readGeneration || context !== this.context) return;
                 if (r.code !== 0) throw new Error((r.stderr || `exit ${r.code}`).trim().split("\n")[0]);
                 this.repos = parseRepos(r.stdout, root);
                 this.error = null;
@@ -399,13 +406,18 @@ export default class RepoChanges extends View {
                 this.switching = false;
                 badge(this.repos.filter((x) => x.files.length).length);
             } catch (e) {
-                if (context === this.context) this.error = String(e?.message ?? e).split("\n")[0];
+                if (run !== this.readGeneration) return;
+                timedOut = String(e?.message ?? e).includes("Reading timed out");
+                if (timedOut) this.readGeneration++;
+                else if (context === this.context) this.error = String(e?.message ?? e).split("\n")[0];
             } finally {
-                this.loading = false;
-                const again = this.refreshState.finish();
-                this.last = again ? 0 : Date.now();
-                if (again) this.refreshScheduler.trigger();
-                cx.notify();
+                if (run === this.readGeneration || timedOut) {
+                    this.loading = false;
+                    const again = this.refreshState.finish();
+                    this.last = again ? 0 : Date.now();
+                    if (again) this.refreshScheduler.trigger();
+                    cx.notify();
+                }
             }
         });
         cx.notify();

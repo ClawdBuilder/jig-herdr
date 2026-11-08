@@ -148,6 +148,8 @@ export default class RepoWorktrees extends View {
         this.refreshState = new RefreshState();
         this.configAt = 0;
         this.refreshScheduler = new RefreshScheduler({ seconds: refreshSeconds(this.config) });
+        this.readTimeoutSeconds = readTimeoutSeconds(this.config);
+        this.readGeneration = 0;
         this.seen = false;
         this.lastTerminals = terminals();
         this.windowActive = window()?.active === true;
@@ -218,6 +220,7 @@ export default class RepoWorktrees extends View {
                 this.config = {};
             }
             this.refreshScheduler.setSeconds(refreshSeconds(this.config));
+            this.readTimeoutSeconds = readTimeoutSeconds(this.config);
             cx.notify();
         });
     }
@@ -232,26 +235,38 @@ export default class RepoWorktrees extends View {
         this.refreshScheduler.sweep();
         this.loading = true;
         this.triedAt = started;
+        const run = ++this.readGeneration;
+        const seconds = this.readTimeoutSeconds;
         cx.spawn(async (cx) => {
+            let timedOut = false;
             try {
-                const result = await exec("sh", ["-c", SCRIPT, "sh", root], { on });
-                if (contextKey !== this.contextKey) return;
-                if (result.code !== 0) throw new Error((result.stderr || `exit ${result.code}`).trim().split("\n")[0]);
-                const parsed = parseTrees(result.stdout);
-                this.single = parsed.single;
-                this.trees = parsed.trees;
-                this.error = null;
-                this.loadedAt = Date.now();
-                this.tookMs = this.loadedAt - started;
+                const work = (async () => {
+                    const result = await exec("timeout", [String(seconds), "sh", "-c", SCRIPT, "sh", root], { on });
+                    if (run !== this.readGeneration || contextKey !== this.contextKey) return;
+                    if (result.code !== 0)
+                        throw new Error((result.stderr || `exit ${result.code}`).trim().split("\n")[0]);
+                    const parsed = parseTrees(result.stdout);
+                    this.single = parsed.single;
+                    this.trees = parsed.trees;
+                    this.error = null;
+                    this.loadedAt = Date.now();
+                    this.tookMs = this.loadedAt - started;
+                })();
+                await readDeadline(work, seconds);
             } catch (e) {
-                if (contextKey === this.contextKey) this.error = friendly(e?.message ?? e);
+                if (run !== this.readGeneration) return;
+                timedOut = String(e?.message ?? e).includes("Reading timed out");
+                if (timedOut) this.readGeneration++;
+                else if (contextKey === this.contextKey) this.error = friendly(e?.message ?? e);
             } finally {
-                this.loading = false;
-                if (this.refreshState.finish()) {
-                    this.triedAt = 0;
-                    this.refreshScheduler.trigger();
+                if (run === this.readGeneration || timedOut) {
+                    this.loading = false;
+                    if (this.refreshState.finish()) {
+                        this.triedAt = 0;
+                        this.refreshScheduler.trigger();
+                    }
+                    cx.notify();
                 }
-                cx.notify();
             }
         });
         cx.notify();

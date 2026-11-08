@@ -194,6 +194,8 @@ export default class RepoHistory extends View {
         this.refreshState = new RefreshState();
         this.configAt = 0;
         this.refreshScheduler = new RefreshScheduler({ seconds: refreshSeconds(this.config) });
+        this.readTimeoutSeconds = readTimeoutSeconds(this.config);
+        this.readGeneration = 0;
         this.seen = false;
         this.lastTerminals = terminals();
         this.windowActive = window()?.active === true;
@@ -285,9 +287,14 @@ export default class RepoHistory extends View {
         const contextKey = this.contextKey;
         this.loadingRepos = true;
         this.reposAt = Date.now();
+        const run = ++this.readGeneration;
+        const seconds = this.readTimeoutSeconds;
+        const command = `if command -v timeout >/dev/null 2>&1; then exec timeout ${seconds} sh -c "$1" sh "$2"; fi; exec sh -c "$1" sh "$2"`;
         cx.spawn(async (cx) => {
+            let timedOut = false;
             try {
-                const result = await exec("sh", ["-c", SCRIPT, "sh", root], { on });
+                const result = await readDeadline(exec("sh", ["-c", command, "sh", SCRIPT, root], { on }), seconds);
+                if (run !== this.readGeneration) return;
                 if (contextKey !== this.contextKey) return;
                 if (result.code !== 0) throw new Error((result.stderr || `exit ${result.code}`).trim().split("\n")[0]);
                 const { single, repos } = parseRepos(result.stdout);
@@ -309,10 +316,15 @@ export default class RepoHistory extends View {
                 }
                 if (initial && this.repo) this.loadLog(cx);
             } catch (e) {
-                if (contextKey === this.contextKey) this.reposError = String(e?.message ?? e).split("\n")[0];
+                if (run !== this.readGeneration) return;
+                timedOut = String(e?.message ?? e).includes("Reading timed out");
+                if (timedOut) this.readGeneration++;
+                else if (contextKey === this.contextKey) this.reposError = String(e?.message ?? e).split("\n")[0];
             } finally {
-                this.loadingRepos = false;
-                cx.notify();
+                if (run === this.readGeneration || timedOut) {
+                    this.loadingRepos = false;
+                    cx.notify();
+                }
             }
         });
         cx.notify();
@@ -432,6 +444,7 @@ export default class RepoHistory extends View {
                 this.config = {};
             }
             this.refreshScheduler.setSeconds(refreshSeconds(this.config));
+            this.readTimeoutSeconds = readTimeoutSeconds(this.config);
             cx.notify();
         });
     }
@@ -456,12 +469,19 @@ export default class RepoHistory extends View {
         this.refreshScheduler.sweep();
         this.loading = true;
         const generation = ++this.generation;
+        const run = ++this.readGeneration;
+        const seconds = this.readTimeoutSeconds;
         cx.spawn(async (cx) => {
+            let timedOut = false;
             try {
-                const [log, status] = await Promise.all([
-                    exec("git", logArgs, { cwd, on }),
-                    exec("git", statusArgs, { cwd, on }),
-                ]);
+                const [log, status] = await readDeadline(
+                    Promise.all([
+                        exec("timeout", [String(seconds), "git", ...logArgs], { cwd, on }),
+                        exec("timeout", [String(seconds), "git", ...statusArgs], { cwd, on }),
+                    ]),
+                    seconds,
+                );
+                if (run !== this.readGeneration) return;
                 if (key !== this.logKey()) return;
                 if (log.code !== 0) {
                     this.commits = null;
@@ -475,16 +495,23 @@ export default class RepoHistory extends View {
                 this.logAt = Date.now();
                 this.logFor = key;
             } catch (e) {
-                this.error = String(e?.message ?? e);
-                this.logAt = Date.now();
-                this.logFor = key;
-            } finally {
-                this.loading = false;
-                if (this.refreshState.finish()) {
-                    this.logAt = 0;
-                    this.refreshScheduler.trigger();
+                if (run !== this.readGeneration) return;
+                timedOut = String(e?.message ?? e).includes("Reading timed out");
+                if (timedOut) this.readGeneration++;
+                else {
+                    this.error = String(e?.message ?? e);
+                    this.logAt = Date.now();
+                    this.logFor = key;
                 }
-                cx.notify();
+            } finally {
+                if (run === this.readGeneration || timedOut) {
+                    this.loading = false;
+                    if (this.refreshState.finish()) {
+                        this.logAt = 0;
+                        this.refreshScheduler.trigger();
+                    }
+                    cx.notify();
+                }
             }
         });
         cx.notify();
