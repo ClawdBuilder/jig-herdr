@@ -23,39 +23,96 @@ import {
     setShared,
     shared,
     spaces,
+    terminals,
     theme,
     window,
 } from "herdr";
 import {
     addressOf,
+    changedSince,
     clock,
     decisionText,
     folderName,
     isShown,
+    MTIMES,
+    mergeSessions,
+    missingDetails,
     parseConfig,
+    parseMtimes,
     parseRepoInfo,
     parseSessions,
     pickSession,
     prRows,
+    READ,
     REPO_SCRIPT,
     REVIEW,
+    recentDecision,
+    recentTarget,
+    recentTooltip,
     reposLine,
     reviewTarget,
     SCRIPT,
     searchArgs,
     short,
+    shortFolder,
     splitOutputs,
     splitPath,
     stageLine,
+    stageSummary,
+    terminalStateChanged,
 } from "./lib.js";
+import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds } from "./refresh.js";
 
-const EVERY_MS = 2000; // status files, while on screen
+const MTIME_MS = 3000; // while the followed session works: a cheap mtime check
 const REPO_MS = 30000; // which outputs have changes in a repository
 const PR_MS = 5 * 60000; // pull requests, per ticket
 const MODS_MS = 30000; // whether file-view and repo-review are installed
 const SEARCH = "number,title,url,state,isDraft,repository,updatedAt";
 const VIEW = "title,state,isDraft,reviewDecision,statusCheckRollup";
 const ICON = (name) => `mods/workspace-chrome/${name}.svg`;
+const OWN = (name) => `mods/jig-work/${name}.svg`;
+
+// A 22x20 icon button for the header, like the Changes panel's.
+function iconButton(t, id, icon, tip, onClick, disabled = false, busy = false) {
+    return div()
+        .id(id)
+        .flex_none()
+        .w(22)
+        .h(20)
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(5)
+        .text_color(disabled || busy ? t.dim : t.muted)
+        .when(disabled, (el) => el.opacity(0.45))
+        .when(busy, (el) => el.opacity(0.6))
+        .when(!disabled, (el) =>
+            el
+                .cursor_pointer()
+                .hover((s) => s.bg(t.raised).text_color(t.foreground))
+                .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+                .on_click((_e, cx) => {
+                    cx.stop_propagation();
+                    onClick(cx);
+                }),
+        )
+        .tooltip(tip)
+        .child(svg(icon).size(13));
+}
+
+function saveFolds(folds) {
+    try {
+        localStorage.setItem("folds", JSON.stringify(folds));
+    } catch {}
+}
+
+function readFolds() {
+    try {
+        return { outputs: true, recent: true, ...JSON.parse(localStorage.getItem("folds") ?? "{}") };
+    } catch {
+        return { outputs: true, recent: true };
+    }
+}
 
 const readCache = () => {
     try {
@@ -94,6 +151,18 @@ export default class JigWork extends View {
         this.opening = [];
         this.warned = new Set();
         this.home = null;
+        this.loaded = false;
+        this.mtimes = {};
+        this.mtimeAt = 0;
+        this.checking = false;
+        this.refreshState = new RefreshState();
+        this.refreshScheduler = new RefreshScheduler({ seconds: refreshSeconds(this.config) });
+        this.lastTerminals = terminals();
+        this.windowActive = window()?.active === true;
+        this.selectedId = undefined;
+        this.width = 0;
+        this.folds = readFolds();
+        this.recentAll = false;
         cx.timer.every(1000, (cx) => this.tick(cx));
     }
 
@@ -120,59 +189,102 @@ export default class JigWork extends View {
     }
 
     // Once a second, never from render: claim opened tabs, and load only while the panel is on screen.
+    // Once a second: the events that make the panel read (focus/session change, window focus, the followed terminal's
+    // Herdr status), the backstop, and a cheap mtime check while the session works. No 2 s body polling.
     tick(cx) {
         this.claim();
         if (!isShown(layout(), "jig-work")) return;
         const now = Date.now();
         if (now - this.modsAt > MODS_MS) this.checkMods(cx);
-        if (!this.loading && now - this.loadedAt >= EVERY_MS) this.load(cx);
-        const { session } = this.current();
-        if (!session) return;
-        this.loadRepos(cx, session.status);
-        this.loadPrs(cx, session.status);
+        const current = this.current(),
+            id = current.session?.status.session ?? null;
+        if (id !== this.selectedId) {
+            if (this.selectedId !== undefined) this.mtimes = {};
+            this.selectedId = id;
+            if (id) this.refreshScheduler.trigger();
+            cx.notify();
+        }
+        if (!this.loaded && !this.loading) this.refreshScheduler.trigger();
+        const active = window()?.active === true;
+        if (focusRegained(this.windowActive, active)) this.refreshScheduler.trigger();
+        this.windowActive = active;
+        const currentTerminals = terminals(),
+            address = current.session ? addressOf(current.session.status, this.machine()) : null;
+        if (terminalStateChanged(this.lastTerminals, currentTerminals, address)) this.refreshScheduler.trigger();
+        this.lastTerminals = currentTerminals;
+        if (!this.loading && this.refreshScheduler.due()) this.readAll(cx, false, this.refreshScheduler.isBackstop());
+        if (current.session) {
+            this.loadRepos(cx, current.session.status);
+            this.loadPrs(cx, current.session.status);
+            this.checkMtimes(cx, current.session);
+        }
     }
 
-    checkMods(cx) {
-        this.modsAt = Date.now();
-        cx.spawn(async (cx) => {
-            let changed = false;
-            for (const mod of Object.keys(this.mods)) {
-                const there = (await readTextFile(`${appHome()}/mods/${mod}/mod.json`)) !== null;
-                if (this.mods[mod] !== there) changed = true;
-                this.mods[mod] = there;
-            }
-            if (changed) cx.notify();
-        });
-    }
-
-    load(cx) {
+    /** A full read of every status file: an event, the backstop, or a click. Background runs are silent. */
+    readAll(cx, user = false) {
+        if (!this.refreshState.start({ user, first: !this.loaded, notify: () => cx.notify() })) return;
+        this.refreshScheduler.sweep();
         this.loading = true;
+        const on = this.machine();
         cx.spawn(async (cx) => {
             try {
                 const config = parseConfig(await readTextFile(`${appHome()}/mods/jig-work/config.json`));
-                for (const p of config.problems) this.warn(p);
+                for (const problem of config.problems) this.warn(problem);
                 this.config = config;
-                const on = this.machine();
+                this.refreshScheduler.setSeconds(refreshSeconds(config));
                 const r = await exec("sh", ["-c", SCRIPT, "sh", config.stateDir ?? ""], { on });
-                if (r.stdout === this.raw && this.error === null) return;
+                if (r.code !== 0) throw new Error((r.stderr || `exit ${r.code}`).trim().split("\n")[0]);
                 this.raw = r.stdout;
                 this.dir = /^@@dir (.*)$/m.exec(r.stdout)?.[1] ?? null;
                 this.sessions = parseSessions(r.stdout);
                 this.error = null;
+                this.loaded = true;
+                this.mtimes = await this.readMtimes();
                 if (this.home === null) {
                     const h = await exec("sh", ["-c", 'printf %s "$HOME"'], { on }).catch(() => null);
                     this.home = h?.stdout ?? "";
                 }
-                cx.notify();
             } catch (e) {
-                const message = String(e?.message ?? e);
-                if (message !== this.error) {
-                    this.error = message;
-                    cx.notify();
-                }
+                this.error = String(e?.message ?? e).split("\n")[0];
             } finally {
                 this.loading = false;
-                this.loadedAt = Date.now();
+                const again = this.refreshState.finish();
+                if (again) this.refreshScheduler.trigger();
+                cx.notify();
+            }
+        });
+    }
+
+    async readMtimes() {
+        const r = await exec("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], { on: this.machine() }).catch(
+            () => null,
+        );
+        return r?.code === 0 ? parseMtimes(r.stdout) : {};
+    }
+
+    /** While the followed session works, every 3 s: only the status files whose mtime moved are read. */
+    checkMtimes(cx, session) {
+        if (this.loading || this.checking || session?.status.state !== "busy") return;
+        const now = Date.now();
+        if (now - this.mtimeAt < MTIME_MS) return;
+        this.mtimeAt = now;
+        this.checking = true;
+        const on = this.machine();
+        cx.spawn(async (cx) => {
+            try {
+                const r = await exec("sh", ["-c", MTIMES, "sh", this.config.stateDir ?? ""], { on }).catch(() => null);
+                if (r?.code !== 0) return;
+                const next = parseMtimes(r.stdout),
+                    files = changedSince(this.mtimes, next);
+                this.mtimes = next;
+                if (files.length === 0) return;
+                const read = await exec("sh", ["-c", READ, "sh", ...files], { on }).catch(() => null);
+                if (read?.code !== 0) return;
+                this.sessions = mergeSessions(this.sessions, parseSessions(read.stdout), Object.keys(next));
+                this.error = null;
+                cx.notify();
+            } finally {
+                this.checking = false;
             }
         });
     }
@@ -316,33 +428,34 @@ export default class JigWork extends View {
             .when(extra != null, (el) => el.child(div().text_color(t.dim).font_normal().child(String(extra))));
     }
 
-    header(t, s, live, by) {
-        const st = s.status;
-        const model = st.model?.name ?? st.model?.id ?? "no model";
-        const busy = st.state === "busy";
-        return v_flex()
-            .px(14)
-            .py(10)
-            .gap(4)
+    // The pinned 42 px header: title left; state, session picker and the refresh button right.
+    topBar(t, cx, s, live, by) {
+        const st = s?.status ?? null,
+            busy = st?.state === "busy",
+            narrow = this.width > 0 && this.width < 380;
+        return h_flex()
+            .h(42)
+            .flex_none()
+            .px(12)
+            .gap(7)
+            .items_center()
             .border_b(1)
             .border_color(t.border)
+            .child(div().flex_none().text_color(t.accent).font_semibold().child("π"))
             .child(
-                h_flex()
-                    .gap(8)
-                    .items_center()
-                    .text_size(13)
-                    .child(div().text_color(t.accent).font_semibold().child("π"))
-                    .child(
-                        div().flex_none().font_semibold().text_color(t.foreground).child(folderName(st.cwd, this.home)),
-                    )
-                    .child(div().text_color(t.dim).child("·"))
-                    .child(div().min_w(0).truncate().text_color(t.muted).child(model))
-                    .when(Boolean(st.thinking) && st.thinking !== "off", (el) =>
-                        el.child(div().flex_none().text_color(t.dim).child(st.thinking)),
-                    )
-                    .child(div().flex_1())
+                div()
+                    .flex_1()
+                    .min_w(0)
+                    .truncate()
+                    .font_semibold()
+                    .tooltip(st?.cwd ?? "The Pi session in focus")
+                    .child(st ? folderName(st.cwd, this.home) : "Work"),
+            )
+            .when(Boolean(st), (el) =>
+                el
                     .child(
                         div()
+                            .flex_none()
                             .size(7)
                             .rounded(4)
                             .bg(busy ? t.working : t.idle),
@@ -355,43 +468,141 @@ export default class JigWork extends View {
                             .child(busy ? "working" : "idle"),
                     ),
             )
+            .when(live.length > 1, (el) =>
+                el.child(
+                    div()
+                        .id("jw-picker")
+                        .flex_none()
+                        .h(22)
+                        .px(7)
+                        .flex()
+                        .items_center()
+                        .gap(4)
+                        .rounded(5)
+                        .border(1)
+                        .border_color(t.border)
+                        .text_size(11)
+                        .text_color(t.muted)
+                        .cursor_pointer()
+                        .hover((x) => x.bg(t.hover).text_color(t.foreground))
+                        .tooltip("Choose the session shown")
+                        .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+                        .on_click((_e, cx) => {
+                            cx.stop_propagation();
+                            this.pickerOpen = !this.pickerOpen;
+                            cx.notify();
+                        })
+                        .child(narrow ? String(live.length) : `${live.length} sessions`)
+                        .child(svg(ICON("chevron-down")).size(10)),
+                ),
+            )
             .child(
-                h_flex()
-                    .gap(10)
+                iconButton(
+                    t,
+                    "jw-refresh",
+                    OWN("refresh"),
+                    this.refreshState.busy ? "Reading the session…" : "Read the session again",
+                    (cx) => this.readAll(cx, true),
+                    false,
+                    this.refreshState.busy,
+                ),
+            );
+    }
+
+    // The pinned second line: model, thinking, context, cost, terminal and whether this is the focused session.
+    infoBar(t, s, by) {
+        const st = s.status,
+            model = st.model?.name ?? st.model?.id ?? "no model",
+            narrow = this.width > 0 && this.width < 380;
+        return h_flex()
+            .h(26)
+            .flex_none()
+            .px(14)
+            .gap(10)
+            .items_center()
+            .text_size(11)
+            .text_color(t.dim)
+            .child(div().min_w(0).truncate().child(model))
+            .when(Boolean(st.thinking) && st.thinking !== "off" && !narrow, (el) =>
+                el.child(div().flex_none().child(st.thinking)),
+            )
+            .when(st.context?.percent != null, (el) =>
+                el.child(
+                    div()
+                        .flex_none()
+                        .child(`context ${Math.round(st.context.percent)}% of ${short(st.context.window)}`),
+                ),
+            )
+            .when(st.usage?.cost != null && !narrow, (el) =>
+                el.child(
+                    div()
+                        .flex_none()
+                        .child(`$${st.usage.cost.toFixed(2)}`),
+                ),
+            )
+            .when(Boolean(st.terminal) && this.width >= 360, (el) => el.child(div().flex_none().child(st.terminal)))
+            .when(by !== "focus", (el) =>
+                el.child(
+                    div()
+                        .flex_none()
+                        .text_color(t.muted)
+                        .child(by === "picked" ? "picked" : "last active"),
+                ),
+            );
+    }
+
+    /** A section header that folds its list, like Context's. */
+    section(t, key, label, count) {
+        const open = this.folds[key] !== false;
+        return h_flex()
+            .id(`jw-sec-${key}`)
+            .h(28)
+            .px(14)
+            .mt(6)
+            .gap(6)
+            .items_center()
+            .text_size(10.5)
+            .font_semibold()
+            .text_color(t.dim)
+            .cursor_pointer()
+            .hover((x) => x.text_color(t.foreground))
+            .on_click((_e, cx) => {
+                this.folds[key] = !open;
+                saveFolds(this.folds);
+                cx.notify();
+            })
+            .child(
+                div()
+                    .w(10)
+                    .child(open ? "▾" : "▸"),
+            )
+            .child(label)
+            .when(count != null, (el) => el.child(div().font_normal().child(String(count))));
+    }
+
+    /** The stage line as one chip at narrow widths, with every stage in its tooltip. */
+    stageChip(t, workflow) {
+        const summary = stageSummary(workflow);
+        if (!summary) return div();
+        return h_flex()
+            .px(14)
+            .pt(8)
+            .pb(2)
+            .child(
+                div()
+                    .h(20)
+                    .px(7)
+                    .rounded(10)
+                    .flex()
                     .items_center()
-                    .text_size(11.5)
-                    .text_color(t.dim)
-                    .when(st.context?.percent != null, (el) =>
-                        el.child(
-                            div().child(`context ${Math.round(st.context.percent)}% of ${short(st.context.window)}`),
-                        ),
-                    )
-                    .when(st.usage?.cost != null, (el) => el.child(div().child(`$${st.usage.cost.toFixed(2)}`)))
-                    .when(Boolean(st.terminal), (el) => el.child(div().child(st.terminal)))
-                    .when(by !== "focus", (el) =>
-                        el.child(
-                            div()
-                                .text_color(t.muted)
-                                .child(by === "picked" ? "picked" : "last active"),
-                        ),
-                    )
-                    .child(div().flex_1())
-                    .when(live.length > 1, (el) =>
-                        el.child(
-                            div()
-                                .id("jw-picker")
-                                .px(6)
-                                .rounded(4)
-                                .cursor_pointer()
-                                .text_color(t.muted)
-                                .hover((x) => x.bg(t.hover).text_color(t.foreground))
-                                .on_click((_e, cx) => {
-                                    this.pickerOpen = !this.pickerOpen;
-                                    cx.notify();
-                                })
-                                .child(`${live.length} sessions ▾`),
-                        ),
-                    ),
+                    .text_size(11)
+                    .border(1)
+                    .border_color(t.accent)
+                    .bg(t.accent)
+                    .text_color(t.accent_foreground)
+                    .font_semibold()
+                    .tooltip(summary.title)
+                    .child(summary.text),
             );
     }
 
@@ -479,7 +690,9 @@ export default class JigWork extends View {
                             .child(k.title ?? ""),
                     ),
             )
-            .when(line.length > 0, (el) => el.child(this.stages(t, line)))
+            .when(line.length > 0, (el) =>
+                el.child(this.width > 0 && this.width < 420 ? this.stageChip(t, st.workflow) : this.stages(t, line)),
+            )
             .when(Boolean(st.workflow?.problem), (el) =>
                 el.child(div().px(14).pt(4).text_size(11.5).text_color(t.blocked).child(st.workflow.problem)),
             );
@@ -537,16 +750,28 @@ export default class JigWork extends View {
                 this.heading(t, "PULL REQUESTS", rows.length || null)
                     .child(div().flex_1())
                     .child(
-                        div()
-                            .id("jw-pr-refresh")
-                            .cursor_pointer()
-                            .text_color(t.dim)
-                            .hover((s) => s.text_color(t.foreground))
-                            .on_click((_e, cx) => this.loadPrs(cx, st, true))
-                            .child(this.prLoading ? "…" : "Refresh"),
+                        iconButton(
+                            t,
+                            "jw-pr-refresh",
+                            OWN("refresh"),
+                            this.prLoading ? "Reading the pull requests…" : "Refresh the pull requests",
+                            (cx) => this.loadPrs(cx, st, true),
+                            false,
+                            this.prLoading,
+                        ),
                     ),
             )
-            .child(body);
+            .child(body)
+            .when(missingDetails(st.workflow?.prs, cached) > 0, (el) =>
+                el.child(
+                    div()
+                        .px(14)
+                        .pt(2)
+                        .text_size(11.5)
+                        .text_color(t.dim)
+                        .child(`Details unavailable for ${missingDetails(st.workflow?.prs, cached)} pull request(s).`),
+                ),
+            );
     }
 
     pull(t, r, i) {
@@ -647,137 +872,176 @@ export default class JigWork extends View {
     }
 
     outputs(t, st) {
-        const { files: list, inRepos } = splitOutputs(st.outputs);
-        const line = reposLine(inRepos);
+        const { files: list, inRepos } = splitOutputs(st.outputs),
+            line = reposLine(inRepos),
+            open = this.folds.outputs !== false;
         return v_flex()
-            .child(this.heading(t, "OUTPUTS", list.length || null))
-            .when(list.length === 0, (el) =>
-                el.child(div().px(14).text_size(12).text_color(t.dim).child("No ticket files yet")),
-            )
-            .children(
-                list.map((o, i) => {
-                    const { dir, name } = splitPath(o.path);
-                    const info = this.repoInfo[o.path];
-                    const target = info?.status && this.mods["repo-review"] ? reviewTarget(o.path, info) : null;
-                    const created = o.action === "created";
-                    return h_flex()
-                        .id(`jw-out-${i}`)
-                        .h(26)
-                        .px(14)
-                        .gap(8)
-                        .items_center()
-                        .text_size(12.5)
-                        .cursor_pointer()
-                        .hover((s) => s.bg(t.hover))
-                        .tooltip(o.path)
-                        .on_click(() => this.openFile(o.path))
-                        .child(
+            .child(this.section(t, "outputs", "OUTPUTS", list.length))
+            .when(open, (el) =>
+                el
+                    .when(list.length === 0, (x) =>
+                        x.child(div().px(14).text_size(12).text_color(t.dim).child("No ticket files yet")),
+                    )
+                    .children(
+                        list.map((o, i) => {
+                            const { dir, name } = splitPath(o.path);
+                            const info = this.repoInfo[o.path];
+                            const target = info?.status && this.mods["repo-review"] ? reviewTarget(o.path, info) : null;
+                            const created = o.action === "created";
+                            return h_flex()
+                                .id(`jw-out-${i}`)
+                                .h(26)
+                                .px(14)
+                                .gap(8)
+                                .items_center()
+                                .text_size(12.5)
+                                .cursor_pointer()
+                                .hover((s) => s.bg(t.hover))
+                                .tooltip(o.path)
+                                .on_click(() => this.openFile(o.path))
+                                .child(
+                                    div()
+                                        .w(12)
+                                        .flex_none()
+                                        .font_semibold()
+                                        .text_color(created ? t.ansi2 : t.blocked)
+                                        .child(created ? "A" : "M"),
+                                )
+                                .child(div().flex_none().text_color(t.foreground).child(name))
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .min_w(0)
+                                        .truncate()
+                                        .text_size(11.5)
+                                        .text_color(t.dim)
+                                        .child(shortFolder(dir)),
+                                )
+                                .when(Boolean(target), (x) =>
+                                    x.child(
+                                        div()
+                                            .id(`jw-diff-${i}`)
+                                            .flex_none()
+                                            .size(22)
+                                            .rounded(4)
+                                            .flex()
+                                            .items_center()
+                                            .justify_center()
+                                            .text_color(t.muted)
+                                            .hover((s) => s.bg(t.raised).text_color(t.accent))
+                                            .tooltip(`Diff in Review · ${target.name}`)
+                                            .on_click((_e, cx) => {
+                                                cx.stop_propagation();
+                                                this.openReview(target);
+                                            })
+                                            .child(svg(ICON("git-compare")).size(14)),
+                                    ),
+                                )
+                                .child(div().flex_none().text_size(11).text_color(t.dim).child(clock(o.at)));
+                        }),
+                    )
+                    .when(line !== "", (x) =>
+                        x.child(
                             div()
-                                .w(12)
-                                .flex_none()
-                                .font_semibold()
-                                .text_color(created ? t.ansi2 : t.blocked)
-                                .child(created ? "A" : "M"),
-                        )
-                        .child(div().flex_none().text_color(t.foreground).child(name))
-                        .child(div().min_w(0).truncate().text_size(11.5).text_color(t.dim).child(dir))
-                        .child(div().flex_1())
-                        .when(Boolean(target), (el) =>
-                            el.child(
-                                div()
-                                    .id(`jw-diff-${i}`)
-                                    .flex_none()
-                                    .size(22)
-                                    .rounded(4)
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .text_color(t.muted)
-                                    .hover((s) => s.bg(t.raised).text_color(t.accent))
-                                    .tooltip(`Diff in Review · ${target.name}`)
-                                    .on_click((_e, cx) => {
-                                        cx.stop_propagation();
-                                        this.openReview(target);
-                                    })
-                                    .child(svg(ICON("git-compare")).size(14)),
-                            ),
-                        )
-                        .child(div().flex_none().text_size(11).text_color(t.dim).child(clock(o.at)));
-                }),
-            )
-            .when(line !== "", (el) =>
-                el.child(
-                    div()
-                        .id("jw-out-repos")
-                        .h(26)
-                        .px(14)
-                        .flex()
-                        .items_center()
-                        .text_size(11.5)
-                        .text_color(t.dim)
-                        .cursor_pointer()
-                        .hover((s) => s.bg(t.hover).text_color(t.accent))
-                        .tooltip("Show the Changes panel")
-                        .on_click(() => this.showChanges())
-                        .child(line),
-                ),
+                                .id("jw-out-repos")
+                                .h(26)
+                                .px(14)
+                                .flex()
+                                .items_center()
+                                .text_size(11.5)
+                                .text_color(t.dim)
+                                .cursor_pointer()
+                                .hover((s) => s.bg(t.hover).text_color(t.accent))
+                                .tooltip("Show the Changes panel")
+                                .on_click(() => this.showChanges())
+                                .child(line),
+                        ),
+                    ),
             );
     }
 
     recent(t, st) {
-        const list = st.recent ?? [];
-        const tone = { ok: t.ansi2, error: t.ansi1, blocked: t.blocked, running: t.working };
+        const list = st.recent ?? [],
+            open = this.folds.recent !== false,
+            shown = this.recentAll ? list : list.slice(0, 5),
+            tone = { ok: t.ansi2, error: t.ansi1, blocked: t.blocked, running: t.working };
         return v_flex()
-            .child(this.heading(t, "RECENT", list.length || null))
-            .when(list.length === 0, (el) =>
-                el.child(div().px(14).text_size(12).text_color(t.dim).child("No tool calls yet.")),
-            )
-            .children(
-                list.map((r) => {
-                    const decision = decisionText(r);
-                    return h_flex()
-                        .h(22)
-                        .px(14)
-                        .gap(8)
-                        .items_center()
-                        .text_size(12)
-                        .child(div().w(54).flex_none().text_size(11).text_color(t.dim).child(clock(r.at)))
-                        .child(
+            .child(this.section(t, "recent", "RECENT", list.length))
+            .when(open, (el) =>
+                el
+                    .when(list.length === 0, (x) =>
+                        x.child(div().px(14).text_size(12).text_color(t.dim).child("No tool calls yet.")),
+                    )
+                    .children(
+                        shown.map((r) => {
+                            const decision = recentDecision(r);
+                            return h_flex()
+                                .h(22)
+                                .px(14)
+                                .gap(8)
+                                .items_center()
+                                .text_size(12)
+                                .tooltip(recentTooltip(r))
+                                .child(div().w(50).flex_none().text_size(11).text_color(t.dim).child(clock(r.at)))
+                                .child(
+                                    div()
+                                        .min_w(0)
+                                        .truncate()
+                                        .text_color(t.foreground)
+                                        .child(r.tool + (recentTarget(r) ? ` ${recentTarget(r)}` : "")),
+                                )
+                                .child(div().flex_1())
+                                .when(decision !== "", (x) =>
+                                    x.child(
+                                        div()
+                                            .flex_none()
+                                            .text_size(11)
+                                            .text_color(
+                                                r.answer === "decline" || r.decision === "deny" ? t.blocked : t.accent,
+                                            )
+                                            .child(decision),
+                                    ),
+                                )
+                                .child(
+                                    div()
+                                        .w(52)
+                                        .flex_none()
+                                        .text_size(11)
+                                        .text_color(tone[r.outcome] ?? t.dim)
+                                        .child(r.outcome),
+                                );
+                        }),
+                    )
+                    .when(list.length > 5, (x) =>
+                        x.child(
                             div()
-                                .min_w(0)
-                                .truncate()
-                                .text_color(t.foreground)
-                                .child(r.action ? `${r.tool} ${r.action}` : r.tool),
-                        )
-                        .child(div().flex_1())
-                        .when(decision !== "", (el) =>
-                            el.child(
-                                div()
-                                    .flex_none()
-                                    .text_size(11)
-                                    .text_color(
-                                        r.decision === "deny" || r.answer === "decline"
-                                            ? t.blocked
-                                            : r.decision === "ask"
-                                              ? t.accent
-                                              : t.dim,
-                                    )
-                                    .child(decision),
-                            ),
-                        )
-                        .child(
-                            div()
-                                .w(52)
-                                .flex_none()
-                                .text_size(11)
-                                .text_color(tone[r.outcome] ?? t.dim)
-                                .child(r.outcome),
-                        );
-                }),
+                                .id("jw-recent-all")
+                                .h(24)
+                                .px(14)
+                                .flex()
+                                .items_center()
+                                .text_size(11.5)
+                                .text_color(t.muted)
+                                .cursor_pointer()
+                                .hover((s) => s.text_color(t.foreground))
+                                .on_click((_e, cx) => {
+                                    this.recentAll = !this.recentAll;
+                                    cx.notify();
+                                })
+                                .child(this.recentAll ? "Show fewer" : `Show all ${list.length}`),
+                        ),
+                    ),
             );
     }
 
     empty(t) {
+        if (!this.loaded && !this.error)
+            return v_flex()
+                .p(14)
+                .gap(6)
+                .text_size(12.5)
+                .text_color(t.dim)
+                .child(div().text_color(t.muted).child("Reading Pi sessions…"));
         const where = this.machine() ?? "this computer";
         return v_flex()
             .p(14)
@@ -793,15 +1057,26 @@ export default class JigWork extends View {
             .child(div().child("Start Pi with the Jig plugins (jig-session among them) in a terminal here."));
     }
 
-    render(_cx) {
+    render(cx) {
         const t = theme();
         const live = this.sessions.filter((s) => s.alive);
         const { session, by } = this.current();
-        const root = v_flex().id("jig-work").size_full().min_h(0).bg(t.chrome).text_color(t.foreground);
-        if (!session) return root.child(this.empty(t));
+        const root = v_flex()
+            .id("jig-work")
+            .size_full()
+            .min_h(0)
+            .bg(t.chrome)
+            .text_color(t.foreground)
+            .on_size_change((size, cx) => {
+                if (Math.round(size.width) === Math.round(this.width)) return;
+                this.width = size.width;
+                cx.notify();
+            });
+        if (!session) return root.child(this.topBar(t, cx, null, live, by)).child(this.empty(t));
         const st = session.status;
         return root
-            .child(this.header(t, session, live, by))
+            .child(this.topBar(t, cx, session, live, by))
+            .child(this.infoBar(t, session, by))
             .when(this.pickerOpen && live.length > 1, (el) => el.child(this.picker(t, live, session)))
             .child(
                 v_flex()

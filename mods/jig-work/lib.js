@@ -184,6 +184,61 @@ export function parseRepoInfo(stdout) {
 // The status file's outputs split for the Outputs list: `files` are the ones outside any git repository (`repo` null), and
 // those of an older status file that has no `repo` field at all, which keep showing as before; `inRepos` counts the ones in a
 // repository, which belong to the Changes panel.
+
+/** The ticket's workflow as one compact chip at narrow widths: "build · 3 of 5", with every stage and goal in `title`. */
+export function stageSummary(workflow, line = stageLine(workflow)) {
+    if (!workflow || line.length === 0) return null;
+    const at = line.findIndex((s) => s.state === "current"),
+        current = line[at]?.id ?? workflow.current;
+    if (!current) return null;
+    const title = line
+        .map(
+            (s) =>
+                `${s.state === "done" ? "✓ " : s.state === "current" ? "▸ " : "  "}${s.id}${s.goal ? ` — ${s.goal}` : ""}`,
+        )
+        .join("\n");
+    return { text: `${current} · ${at + 1} of ${line.length}`, title };
+}
+
+/** The folder shown beside an Output: the last two segments of its parent (a full path would repeat and truncate). */
+export function shortFolder(dir) {
+    const parts = String(dir ?? "")
+        .split(/[\\/]+/)
+        .filter(Boolean);
+    return parts.slice(-2).join("/");
+}
+
+/** A Recent call's target, short: the last segment of a path or the first words of an action. */
+export function recentTarget(r, max = 32) {
+    const said = String(r?.action ?? "").trim();
+    if (!said) return "";
+    const base = said.split(/[\\/]+/).pop() ?? said;
+    return base.length > max ? `${base.slice(0, max - 1)}…` : base;
+}
+
+/** The decision to show on a Recent row: nothing for the default allow, else the ask/deny (and a declined answer). */
+export function recentDecision(r) {
+    if (!r) return "";
+    if (r.answer === "decline" || r.decision === "deny") return r.answer === "decline" ? "declined" : "denied";
+    if (r.decision === "ask") return r.answer ? `asked · ${r.answer}` : "asked";
+    return "";
+}
+
+/** A Recent row's full text for its tooltip: tool, target, decision/answer and outcome. */
+export function recentTooltip(r) {
+    let bits = [String(r?.tool ?? ""), String(r?.action ?? "")].filter(Boolean).join(" ");
+    if (r?.decision) bits += ` · ${r.decision}${r.answer ? ` (${r.answer})` : ""}`;
+    if (r?.outcome) bits += ` · ${r.outcome}`;
+    return bits;
+}
+
+/** How many of the ticket's pull requests have no details yet (the workflow listed them, gh did not answer). */
+export function missingDetails(workflowPrs, cached) {
+    const known = (workflowPrs ?? []).map((p) => p.url).filter(Boolean);
+    if (!cached?.at || known.length === 0) return 0;
+    return known.filter((url) => !cached.details?.[url]).length;
+}
+
 export function splitOutputs(outputs) {
     const files = [];
     let inRepos = 0;
