@@ -5,6 +5,26 @@ export const BUSY_AFTER_MS = 400;
 export const DEBOUNCE_MS = 500;
 export const MIN_REFRESH_SECONDS = 15;
 export const DEFAULT_REFRESH_SECONDS = 60;
+export const DEFAULT_READ_TIMEOUT_SECONDS = 20;
+
+/** `readTimeoutSeconds` from a config object, at least one second. */
+export function readTimeoutSeconds(value, fallback = DEFAULT_READ_TIMEOUT_SECONDS) {
+    const wanted = typeof value === "object" && value !== null ? value.readTimeoutSeconds : value;
+    const seconds = Number(wanted);
+    return Number.isFinite(seconds) ? Math.max(1, seconds) : Math.max(1, fallback);
+}
+
+/** Races one read against its deadline; a late result can no longer be awaited after this rejects. */
+export function readDeadline(work, seconds = DEFAULT_READ_TIMEOUT_SECONDS) {
+    let timer;
+    const deadline = new Promise((_, reject) => {
+        timer = setTimeout(
+            () => reject(new Error(`Reading timed out after ${seconds} s; Refresh to try again`)),
+            seconds * 1000,
+        );
+    });
+    return Promise.race([work, deadline]).finally(() => clearTimeout(timer));
+}
 
 /** `refreshSeconds` from a config object or number, clamped to at least 15 s. */
 export function refreshSeconds(value, fallback = DEFAULT_REFRESH_SECONDS) {

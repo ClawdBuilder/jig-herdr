@@ -173,11 +173,23 @@ export default class RepoPullRequests extends View {
         this.refreshState = new RefreshState();
         this.configAt = 0;
         this.refreshScheduler = new RefreshScheduler({ seconds: refreshSeconds(this.config, 180) });
+        this.readTimeoutSeconds = readTimeoutSeconds(this.config);
+        this.readGeneration = 0;
         this.seen = false;
         this.lastTerminals = terminals();
         this.windowActive = window()?.active === true;
         this.enter(whereToLook());
+        this.initialRead(cx);
         cx.timer.every(1000, (cx) => this.tick(cx));
+    }
+
+    /** A first read that does not wait for the one-second timer. */
+    initialRead(cx) {
+        if (!this.where?.root) return;
+        this.seen = true;
+        cx.spawn(async (cx) => {
+            if (this.where?.root) this.load(cx);
+        });
     }
 
     /** A new folder or machine: forget what was shown and take what the cache has for it. */
@@ -249,6 +261,7 @@ export default class RepoPullRequests extends View {
                 this.config = {};
             }
             this.refreshScheduler.setSeconds(refreshSeconds(this.config, 180));
+            this.readTimeoutSeconds = readTimeoutSeconds(this.config);
             cx.notify();
         });
     }
@@ -264,47 +277,45 @@ export default class RepoPullRequests extends View {
         this.refreshScheduler.sweep();
         this.loading = true;
         this.triedAt[tab] = Date.now();
-        this.watchdogCancel = watchdog(
-            (fn) => cx.timer.after(30_000, fn),
-            () => {
-                if (!this.loading) return;
-                this.loading = false;
-                if (this.refreshState.finish()) {
-                    this.triedAt[this.tab] = 0;
-                    this.refreshScheduler.trigger();
-                }
-                this.error = "Timed out after 20 s — check your network or sign-in.";
-                cx.notify();
-            },
-        );
+        const run = ++this.readGeneration;
+        const seconds = this.readTimeoutSeconds;
         cx.spawn(async (cx) => {
+            let timedOut = false;
             try {
-                const found = await exec("sh", ["-c", SCRIPT, "sh", root], { on });
-                if (found.code !== 0) throw new Error((found.stderr || `exit ${found.code}`).trim().split("\n")[0]);
-                if (contextKey !== this.contextKey) return;
-                const discovery = parseRepos(found.stdout);
-                this.single = discovery.single;
-                saveCache(remember(this.cache, `${on}|${root}|kind`, discovery.single));
-                let data;
-                if (discovery.single) data = await this.loadOne(discovery, tab);
-                else if (tab === "mine") data = await this.loadMine(cx, contextKey);
-                else data = await this.loadWorkspace(cx, discovery, root, contextKey);
-                if (contextKey !== this.contextKey) return;
-                this.error = null;
-                if (!currentGeneration(generation, this.generation)) return;
-                this.data[tab] = data;
-                this.loadedAt[tab] = Date.now();
-                saveCache(remember(this.cache, this.cacheKey(tab), data));
+                const work = (async () => {
+                    const found = await exec("timeout", [String(seconds), "sh", "-c", SCRIPT, "sh", root], { on });
+                    if (run !== this.readGeneration) return;
+                    if (found.code !== 0) throw new Error((found.stderr || `exit ${found.code}`).trim().split("\n")[0]);
+                    if (contextKey !== this.contextKey) return;
+                    const discovery = parseRepos(found.stdout);
+                    this.single = discovery.single;
+                    saveCache(remember(this.cache, `${on}|${root}|kind`, discovery.single));
+                    let data;
+                    if (discovery.single) data = await this.loadOne(discovery, tab);
+                    else if (tab === "mine") data = await this.loadMine(cx, contextKey);
+                    else data = await this.loadWorkspace(cx, discovery, root, contextKey);
+                    if (run !== this.readGeneration || contextKey !== this.contextKey) return;
+                    this.error = null;
+                    if (!currentGeneration(generation, this.generation)) return;
+                    this.data[tab] = data;
+                    this.loadedAt[tab] = Date.now();
+                    saveCache(remember(this.cache, this.cacheKey(tab), data));
+                })();
+                await readDeadline(work, seconds);
             } catch (e) {
-                if (contextKey === this.contextKey) this.error = friendly(e?.message ?? e);
+                if (run !== this.readGeneration) return;
+                timedOut = String(e?.message ?? e).includes("Reading timed out");
+                if (timedOut) this.readGeneration++;
+                else if (contextKey === this.contextKey) this.error = friendly(e?.message ?? e);
             } finally {
-                this.watchdogCancel?.();
-                this.loading = false;
-                if (this.refreshState.finish()) {
-                    this.triedAt[tab] = 0;
-                    this.refreshScheduler.trigger();
+                if (run === this.readGeneration || timedOut) {
+                    this.loading = false;
+                    if (this.refreshState.finish()) {
+                        this.triedAt[tab] = 0;
+                        this.refreshScheduler.trigger();
+                    }
+                    cx.notify();
                 }
-                cx.notify();
             }
         });
         cx.notify();

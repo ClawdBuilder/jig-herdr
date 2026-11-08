@@ -1100,6 +1100,7 @@ test("the Changes panel's config.json has its defaults, and a wrong field is rep
         networkTimeoutSeconds: 60,
         rowDetail: "compact",
         refreshSeconds: 60,
+        readTimeoutSeconds: 20,
         problems: [],
     });
     assert.deepEqual(parseConfig('{ "newBranchPrefix": "", "baseBranch": "develop" }'), {
@@ -1109,6 +1110,7 @@ test("the Changes panel's config.json has its defaults, and a wrong field is rep
         networkTimeoutSeconds: 60,
         rowDetail: "compact",
         refreshSeconds: 60,
+        readTimeoutSeconds: 20,
         problems: [],
     });
     assert.deepEqual(parseConfig('{ "remote": " up ", "networkTimeoutSeconds": 30 }'), {
@@ -1118,6 +1120,7 @@ test("the Changes panel's config.json has its defaults, and a wrong field is rep
         networkTimeoutSeconds: 30,
         rowDetail: "compact",
         refreshSeconds: 60,
+        readTimeoutSeconds: 20,
         problems: ['"remote" must be a remote name, such as "origin"'],
     });
     assert.deepEqual(parseConfig('{ "remote": "acme", "networkTimeoutSeconds": 1 }'), {
@@ -1127,6 +1130,7 @@ test("the Changes panel's config.json has its defaults, and a wrong field is rep
         networkTimeoutSeconds: 60,
         rowDetail: "compact",
         refreshSeconds: 60,
+        readTimeoutSeconds: 20,
         problems: ['"networkTimeoutSeconds" must be a whole number from 5 to 600'],
     });
     assert.equal(parseConfig('{ "rowDetail": "full" }').rowDetail, "full");
