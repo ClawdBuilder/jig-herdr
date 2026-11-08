@@ -485,7 +485,6 @@ export default class RepoHistory extends View {
                 if (run !== this.logGeneration) return;
                 if (key !== this.logKey()) return;
                 if (log.code !== 0) {
-                    this.commits = null;
                     this.error = friendlyError(log, { what: "Reading", follow: true }) || "git log failed.";
                     return;
                 }
