@@ -1,5 +1,5 @@
 // The Jig Context panel: what fills the context of the Pi session in focus, from the status file the jig-session Pi plugin
-// writes for each session (its format: ../../../plugins/jig-session/README.md). A bar and a legend (messages, tools, system
+// writes for each session (its format: https://github.com/ClawdBuilder/jig/blob/main/plugins/jig-session/README.md). A bar and a legend (messages, tools, system
 // prompt, skills, context files, the compaction buffer, free space), then the tools and skills with a switch each, and the
 // context files.
 //

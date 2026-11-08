@@ -1,5 +1,5 @@
 // The Jig Work panel: what the Pi session in focus is doing, from the status file the jig-session Pi plugin writes for each
-// session (its format: ../../../plugins/jig-session/README.md). Its ticket and the workflow's stages, the ticket's pull requests, the files the
+// session (its format: https://github.com/ClawdBuilder/jig/blob/main/plugins/jig-session/README.md). Its ticket and the workflow's stages, the ticket's pull requests, the files the
 // session created or changed outside any git repository (the Changes panel has the rest), and its recent tool calls with jig-core's decision on each.
 //
 // While the panel is on screen it reads the status files every 2 seconds with one `sh` on the machine where Pi runs
