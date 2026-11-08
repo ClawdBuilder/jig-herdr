@@ -254,7 +254,7 @@ export const isClean = (group) => checkoutsOf(group).every((r) => !r.error && !r
 // ---- The list's look: short names, folded repos, badges and the one commit line ----
 
 /** Shared state: `{ "<main checkout path>": true }` for the repos whose worktrees are folded away. */
-export const FOLD_KEY = "repo-changes.folded";
+export const FOLD_KEY = "jig-repos.folded";
 
 const segmentsOf = (path) =>
     String(path ?? "")
@@ -855,8 +855,8 @@ export function wrapperScript(env, timeout = NETWORK_TIMEOUT) {
     const seconds = timeoutSeconds(timeout);
     lines.push(`if command -v timeout >/dev/null 2>&1; then exec timeout ${seconds} "$@"; fi`);
     lines.push(
-        `flag=\${TMPDIR:-/tmp}/repo-changes-timeout-$$`,
-        `done=\${TMPDIR:-/tmp}/repo-changes-done-$$`,
+        `flag=\${TMPDIR:-/tmp}/jig-repos-timeout-$$`,
+        `done=\${TMPDIR:-/tmp}/jig-repos-done-$$`,
         'rm -f "$flag" "$done"',
         "start=$(date +%s 2>/dev/null || echo 0)",
         '"$@" & pid=$!',
@@ -1191,7 +1191,7 @@ export async function commitsToPush(exec, { checkout, limit = 10, remote = "orig
 // on one checkout never disables another.
 
 /** Shared state: `{ "<machine>|<path>": { what, at } }`, what is running in each checkout now. */
-export const RUNNING_KEY = "repo-changes.running";
+export const RUNNING_KEY = "jig-repos.running";
 /** A lock older than this is stale: a mod that was reloaded mid-action cannot hold a checkout for ever. */
 export const RUNNING_TTL = 15 * 60 * 1000;
 

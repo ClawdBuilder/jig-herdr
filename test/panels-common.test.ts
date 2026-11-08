@@ -1,4 +1,4 @@
-// Shared groundwork of the Work, Context, Files and file-view panels: the one session reader both session panels use, its
+// Shared groundwork of the Work, Context, Files and jig-file-view panels: the one session reader both session panels use, its
 // cheap mtime check, and the config parsing of the new refreshSeconds setting. No Herdr needed.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -116,7 +116,7 @@ test("the mtime check finds only the files that moved, and merges their sessions
 
 test("the new config files parse refreshSeconds, and Files knows deleted and filtered paths", async () => {
     const files = await load<FilesLib>("mods/jig-files/lib.js");
-    const view = await load<ViewLib>("mods/file-view/lib.js");
+    const view = await load<ViewLib>("mods/jig-file-view/lib.js");
     for (const lib of [files, view]) {
         assert.equal(lib.parseConfig(null).refreshSeconds, 60);
         assert.equal(lib.parseConfig('{ "refreshSeconds": 30 }').refreshSeconds, 30);

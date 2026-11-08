@@ -23,7 +23,7 @@ import {
 import { DONE } from "./picker.js";
 
 const ICON = (name) => `mods/workspace-chrome/${name}.svg`;
-const OWN = (name) => `mods/repo-changes/${name}.svg`;
+const OWN = (name) => `mods/jig-repos/${name}.svg`;
 const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 

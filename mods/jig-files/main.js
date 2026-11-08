@@ -1,10 +1,10 @@
 // The Files panel of the jig layout: a lazy file browser for the focused pane's folder. A click on a file opens it in its
-// own tab (the file-view mod, one tab per file); a second click selects that tab. Folders open in place, and files with
+// own tab (the jig-file-view mod, one tab per file); a second click selects that tab. Folders open in place, and files with
 // uncommitted changes carry a letter.
 //
 // Derived from the `files` mod shipped with the Herdr app (mods/files/main.js, version 0.1.11), Copyright the Herdr authors,
 // licensed under the Apache License, Version 2.0 (the LICENSE file in the Herdr app's folder,
-// http://www.apache.org/licenses/LICENSE-2.0). Changed: a click opens the file in a `file-view` tab instead of a preview
+// http://www.apache.org/licenses/LICENSE-2.0). Changed: a click opens the file in a `jig-file-view` tab instead of a preview
 // inside the panel, the tab bookkeeping that goes with it, and the icons, which are Herdr's own `workspace-chrome` ones.
 
 import { h_flex, Input, InputState, v_flex } from "gpui-base";
@@ -326,8 +326,10 @@ export default class Files extends View {
     // The file's tab in the shown space: its id from the path -> tab map, if that tab is still there.
     // (A tab entry does not expose its props, so the map is how a path finds its tab.)
     fileTab(key, space) {
-        const id = shared("file-view.tabs")?.[key];
-        return id && space.tabs.some((t) => t.id === id) && panes().some((p) => p.tab === id && p.mod === "file-view")
+        const id = shared("jig-file-view.tabs")?.[key];
+        return id &&
+            space.tabs.some((t) => t.id === id) &&
+            panes().some((p) => p.tab === id && p.mod === "jig-file-view")
             ? id
             : null;
     }
@@ -343,14 +345,14 @@ export default class Files extends View {
         if (id) return run("tab.select", { id });
         if (this.opening.some((o) => o.key === key)) return; // already on its way
         this.opening.push({ key, space: space.id, name, before: new Set(space.tabs.map((t) => t.id)), at: Date.now() });
-        run("tab.new", { space: space.id, name, mod: "file-view", props: { on: this.on, path: abs } });
+        run("tab.new", { space: space.id, name, mod: "jig-file-view", props: { on: this.on, path: abs } });
     }
 
     // tab.new does not hand back the new tab's id to a mod: find it as the tab that was not there before.
     // Every 500 ms, and only does work while a file is opening.
     claim() {
         if (!this.opening.length) return;
-        const map = shared("file-view.tabs") ?? {},
+        const map = shared("jig-file-view.tabs") ?? {},
             taken = new Set(Object.values(map)),
             found = {};
         this.opening = this.opening.filter((o) => {
@@ -369,7 +371,7 @@ export default class Files extends View {
         // Drop entries for tabs that were closed, so a path opens a fresh tab next time.
         const live = new Set(spaces().flatMap((s) => s.tabs.map((t) => t.id)));
         const next = Object.fromEntries(Object.entries({ ...map, ...found }).filter(([, id]) => live.has(id)));
-        setShared("file-view.tabs", next);
+        setShared("jig-file-view.tabs", next);
     }
 
     rows(prefix, depth, out, t) {

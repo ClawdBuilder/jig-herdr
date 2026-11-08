@@ -75,7 +75,7 @@ try {
     };
     const view = new module.default({}, cx);
     await view.init({}, cx);
-    if (["repo-changes", "repo-history", "repo-prs", "repo-worktrees"].includes(name)) {
+    if (["jig-repos", "jig-history", "jig-prs", "jig-worktrees"].includes(name)) {
         for (let i = 0; i < 20 && globalThis.__jigExecCalls === 0; i++) await new Promise((r) => sleep(r, 10));
         assert.ok(globalThis.__jigExecCalls > 0, `${name}: started a read`);
     }

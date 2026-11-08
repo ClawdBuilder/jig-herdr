@@ -46,7 +46,7 @@ import {
 } from "./lib.js";
 import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds, terminalFinished } from "./refresh.js";
 
-const onScreen = () => isOnScreen(layout(), "repo-history");
+const onScreen = () => isOnScreen(layout(), "jig-history");
 const PAGE = 100; // commits per page
 const ROW_H = 28;
 const MID = ROW_H / 2;
@@ -242,7 +242,7 @@ export default class RepoHistory extends View {
      * since loading notifies and `render` may not. */
     tick(cx) {
         this.refreshState.tick(Date.now(), () => cx.notify());
-        const chosen = shared("repo-history.branch");
+        const chosen = shared("jig-history.branch");
         if (chosen?.at && chosen.at !== this.branchAt) {
             this.branchAt = chosen.at;
             if (this.branches?.some((b) => b.name === chosen.branch)) {
@@ -434,7 +434,7 @@ export default class RepoHistory extends View {
         if (this.configAt && Date.now() - this.configAt < 60000) return;
         this.configAt = Date.now();
         cx.spawn(async (cx) => {
-            const text = await readTextFile(`${appHome()}/mods/repo-history/config.json`).catch(() => null);
+            const text = await readTextFile(`${appHome()}/mods/jig-history/config.json`).catch(() => null);
             try {
                 this.config = text ? JSON.parse(text) : {};
             } catch {

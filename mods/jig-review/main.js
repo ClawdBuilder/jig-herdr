@@ -1,5 +1,5 @@
 // A full-size review tab for one repo: its changed files on the left, the selected file's diff
-// on the right. repo-changes opens it (tab.new, or setShared("repo-review.open") on a tab that
+// on the right. jig-repos opens it (tab.new, or setShared("jig-review.open") on a tab that
 // already shows the repo). The diff's header can stage or unstage the shown file, and discard it after
 // an inline confirm (lib.js); nothing else is written, and nothing is committed or fetched here.
 // The file list's width is a draggable divider, remembered in the mod's localStorage. Code is copied by clicking a line
@@ -57,7 +57,7 @@ const SIDE_MAX = 720;
 const MAX = 400000; // most characters the File and Patch editors show; more is cut with a note
 const PANE_LABEL = { diff: "Diff", file: "File", patch: "Patch" };
 const ICON = (name) => `mods/workspace-chrome/${name}.svg`;
-// Reads write nothing under .git (same flags as repo-changes).
+// Reads write nothing under .git (same flags as jig-repos).
 const READ = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "diff.autoRefreshIndex=false"];
 
 // The file list's width, remembered in the mod's own storage (every Review tab shares it, and a restart keeps it).
@@ -124,7 +124,7 @@ export default class RepoReview extends View {
         this.loaded = false;
         this.loading = false;
         this.last = 0;
-        this.handled = Number(shared("repo-review.open")?.at ?? 0); // older requests are not for us
+        this.handled = Number(shared("jig-review.open")?.at ?? 0); // older requests are not for us
         this.confirming = null; // the file whose Discard waits for its second click
         this.acting = false;
         this.note = null; // { ok, message } of the last action
@@ -144,7 +144,7 @@ export default class RepoReview extends View {
     // Cheap check twice a second: a new "open this file" request, and the 5 s re-list while shown.
     // Not from render: both notify, and render may not.
     tick(cx) {
-        const open = shared("repo-review.open");
+        const open = shared("jig-review.open");
         if (open && open.repo === this.repo && open.at > this.handled) {
             this.handled = open.at;
             this.want = open.file ?? null;
@@ -167,7 +167,7 @@ export default class RepoReview extends View {
         const tab = spaces()
             .find((s) => s.active)
             ?.tabs.find((t) => t.active);
-        return Boolean(tab) && panes().some((p) => p.tab === tab.id && p.mod === "repo-review");
+        return Boolean(tab) && panes().some((p) => p.tab === tab.id && p.mod === "jig-review");
     }
 
     refresh(cx) {
@@ -1045,7 +1045,7 @@ export default class RepoReview extends View {
     render(_cx) {
         const t = theme();
         return h_flex()
-            .id("repo-review")
+            .id("jig-review")
             .size_full()
             .min_h(0)
             .overflow_hidden()

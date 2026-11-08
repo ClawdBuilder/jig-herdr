@@ -37,7 +37,7 @@ runs the call there through herdr-core.
 1. **`exec(program, args, { on, cwd })`** runs a program on machine `on` (`null` is this computer) and returns
    `{ code, stdout, stderr }`. The Jig mods mostly run `sh -c '<script>' sh <arguments>`: the script is a fixed string from
    `lib.js`, and every path or value is an argument, never pasted into the script.
-2. **`readTextFile(path, { on })`** reads one text file there, or gives `null` when it is missing. `file-view` uses it.
+2. **`readTextFile(path, { on })`** reads one text file there, or gives `null` when it is missing. `jig-file-view` uses it.
 3. **Work's read.** Every 2 seconds while shown, `jig-work` runs `SCRIPT` from its `lib.js`: it finds the state dir, lists
    `sessions/*.json`, checks each `pid` with `kill -0` and prints each file after a `@@file` line. `parseSessions` reads that.
 4. **Which session.** `pickSession` takes the one whose `terminal` matches `focused().terminal` (`<machine>/t7` on another
@@ -46,8 +46,8 @@ runs the call there through herdr-core.
    JSON. The switch is drawn dimmed until the status file's `lastRequest.id` is the id sent; after 10 seconds the panel says
    the session does not answer. The round trip is in [jig-session's How it works](../../plugins/jig-session/docs/how-it-works.md#a-switch-there-and-back).
 
-The repository panels do the same with `git` and `gh` on the space's machine: `repo-changes` runs one script that reads
-every checkout's `git status`, and `repo-prs` asks `gh` and caches the answer for 5 minutes in its `localStorage`.
+The repository panels do the same with `git` and `gh` on the space's machine: `jig-repos` runs one script that reads
+every checkout's `git status`, and `jig-prs` asks `gh` and caches the answer for 5 minutes in its `localStorage`.
 
 ## The layout
 
@@ -68,17 +68,17 @@ root (row)
             ├─ panel-body (stack: one child shows)
             │   ├─ jig-work ....... Jig · Work      ┐ the Jig group, a line under it
             │   ├─ jig-context .... Jig · Context   ┘
-            │   ├─ changes ........ repo-changes
-            │   ├─ history ........ repo-history
-            │   ├─ pr ............. repo-prs
-            │   ├─ worktrees ...... repo-worktrees
+            │   ├─ changes ........ jig-repos
+            │   ├─ history ........ jig-history
+            │   ├─ pr ............. jig-prs
+            │   ├─ worktrees ...... jig-worktrees
             │   └─ files .......... jig-files
             └─ activity (40 px) ... jig-activity: one button per child of panel-body
 ```
 
 - **The icon bar holds no list.** `jig-activity` reads the stack's children from `layout()`: each child's `title` is the
   tooltip, and `content.props.activity` gives its icon, `divider` or `end`. A click runs `layout.select`.
-- **Counts** come from shared values: `repo-changes`, `repo-prs` and `repo-worktrees` call `setShared("badge.<mod>", { count,
+- **Counts** come from shared values: `jig-repos`, `jig-prs` and `jig-worktrees` call `setShared("badge.<mod>", { count,
   tone })`, and the icon bar draws them.
 - **The tab bar's `Jig` button** runs `layout.select` on `jig-work` and `layout.show` on `panel`; `Panel` shows or hides it.
 - **A panel of your own** is one more child of `panel-body` with a `title` and `content.props.activity.icon`.
@@ -119,20 +119,20 @@ Start with `jig-work`; the others follow the same pattern. In each, `main.js` is
 | `jig-activity`   | The icon bar: buttons from the stack's children, badges from shared values          | the `activity` block            |
 | `jig-tabs`       | Herdr's tab bar with `Panel` and `Jig` buttons                                      | the `tabs` block                |
 | `jig-theme-sync` | Follows Pi's palette                                                                | the 0 px `jig-theme` block      |
-| `repo-changes`   | Checkouts and their files; `picker.js` the branch picker; `lib.js` the git actions  | the stack's `changes` child     |
-| `repo-review`    | A repository's changed files and a diff, in a tab; stage, unstage, discard          | `tab.new` from Changes and Work |
-| `repo-history`   | Repository picker and commit graph                                                  | the stack's `history` child     |
-| `repo-prs`       | Pull requests and checks through `gh`                                               | the stack's `pr` child          |
-| `repo-worktrees` | Linked worktrees, ready or in progress, and their removal                           | the stack's `worktrees` child   |
-| `jig-files`      | The file tree; a click opens `file-view`                                            | the stack's `files` child       |
-| `file-view`      | One file, read-only; Markdown rendered with a `Source` button                       | `tab.new` from Work and Files   |
+| `jig-repos`      | Checkouts and their files; `picker.js` the branch picker; `lib.js` the git actions  | the stack's `changes` child     |
+| `jig-review`     | A repository's changed files and a diff, in a tab; stage, unstage, discard          | `tab.new` from Changes and Work |
+| `jig-history`    | Repository picker and commit graph                                                  | the stack's `history` child     |
+| `jig-prs`        | Pull requests and checks through `gh`                                               | the stack's `pr` child          |
+| `jig-worktrees`  | Linked worktrees, ready or in progress, and their removal                           | the stack's `worktrees` child   |
+| `jig-files`      | The file tree; a click opens `jig-file-view`                                        | the stack's `files` child       |
+| `jig-file-view`  | One file, read-only; Markdown rendered with a `Source` button                       | `tab.new` from Work and Files   |
 
 **One click followed through.** A click on an output in Work:
 
-1. `jig-work` runs `run("tab.new", { mod: "file-view", props: { on, path } })`, and Herdr opens a tab with `file-view`.
-2. When the tab is shown, `file-view` reads the file on the agent's machine with `readTextFile(path, { on })`.
+1. `jig-work` runs `run("tab.new", { mod: "jig-file-view", props: { on, path } })`, and Herdr opens a tab with `jig-file-view`.
+2. When the tab is shown, `jig-file-view` reads the file on the agent's machine with `readTextFile(path, { on })`.
 3. Its `render` draws `TextView.markdown` for a `.md` file, else an `Editor` with syntax colours.
-4. `jig-work` records the tab in `shared("file-view.tabs")`, so a second click selects it.
+4. `jig-work` records the tab in `shared("jig-file-view.tabs")`, so a second click selects it.
 
 ## Built on
 

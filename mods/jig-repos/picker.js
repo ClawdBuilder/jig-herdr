@@ -19,7 +19,7 @@ import {
 } from "./lib.js";
 
 /** Shared key the picker sets after a switch, so the panel says so and reads the checkouts again at once. */
-export const DONE = "repo-changes.done";
+export const DONE = "jig-repos.done";
 const ICON = (name) => `mods/workspace-chrome/${name}.svg`;
 const pickable = (b) => !b.current && !b.inUse;
 
@@ -107,7 +107,7 @@ export class BranchPicker {
 
     async load() {
         try {
-            const text = await readTextFile(`${appHome()}/mods/repo-changes/config.json`).catch(() => null);
+            const text = await readTextFile(`${appHome()}/mods/jig-repos/config.json`).catch(() => null);
             this.config = parseConfig(text);
             const list = await listBranches(this.exec(), this.path);
             if (!list.ok) throw new Error(list.message);

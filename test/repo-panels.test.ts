@@ -48,33 +48,33 @@ const runScript = (script: string, root: string) =>
 
 test("each panel knows whether its block is on screen: hidden nodes and other stack children hide it", async () => {
     const stackChildren = [
-        { id: "pr", content: { mod: "repo-prs" } },
-        { id: "wt", content: { mod: "repo-worktrees" } },
-        { id: "hist", content: { mod: "repo-history" } },
+        { id: "pr", content: { mod: "jig-prs" } },
+        { id: "wt", content: { mod: "jig-worktrees" } },
+        { id: "hist", content: { mod: "jig-history" } },
     ];
     const layout = { id: "root", children: [{ id: "stack", type: "stack", active: "pr", children: stackChildren }] };
     const hidden = { id: "root", children: [{ id: "stack", type: "stack", hidden: true, children: stackChildren }] };
     const first = { id: "root", children: [{ id: "stack", type: "stack", children: stackChildren }] };
     for (const [file, name] of [
-        ["mods/repo-prs/lib.js", "isOnScreen"],
-        ["mods/repo-worktrees/lib.js", "isOnScreen"],
-        ["mods/repo-history/lib.js", "isOnScreen"],
-        ["mods/repo-changes/layout.js", "shown"],
+        ["mods/jig-prs/lib.js", "isOnScreen"],
+        ["mods/jig-worktrees/lib.js", "isOnScreen"],
+        ["mods/jig-history/lib.js", "isOnScreen"],
+        ["mods/jig-repos/layout.js", "shown"],
     ] as const) {
         const onScreen = (await load<Lib>(file))[name] as (root: unknown, mod: string) => boolean;
-        assert.equal(onScreen(layout, "repo-prs"), true, `${file}: the active child`);
-        assert.equal(onScreen(layout, "repo-worktrees"), false, `${file}: another child of the stack`);
-        assert.equal(onScreen(first, "repo-prs"), true, `${file}: a stack with no active child shows its first`);
-        assert.equal(onScreen(first, "repo-history"), false, file);
-        assert.equal(onScreen(hidden, "repo-prs"), false, `${file}: a hidden stack hides what is in it`);
+        assert.equal(onScreen(layout, "jig-prs"), true, `${file}: the active child`);
+        assert.equal(onScreen(layout, "jig-worktrees"), false, `${file}: another child of the stack`);
+        assert.equal(onScreen(first, "jig-prs"), true, `${file}: a stack with no active child shows its first`);
+        assert.equal(onScreen(first, "jig-history"), false, file);
+        assert.equal(onScreen(hidden, "jig-prs"), false, `${file}: a hidden stack hides what is in it`);
         assert.equal(onScreen(layout, "in-a-tab"), true, `${file}: a mod with no block lives in a tab of its own`);
-        assert.equal(onScreen(null, "repo-prs"), true, `${file}: no layout`);
+        assert.equal(onScreen(null, "jig-prs"), true, `${file}: no layout`);
     }
 });
 
 test("every panel words an age the same way", async () => {
     const now = Date.parse("2026-01-10T12:00:00Z");
-    for (const file of ["mods/repo-prs/lib.js", "mods/repo-worktrees/lib.js", "mods/repo-history/lib.js"]) {
+    for (const file of ["mods/jig-prs/lib.js", "mods/jig-worktrees/lib.js", "mods/jig-history/lib.js"]) {
         const { since } = await load<Lib>(file);
         assert.equal(since("2026-01-10T11:59:40Z", now), "now");
         assert.equal(since("2026-01-10T11:55:00Z", now), "5m");
@@ -86,8 +86,8 @@ test("every panel words an age the same way", async () => {
 
 // ---- PR & CI ----
 
-test("repo-prs reads the owner and name from every form of remote url", async () => {
-    const { slugOf } = await load<Lib>("mods/repo-prs/lib.js");
+test("jig-prs reads the owner and name from every form of remote url", async () => {
+    const { slugOf } = await load<Lib>("mods/jig-prs/lib.js");
     assert.equal(slugOf("https://github.com/acme/orders-api.git"), "acme/orders-api");
     assert.equal(slugOf("https://github.com/acme/orders-api"), "acme/orders-api");
     assert.equal(slugOf("git@github.com:acme/orders-api.git"), "acme/orders-api");
@@ -97,8 +97,8 @@ test("repo-prs reads the owner and name from every form of remote url", async ()
     assert.equal(slugOf(undefined), null);
 });
 
-test("repo-prs sorts checks into fail, pending, pass and skip, and a cancelled run is skipped, not failed", async () => {
-    const { checksOf, countOf, bucketOf } = await load<Lib>("mods/repo-prs/lib.js");
+test("jig-prs sorts checks into fail, pending, pass and skip, and a cancelled run is skipped, not failed", async () => {
+    const { checksOf, countOf, bucketOf } = await load<Lib>("mods/jig-prs/lib.js");
     for (const [result, bucket] of [
         ["FAILURE", "fail"],
         ["ERROR", "fail"],
@@ -144,8 +144,8 @@ test("repo-prs sorts checks into fail, pending, pass and skip, and a cancelled r
     assert.deepEqual(checksOf(null), []);
 });
 
-test("repo-prs keeps the small shape of a pull request, with checks unknown until the rollup is", async () => {
-    const { shapePr } = await load<Lib>("mods/repo-prs/lib.js");
+test("jig-prs keeps the small shape of a pull request, with checks unknown until the rollup is", async () => {
+    const { shapePr } = await load<Lib>("mods/jig-prs/lib.js");
     const searched = shapePr(
         {
             number: 7,
@@ -171,8 +171,8 @@ test("repo-prs keeps the small shape of a pull request, with checks unknown unti
     assert.deepEqual([viewed.checks.length, viewed.review, viewed.slug], [1, "APPROVED", "acme/billing-web"]);
 });
 
-test("repo-prs words gh's failures: sign-in and network problems are flagged", async () => {
-    const { ghError } = await load<Lib>("mods/repo-prs/lib.js");
+test("jig-prs words gh's failures: sign-in and network problems are flagged", async () => {
+    const { ghError } = await load<Lib>("mods/jig-prs/lib.js");
     assert.equal(ghError("To get started with GitHub CLI, please run:  gh auth login").auth, true);
     assert.equal(ghError("HTTP 401: Bad credentials").auth, true);
     assert.equal(
@@ -186,8 +186,8 @@ test("repo-prs words gh's failures: sign-in and network problems are flagged", a
     assert.equal(ghError("").message, "gh failed");
 });
 
-test("repo-prs runs at most the asked number of calls at once, and all of them", async () => {
-    const { inParallel } = await load<Lib>("mods/repo-prs/lib.js");
+test("jig-prs runs at most the asked number of calls at once, and all of them", async () => {
+    const { inParallel } = await load<Lib>("mods/jig-prs/lib.js");
     let running = 0;
     let most = 0;
     const seen: number[] = [];
@@ -203,8 +203,8 @@ test("repo-prs runs at most the asked number of calls at once, and all of them",
     await inParallel([], 4, async () => assert.fail("nothing to do"));
 });
 
-test("repo-prs keeps the newest twelve cache entries", async () => {
-    const { remember } = await load<Lib>("mods/repo-prs/lib.js");
+test("jig-prs keeps the newest twelve cache entries", async () => {
+    const { remember } = await load<Lib>("mods/jig-prs/lib.js");
     const cache: Record<string, { at: number; data: unknown }> = {};
     const real = Date.now;
     try {
@@ -220,8 +220,8 @@ test("repo-prs keeps the newest twelve cache entries", async () => {
     assert.equal(cache.k14?.data, 14);
 });
 
-test("repo-prs finds repositories, their branch, remote and default branch, on real repositories", async (t) => {
-    const { SCRIPT, parseRepos, relName } = await load<Lib>("mods/repo-prs/lib.js");
+test("jig-prs finds repositories, their branch, remote and default branch, on real repositories", async (t) => {
+    const { SCRIPT, parseRepos, relName } = await load<Lib>("mods/jig-prs/lib.js");
     const root = scratch(t);
     const orders = repo(root, "orders-api");
     git(orders, "remote", "add", "origin", "git@github.com:acme/orders-api.git");
@@ -255,8 +255,8 @@ test("repo-prs finds repositories, their branch, remote and default branch, on r
 
 // ---- Worktrees ----
 
-test("repo-worktrees is ready only when the work is in the base and nothing is at risk", async () => {
-    const { readiness } = await load<Lib>("mods/repo-worktrees/lib.js");
+test("jig-worktrees is ready only when the work is in the base and nothing is at risk", async () => {
+    const { readiness } = await load<Lib>("mods/jig-worktrees/lib.js");
     const clean = {
         path: "/w/orders-api-feature",
         main: "/w/orders-api",
@@ -298,8 +298,8 @@ test("repo-worktrees is ready only when the work is in the base and nothing is a
     assert.equal(readiness({ ...clean, baseAhead: null }, false), null);
 });
 
-test("repo-worktrees reads the script's lines, keeping what git could not tell as null", async () => {
-    const { parseTrees, nameOf, relName } = await load<Lib>("mods/repo-worktrees/lib.js");
+test("jig-worktrees reads the script's lines, keeping what git could not tell as null", async () => {
+    const { parseTrees, nameOf, relName } = await load<Lib>("mods/jig-worktrees/lib.js");
     const line = (...f: string[]) => ["W", ...f].join("\t");
     const out = [
         "@single",
@@ -354,8 +354,8 @@ test("repo-worktrees reads the script's lines, keeping what git could not tell a
     assert.equal(relName("/elsewhere/b", "/w"), "b");
 });
 
-test("repo-worktrees tells ready from in-progress worktrees on real repositories", async (t) => {
-    const { SCRIPT, parseTrees, readiness } = await load<Lib>("mods/repo-worktrees/lib.js");
+test("jig-worktrees tells ready from in-progress worktrees on real repositories", async (t) => {
+    const { SCRIPT, parseTrees, readiness } = await load<Lib>("mods/jig-worktrees/lib.js");
     const root = scratch(t);
     // A remote, and a clone of it that holds the worktrees.
     const origin = path.join(root, "origin.git");
@@ -425,8 +425,8 @@ test("repo-worktrees tells ready from in-progress worktrees on real repositories
 
 // ---- History ----
 
-test("repo-history lists repositories with their kind, branch and uncommitted state, clones before worktrees", async (t) => {
-    const { SCRIPT, parseRepos, relName } = await load<Lib>("mods/repo-history/lib.js");
+test("jig-history lists repositories with their kind, branch and uncommitted state, clones before worktrees", async (t) => {
+    const { SCRIPT, parseRepos, relName } = await load<Lib>("mods/jig-history/lib.js");
     const root = scratch(t);
     const orders = repo(root, "orders-api");
     git(orders, "worktree", "add", "-q", "-b", "feature/PROJ-123", path.join(root, "worktrees/PROJ-123"));
@@ -452,8 +452,8 @@ test("repo-history lists repositories with their kind, branch and uncommitted st
     assert.equal(parseRepos(runScript(SCRIPT, orders)).single, true);
 });
 
-test("repo-history picks the deepest repository that holds a path", async () => {
-    const { repoOf } = await load<Lib>("mods/repo-history/lib.js");
+test("jig-history picks the deepest repository that holds a path", async () => {
+    const { repoOf } = await load<Lib>("mods/jig-history/lib.js");
     const repos = [{ path: "/w/a" }, { path: "/w/a/nested" }, { path: "/w/ab" }];
     assert.equal(repoOf(repos, "/w/a/nested/src/x.ts").path, "/w/a/nested");
     assert.equal(repoOf(repos, "/w/a/src").path, "/w/a");
@@ -462,8 +462,8 @@ test("repo-history picks the deepest repository that holds a path", async () => 
     assert.equal(repoOf(repos, null), null);
 });
 
-test("repo-history reads git log's decorations, so a branch called a/b is not mistaken for a remote", async (t) => {
-    const { FORMAT, parseLog } = await load<Lib>("mods/repo-history/lib.js");
+test("jig-history reads git log's decorations, so a branch called a/b is not mistaken for a remote", async (t) => {
+    const { FORMAT, parseLog } = await load<Lib>("mods/jig-history/lib.js");
     const root = scratch(t);
     const origin = path.join(root, "origin.git");
     git(root, "init", "-q", "--bare", "-b", "main", origin);
@@ -510,8 +510,8 @@ test("repo-history reads git log's decorations, so a branch called a/b is not mi
     assert.deepEqual(parseLog(""), []);
 });
 
-test("repo-history lays out a branch and its merge on lanes", async () => {
-    const { layoutGraph } = await load<Lib>("mods/repo-history/lib.js");
+test("jig-history lays out a branch and its merge on lanes", async () => {
+    const { layoutGraph } = await load<Lib>("mods/jig-history/lib.js");
     const commit = (hash: string, ...parents: string[]) => ({ hash, parents });
     // Newest first:  M merges B (first parent) and C; both are children of A.
     const rows = layoutGraph([commit("M", "B", "C"), commit("C", "A"), commit("B", "A"), commit("A")]);
@@ -567,8 +567,8 @@ test("repo-history lays out a branch and its merge on lanes", async () => {
     assert.deepEqual(layoutGraph([]), []);
 });
 
-test("repo-history reads a subject's type, scope, breaking mark and pull request number", async () => {
-    const { readSubject } = await load<Lib>("mods/repo-history/lib.js");
+test("jig-history reads a subject's type, scope, breaking mark and pull request number", async () => {
+    const { readSubject } = await load<Lib>("mods/jig-history/lib.js");
     assert.deepEqual(readSubject("feat(api)!: add retries"), {
         type: "feat",
         scope: "api",
@@ -591,8 +591,8 @@ test("repo-history reads a subject's type, scope, breaking mark and pull request
     assert.equal(readSubject("Fix: capital letter is not a type").type, undefined);
 });
 
-test("repo-history gives an author the same initials and colour every time", async () => {
-    const { initialsOf, colourSeed } = await load<Lib>("mods/repo-history/lib.js");
+test("jig-history gives an author the same initials and colour every time", async () => {
+    const { initialsOf, colourSeed } = await load<Lib>("mods/jig-history/lib.js");
     assert.equal(initialsOf("Ada Lovelace"), "AL");
     assert.equal(initialsOf("ada.lovelace.byron"), "AB");
     assert.equal(initialsOf("  grace  "), "G");
@@ -603,8 +603,8 @@ test("repo-history gives an author the same initials and colour every time", asy
     assert.equal(Number.isInteger(colourSeed("x")) && colourSeed("x") >= 0, true);
 });
 
-test("repo-history reads a commit's message and its files, binary ones with no counts", async (t) => {
-    const { parseCommitDetail } = await load<Lib>("mods/repo-history/lib.js");
+test("jig-history reads a commit's message and its files, binary ones with no counts", async (t) => {
+    const { parseCommitDetail } = await load<Lib>("mods/jig-history/lib.js");
     const detail = parseCommitDetail(
         "feat: add x\n\nBody line one.\nBody line two.\n\u001e\n3\t1\tsrc/a.ts\n-\t-\tlogo.png\n0\t2\tdir/with\ttab.md\n",
     );
@@ -625,8 +625,8 @@ test("repo-history reads a commit's message and its files, binary ones with no c
     assert.deepEqual(real.files, [{ path: "src.txt", oldPath: null, binary: false, add: 1, del: 0 }]);
 });
 
-test("repo-history filters commits by message, author, hash or branch name", async () => {
-    const { commitMatches } = await load<Lib>("mods/repo-history/lib.js");
+test("jig-history filters commits by message, author, hash or branch name", async () => {
+    const { commitMatches } = await load<Lib>("mods/jig-history/lib.js");
     const commit = {
         subject: "fix: retry on timeout",
         author: "Ada Lovelace",
@@ -638,8 +638,8 @@ test("repo-history filters commits by message, author, hash or branch name", asy
     assert.equal(commitMatches(commit, "billing"), false);
 });
 
-test("repo-history finds repos and worktrees by folder name or branch, for a filter that matched no commit", async () => {
-    const { matchRepos } = await load<Lib>("mods/repo-history/lib.js");
+test("jig-history finds repos and worktrees by folder name or branch, for a filter that matched no commit", async () => {
+    const { matchRepos } = await load<Lib>("mods/jig-history/lib.js");
     const repos = [
         { path: "/w/orders-api", linked: false, branch: "main", dirty: false },
         { path: "/w/tickets/PROJ-123/orders-api", linked: true, branch: "feature/PROJ-123", dirty: true },
@@ -657,9 +657,9 @@ test("repo-history finds repos and worktrees by folder name or branch, for a fil
     assert.equal(matchRepos(repos, "/w", "nothing").length, 0);
 });
 
-test("repo-prs keeps the author and merge conflicts from gh json", async () => {
+test("jig-prs keeps the author and merge conflicts from gh json", async () => {
     const { shapePr } = await load<{ shapePr: (raw: unknown, slug: string) => Record<string, unknown> }>(
-        "mods/repo-prs/lib.js",
+        "mods/jig-prs/lib.js",
     );
     const pr = shapePr(
         { number: 1, title: "x", url: "u", author: { login: "demo" }, mergeable: "CONFLICTING" },
@@ -669,9 +669,9 @@ test("repo-prs keeps the author and merge conflicts from gh json", async () => {
     assert.equal(pr.mergeable, "CONFLICTING");
 });
 
-test("repo-prs reads the public Jig fixture in one list shape, failing checks first", async () => {
+test("jig-prs reads the public Jig fixture in one list shape, failing checks first", async () => {
     const { shapePr } = await load<{ shapePr: (raw: unknown, slug: string) => Record<string, any> }>(
-        "mods/repo-prs/lib.js",
+        "mods/jig-prs/lib.js",
     );
     const fixture = JSON.parse(readFileSync("test/fixtures/jig-prs.json", "utf8")) as unknown[];
     const pr = shapePr(fixture[0] as unknown, "ClawdBuilder/jig");
@@ -684,9 +684,9 @@ test("repo-prs reads the public Jig fixture in one list shape, failing checks fi
     if (first >= 0) assert.equal(first, 0, "a failing check is first");
 });
 
-test("repo-prs shapes the branch's latest CI runs", async () => {
+test("jig-prs shapes the branch's latest CI runs", async () => {
     const { shapeRuns } = await load<{ shapeRuns: (raw: unknown) => Array<Record<string, any>> }>(
-        "mods/repo-prs/lib.js",
+        "mods/jig-prs/lib.js",
     );
     const runs = shapeRuns(JSON.parse(readFileSync("test/fixtures/jig-runs.json", "utf8")));
     assert.ok(runs.length > 0);
@@ -698,19 +698,19 @@ test("repo-prs shapes the branch's latest CI runs", async () => {
     }
 });
 
-test("repo-prs turns gh errors into one actionable line", async () => {
-    const { ghError } = await load<{ ghError: (text: string) => Record<string, unknown> }>("mods/repo-prs/lib.js");
+test("jig-prs turns gh errors into one actionable line", async () => {
+    const { ghError } = await load<{ ghError: (text: string) => Record<string, unknown> }>("mods/jig-prs/lib.js");
     assert.match(String(ghError("gh: not logged in").message), /not logged in/);
     assert.equal(ghError("gh: not logged in").auth, true);
     assert.match(String(ghError("dial tcp: connection refused").message), /Network error/);
     assert.match(String(ghError("something odd").message), /something odd/);
 });
 
-test("repo-prs orders a failing check first and shapes a no-PR branch's runs", async () => {
+test("jig-prs orders a failing check first and shapes a no-PR branch's runs", async () => {
     const { checksOf, branchRuns } = await load<{
         checksOf: (rollup: unknown[]) => Array<{ bucket: string }>;
         branchRuns: (reply: unknown) => Array<Record<string, unknown>> | null;
-    }>("mods/repo-prs/lib.js");
+    }>("mods/jig-prs/lib.js");
     const checks = checksOf([
         { name: "ok", conclusion: "SUCCESS" },
         { name: "bad", conclusion: "FAILURE", detailsUrl: "https://example.test/1" },
@@ -725,8 +725,8 @@ test("repo-prs orders a failing check first and shapes a no-PR branch's runs", a
     assert.equal(branchRuns({ err: "no" }), null);
 });
 
-test("repo-history reads parents, renames, binaries, branches and caps lanes for a 300 px row", async (t) => {
-    const { parseCommitDetail, parseLog, parseBranches, laneColumns } = await load<Lib>("mods/repo-history/lib.js");
+test("jig-history reads parents, renames, binaries, branches and caps lanes for a 300 px row", async (t) => {
+    const { parseCommitDetail, parseLog, parseBranches, laneColumns } = await load<Lib>("mods/jig-history/lib.js");
     const root = scratch(t);
     const dir = repo(root, "orders-api");
     commitFile(dir, "old-name.txt", "one");
@@ -759,8 +759,8 @@ test("repo-history reads parents, renames, binaries, branches and caps lanes for
     assert.equal(laneColumns(2), 2);
 });
 
-test("repo-history filters branches, local first, with the current one marked", async () => {
-    const { filterBranches } = await load<Lib>("mods/repo-history/lib.js");
+test("jig-history filters branches, local first, with the current one marked", async () => {
+    const { filterBranches } = await load<Lib>("mods/jig-history/lib.js");
     const list = [
         { name: "origin/main", remote: true },
         { name: "main", remote: false },
@@ -777,8 +777,8 @@ test("repo-history filters branches, local first, with the current one marked", 
     assert.equal(filterBranches(list, "", "main")[0].name, "main");
 });
 
-test("repo-worktrees lists prune candidates and row actions without the main checkout", async () => {
-    const { pruneCandidates, rowActions } = await load<Lib>("mods/repo-worktrees/lib.js");
+test("jig-worktrees lists prune candidates and row actions without the main checkout", async () => {
+    const { pruneCandidates, rowActions } = await load<Lib>("mods/jig-worktrees/lib.js");
     const rows = [
         { path: "/w/main", main: "/w/main", ready: true },
         { path: "/w/a", main: "/w/main", ready: true },
@@ -792,8 +792,8 @@ test("repo-worktrees lists prune candidates and row actions without the main che
     assert.deepEqual(rowActions({ open: true, ready: true, path: "/w/a", main: "/w/main" }), ["Remove"]);
 });
 
-test("repo-prs counts checks in words and singular", async () => {
-    const { checkCount, checkSummary } = await load<Lib>("mods/repo-prs/lib.js");
+test("jig-prs counts checks in words and singular", async () => {
+    const { checkCount, checkSummary } = await load<Lib>("mods/jig-prs/lib.js");
     assert.equal(checkCount(1), "1 check");
     assert.equal(checkCount(3), "3 checks");
     const checks = [
@@ -807,8 +807,8 @@ test("repo-prs counts checks in words and singular", async () => {
     assert.equal(checkSummary([]), "");
 });
 
-test("repo-prs loads a no-PR branch's runs with --repo and keeps gh's error", async () => {
-    const { loadRuns } = await load<Lib>("mods/repo-prs/lib.js");
+test("jig-prs loads a no-PR branch's runs with --repo and keeps gh's error", async () => {
+    const { loadRuns } = await load<Lib>("mods/jig-prs/lib.js");
     let seen: string[] = [];
     const ok = await loadRuns(
         async (args: string[]) => {
@@ -827,22 +827,22 @@ test("repo-prs loads a no-PR branch's runs with --repo and keeps gh's error", as
     assert.match(String(bad.error), /not logged in/);
 });
 
-test("repo-history's branch header handler toggles the list", async () => {
-    const { toggleBranchPicker } = await load<Lib>("mods/repo-history/lib.js");
+test("jig-history's branch header handler toggles the list", async () => {
+    const { toggleBranchPicker } = await load<Lib>("mods/jig-history/lib.js");
     assert.equal(toggleBranchPicker(false), true);
     assert.equal(toggleBranchPicker(true), false);
 });
 
-test("repo-worktrees refuses ignored data files but allows build output", async () => {
-    const { dangerousIgnored } = await load<Lib>("mods/repo-worktrees/lib.js");
+test("jig-worktrees refuses ignored data files but allows build output", async () => {
+    const { dangerousIgnored } = await load<Lib>("mods/jig-worktrees/lib.js");
     assert.deepEqual(dangerousIgnored("!! .env\n!! local/config.json\n!! node_modules/x\n!! dist/y\n"), [
         ".env",
         "local/config.json",
     ]);
 });
 
-test("repo-prs wraps gh with no prompts and a timeout", async () => {
-    const { ghShell } = await load<Lib>("mods/repo-prs/lib.js");
+test("jig-prs wraps gh with no prompts and a timeout", async () => {
+    const { ghShell } = await load<Lib>("mods/jig-prs/lib.js");
     const shell = ghShell(["pr", "list"]);
     assert.equal(shell.cmd, "sh");
     assert.match(shell.args[1], /GIT_TERMINAL_PROMPT=0/);
@@ -851,8 +851,8 @@ test("repo-prs wraps gh with no prompts and a timeout", async () => {
     assert.deepEqual(shell.args.slice(2), ["sh", "pr", "list"]);
 });
 
-test("repo-prs opens only GitHub links", async () => {
-    const { githubUrl } = await load<Lib>("mods/repo-prs/lib.js");
+test("jig-prs opens only GitHub links", async () => {
+    const { githubUrl } = await load<Lib>("mods/jig-prs/lib.js");
     assert.equal(githubUrl("https://github.com/a/b/pull/1"), "https://github.com/a/b/pull/1");
     assert.equal(githubUrl("https://example.com/x"), null);
     assert.equal(githubUrl("javascript:alert(1)"), null);
@@ -860,18 +860,18 @@ test("repo-prs opens only GitHub links", async () => {
 
 test("the follow-state copies agree and pickRoot follows the focused terminal first", async () => {
     const root = new URL("../mods/", import.meta.url);
-    const source = readFileSync(new URL("repo-changes/follow-state.js", root), "utf8");
-    for (const mod of ["repo-history", "repo-prs", "repo-worktrees"])
+    const source = readFileSync(new URL("jig-repos/follow-state.js", root), "utf8");
+    for (const mod of ["jig-history", "jig-prs", "jig-worktrees"])
         assert.equal(readFileSync(new URL(`${mod}/follow-state.js`, root), "utf8"), source, mod);
-    const { pickRoot } = await load<Lib>("mods/repo-changes/follow-state.js");
+    const { pickRoot } = await load<Lib>("mods/jig-repos/follow-state.js");
     assert.equal(pickRoot({ follow: true, focusedCwd: "/f", spaceFolder: "/s", first: "/1" }), "/f");
     assert.equal(pickRoot({ follow: false, focusedCwd: "/f", spaceFolder: "/s", first: "/1" }), "/s");
     assert.equal(pickRoot({ follow: true, focusedCwd: null, spaceFolder: null, first: "/1" }), "/1");
     assert.equal(pickRoot({ follow: true }), null);
 });
 
-test("repo-worktrees parses -z worktree lists with spaces and tabs, and refuses a changed row", async () => {
-    const { parseWorktreeListZ, removalRefusal } = await load<Lib>("mods/repo-worktrees/lib.js");
+test("jig-worktrees parses -z worktree lists with spaces and tabs, and refuses a changed row", async () => {
+    const { parseWorktreeListZ, removalRefusal } = await load<Lib>("mods/jig-worktrees/lib.js");
     const z =
         "worktree /w/main\0HEAD abc\0branch refs/heads/main\0\0worktree /w/a b\tc\0HEAD def\0branch refs/heads/f\0\0";
     const entries = parseWorktreeListZ(z);
@@ -888,7 +888,7 @@ test("repo-worktrees parses -z worktree lists with spaces and tabs, and refuses 
 });
 
 test("prune plan removes two in order, refuses a stale banner and cancel runs nothing", async () => {
-    const { prunePlan, cancelPrune } = await load<Lib>("mods/repo-worktrees/lib.js");
+    const { prunePlan, cancelPrune } = await load<Lib>("mods/jig-worktrees/lib.js");
     const entries = [
         { tree: { path: "/w/a" }, on: "wsl", contextKey: "ctx" },
         { tree: { path: "/w/b" }, on: "wsl", contextKey: "ctx" },
@@ -905,7 +905,7 @@ test("prune plan removes two in order, refuses a stale banner and cancel runs no
 });
 
 test("follow reload writes the choice then reloads", async () => {
-    const { followReload } = await load<Lib>("mods/repo-worktrees/lib.js");
+    const { followReload } = await load<Lib>("mods/jig-worktrees/lib.js");
     let written = null,
         reloaded = 0;
     followReload(
@@ -919,7 +919,7 @@ test("follow reload writes the choice then reloads", async () => {
 });
 
 test("the watchdog times out a never-resolving task and not a finished one", async () => {
-    const { watchdog } = await load<Lib>("mods/repo-worktrees/lib.js");
+    const { watchdog } = await load<Lib>("mods/jig-worktrees/lib.js");
     let callback = null,
         timedOut = 0;
     const cancel = watchdog(
@@ -938,7 +938,7 @@ test("the watchdog times out a never-resolving task and not a finished one", asy
 });
 
 test("realpath comparison sees a terminal inside a symlinked folder", async (t) => {
-    const { sameOrInside } = await load<Lib>("mods/repo-worktrees/lib.js");
+    const { sameOrInside } = await load<Lib>("mods/jig-worktrees/lib.js");
     const root = scratch(t);
     const real = path.join(root, "real");
     const link = path.join(root, "link");
@@ -956,8 +956,8 @@ test("realpath comparison sees a terminal inside a symlinked folder", async (t) 
 
 test("the live panel files call the tested seams, not inline copies", () => {
     const read = (name: string) => readFileSync(new URL(`../mods/${name}/main.js`, import.meta.url), "utf8");
-    for (const name of ["repo-history", "repo-prs", "repo-worktrees"]) assert.match(read(name), /followReload\(/, name);
-    const wt = read("repo-worktrees");
+    for (const name of ["jig-history", "jig-prs", "jig-worktrees"]) assert.match(read(name), /followReload\(/, name);
+    const wt = read("jig-worktrees");
     for (const seam of [
         "pruneAll(",
         "liveReady(",
@@ -968,11 +968,11 @@ test("the live panel files call the tested seams, not inline copies", () => {
     ])
         assert.ok(wt.includes(seam), seam);
     assert.doesNotMatch(wt, /list\.some\(\s*\(entry\)\s*=>\s*entry\.contextKey/);
-    assert.match(read("repo-prs"), /exec\("timeout",/);
+    assert.match(read("jig-prs"), /exec\("timeout",/);
 });
 
 test("a fresh branch from base and one from origin/develop are not ready; a merged one is", async () => {
-    const { readiness, terminalInside } = await load<Lib>("mods/repo-worktrees/lib.js");
+    const { readiness, terminalInside } = await load<Lib>("mods/jig-worktrees/lib.js");
     const base = {
         path: "/w/f",
         main: "/w/main",
@@ -997,7 +997,7 @@ test("a fresh branch from base and one from origin/develop are not ready; a merg
 });
 
 test("ignored allowlist is root-anchored and never allows .env", async () => {
-    const { dangerousIgnored } = await load<Lib>("mods/repo-worktrees/lib.js");
+    const { dangerousIgnored } = await load<Lib>("mods/jig-worktrees/lib.js");
     assert.deepEqual(dangerousIgnored("!! build/.env\n!! packages/a/dist/x\n!! node_modules/x\n!! build/y\n"), [
         "build/.env",
         "packages/a/dist/x",
@@ -1005,7 +1005,7 @@ test("ignored allowlist is root-anchored and never allows .env", async () => {
 });
 
 test("terminals inside a worktree use realpath through a fake exec", async () => {
-    const { terminalsInsideWorktree } = await load<Lib>("mods/repo-worktrees/lib.js");
+    const { terminalsInsideWorktree } = await load<Lib>("mods/jig-worktrees/lib.js");
     const exec = async (_cmd: string, args: string[]) => {
         const path = args[3];
         return { code: 0, stdout: path.replace("/link", "/real") };
@@ -1015,13 +1015,13 @@ test("terminals inside a worktree use realpath through a fake exec", async () =>
 });
 
 test("a late load generation is stale", async () => {
-    const { currentGeneration } = await load<Lib>("mods/repo-worktrees/lib.js");
+    const { currentGeneration } = await load<Lib>("mods/jig-worktrees/lib.js");
     assert.equal(currentGeneration(1, 2), false);
     assert.equal(currentGeneration(2, 2), true);
 });
 
 test("the real prune chain removes two entries in order and both kinds of ready row pass liveReady", async () => {
-    const { pruneAll, liveReady } = await load<Lib>("mods/repo-worktrees/lib.js");
+    const { pruneAll, liveReady } = await load<Lib>("mods/jig-worktrees/lib.js");
     const entries = [
         { tree: { path: "/w/a", branch: "a" }, on: "wsl", contextKey: "ctx" },
         { tree: { path: "/w/b", branch: "b" }, on: "wsl", contextKey: "ctx" },
@@ -1051,13 +1051,13 @@ test("the real prune chain removes two entries in order and both kinds of ready 
 });
 
 test("an unresolved pane cwd fails closed", async () => {
-    const { terminalsInsideWorktree } = await load<Lib>("mods/repo-worktrees/lib.js");
+    const { terminalsInsideWorktree } = await load<Lib>("mods/jig-worktrees/lib.js");
     const exec = async (_cmd: string, args: string[]) => ({ code: args[3] === "/real/wt" ? 0 : 1, stdout: args[3] });
     assert.equal(await terminalsInsideWorktree(exec as never, "/real/wt", ["/missing"]), true);
 });
 
 test("pruneAll stops when the live context changes after item one", async () => {
-    const { pruneAll } = await load<Lib>("mods/repo-worktrees/lib.js");
+    const { pruneAll } = await load<Lib>("mods/jig-worktrees/lib.js");
     const entries = [
         { tree: { path: "/w/a" }, on: "wsl", contextKey: "ctx1" },
         { tree: { path: "/w/b" }, on: "wsl", contextKey: "ctx1" },
@@ -1079,7 +1079,7 @@ test("pruneAll stops when the live context changes after item one", async () => 
 });
 
 test("pruneAll reports a removal already running", async () => {
-    const { pruneAll } = await load<Lib>("mods/repo-worktrees/lib.js");
+    const { pruneAll } = await load<Lib>("mods/jig-worktrees/lib.js");
     const result = await pruneAll(
         [{ tree: { path: "/w/a" }, on: "wsl", contextKey: "ctx" }],
         "ctx",
@@ -1091,7 +1091,7 @@ test("pruneAll reports a removal already running", async () => {
 });
 
 test("the real worktree scan keeps a path, branch, date, creation and a subject with a space", async (t) => {
-    const { SCRIPT, parseTrees } = await load<Lib>("mods/repo-worktrees/lib.js");
+    const { SCRIPT, parseTrees } = await load<Lib>("mods/jig-worktrees/lib.js");
     const root = scratch(t);
     const origin = path.join(root, "origin.git");
     git(root, "init", "-q", "--bare", "-b", "main", origin);

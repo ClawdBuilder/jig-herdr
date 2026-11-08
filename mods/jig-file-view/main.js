@@ -1,8 +1,8 @@
-// A full-tab, read-only viewer for one file, opened with tab.new { mod: "file-view", props: { on, path } }.
+// A full-tab, read-only viewer for one file, opened with tab.new { mod: "jig-file-view", props: { on, path } }.
 // jig-work opens one from its Outputs list; any mod may.
 //
 // props: { on: "<machine, or null for this computer>", path: "<absolute path on that machine>" }
-// A mod that opens these tabs may keep shared("file-view.tabs"), a map of "<on>|<path>" to the tab id, so that a second
+// A mod that opens these tabs may keep shared("jig-file-view.tabs"), a map of "<on>|<path>" to the tab id, so that a second
 // click selects the tab instead of opening another, and so that this copy knows which tab is its own.
 
 import { Editor, EditorState, h_flex, TextView, v_flex } from "gpui-base";
@@ -25,7 +25,7 @@ const LANG = {
     vue: "html",
 };
 const MAX = 400000;
-const OWN = (name) => `mods/file-view/${name}.svg`;
+const OWN = (name) => `mods/jig-file-view/${name}.svg`;
 
 function iconButton(t, id, icon, tip, onClick, busy = false) {
     return div()
@@ -82,16 +82,16 @@ export default class FileView extends View {
         cx.timer.every(1000, (cx) => this.tick(cx));
     }
 
-    // Is this copy's tab the one on screen? The path -> tab map in shared("file-view.tabs") says which tab is ours;
-    // without it (a tab opened another way) any file-view tab on screen counts.
+    // Is this copy's tab the one on screen? The path -> tab map in shared("jig-file-view.tabs") says which tab is ours;
+    // without it (a tab opened another way) any jig-file-view tab on screen counts.
     shown() {
         const tab = spaces()
             .find((s) => s.active)
             ?.tabs.find((t) => t.active);
         if (!tab) return false;
-        const mine = shared("file-view.tabs")?.[`${this.on ?? ""}|${this.path}`];
+        const mine = shared("jig-file-view.tabs")?.[`${this.on ?? ""}|${this.path}`];
         if (mine) return mine === tab.id;
-        return panes().some((p) => p.tab === tab.id && p.mod === "file-view");
+        return panes().some((p) => p.tab === tab.id && p.mod === "jig-file-view");
     }
 
     // Once a second: read when the tab comes back, on focus/session change, on the backstop, or when clicked. No 5 s loop.
@@ -111,7 +111,7 @@ export default class FileView extends View {
         if (this.configAt && Date.now() - this.configAt < 5000) return;
         this.configAt = Date.now();
         cx.spawn(async (cx) => {
-            const text = await readTextFile(`${appHome()}/mods/file-view/config.json`).catch(() => null);
+            const text = await readTextFile(`${appHome()}/mods/jig-file-view/config.json`).catch(() => null);
             this.config = parseConfig(text);
             this.refreshScheduler.setSeconds(refreshSeconds(this.config));
             cx.notify();
@@ -209,7 +209,7 @@ export default class FileView extends View {
             { name, dir } = splitPath(this.path),
             narrow = this.width > 0 && this.width < 420;
         return v_flex()
-            .id("file-view")
+            .id("jig-file-view")
             .size_full()
             .min_h(0)
             .bg(t.background)

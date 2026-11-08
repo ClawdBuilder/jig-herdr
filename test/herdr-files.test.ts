@@ -32,19 +32,19 @@ const layout = JSON.parse(readFileSync(path.join(HERDR, "layouts/jig.json"), "ut
 
 test("the mods are the thirteen this folder ships", () => {
     assert.deepEqual(MODS, [
-        "file-view",
         "jig-activity",
         "jig-context",
+        "jig-file-view",
         "jig-files",
+        "jig-history",
+        "jig-keep-awake",
+        "jig-prs",
+        "jig-repos",
+        "jig-review",
         "jig-tabs",
         "jig-theme-sync",
         "jig-work",
-        "keep-awake",
-        "repo-changes",
-        "repo-history",
-        "repo-prs",
-        "repo-review",
-        "repo-worktrees",
+        "jig-worktrees",
     ]);
 });
 
@@ -62,9 +62,12 @@ test("every mod has a mod.json that places it nowhere by itself, and a main.js w
 test("every mod the layout names is one of ours or one of Herdr's, and every mod of ours is in it or opens as a tab", () => {
     const named = new Set(nodes(layout).flatMap((n) => (n.content?.mod ? [n.content.mod] : [])));
     for (const mod of named) assert.ok([...MODS, ...HERDR_OWN].includes(mod), `${mod} is not known`);
-    // repo-review and file-view open as tabs, so no block of the layout names them.
+    // jig-review and jig-file-view open as tabs, so no block of the layout names them.
     for (const mod of MODS)
-        assert.ok(named.has(mod) || ["repo-review", "file-view"].includes(mod), `${mod} is in no block of the layout`);
+        assert.ok(
+            named.has(mod) || ["jig-review", "jig-file-view"].includes(mod),
+            `${mod} is in no block of the layout`,
+        );
     assert.equal(named.has("tabs"), false, "the tab bar is jig-tabs, with the Panel and Jig buttons");
     assert.equal(named.has("files"), false, "the Files panel is jig-files, which opens files as tabs");
 });
@@ -79,10 +82,10 @@ test("the layout's side panel gives each child an icon that exists, and ids are 
         [
             ["jig-work", "jig-work"],
             ["jig-context", "jig-context"],
-            ["changes", "repo-changes"],
-            ["history", "repo-history"],
-            ["pr", "repo-prs"],
-            ["worktrees", "repo-worktrees"],
+            ["changes", "jig-repos"],
+            ["history", "jig-history"],
+            ["pr", "jig-prs"],
+            ["worktrees", "jig-worktrees"],
             ["files", "jig-files"],
         ],
     );
@@ -124,7 +127,7 @@ test("keys.json binds keys for the jig layout only, to commands that exist", () 
         Record<string, string>
     >;
     assert.deepEqual(keys, {
-        global: { "ctrl-shift-alt-k": "keep-awake.cycle" },
+        global: { "ctrl-shift-alt-k": "jig-keep-awake.cycle" },
         "layout:jig": { "ctrl-shift-r": "layout.toggle:panel" },
     });
 });
@@ -133,11 +136,11 @@ test("there is no status bar: the unseen workers sit in 0 px blocks above the si
     const sidebar = layout.children?.find((n) => n.id === "sidebar");
     assert.deepEqual(
         sidebar?.children?.map((n) => n.id),
-        ["brand", "sidebar-lists", "jig-theme", "keep-awake", "sidebar-footer"],
+        ["brand", "sidebar-lists", "jig-theme", "jig-keep-awake", "sidebar-footer"],
     );
     assert.equal(sidebar?.children?.[2]?.content?.mod, "jig-theme-sync");
     assert.deepEqual((sidebar?.children?.[2] as { size?: unknown } | undefined)?.size, { px: 0 });
-    assert.equal(sidebar?.children?.[3]?.content?.mod, "keep-awake");
+    assert.equal(sidebar?.children?.[3]?.content?.mod, "jig-keep-awake");
     assert.deepEqual((sidebar?.children?.[3] as { size?: unknown } | undefined)?.size, { px: 0 });
     // Pane headers stay on screen: on hover they would cover the terminal's prompt line.
     const main = nodes(layout).find((n) => n.id === "main") as {
@@ -161,11 +164,11 @@ test("the layout has no status bar, no reply, no issues and no settings panel", 
     );
 });
 
-test("jig-files credits Herdr's files mod and its licence, and opens files as file-view tabs", () => {
+test("jig-files credits Herdr's files mod and its licence, and opens files as jig-file-view tabs", () => {
     const text = readFileSync(path.join(HERDR, "mods/jig-files/main.js"), "utf8");
     assert.match(text.slice(0, 1200), /Derived from the `files` mod shipped with the Herdr app/);
     assert.match(text.slice(0, 1200), /Apache License, Version 2\.0/);
-    assert.match(text, /mod: "file-view"/);
+    assert.match(text, /mod: "jig-file-view"/);
     assert.match(text, /Copyright the Herdr authors/);
 });
 
@@ -183,7 +186,7 @@ test("the new repository panels read with git and gh and never write", () => {
             .filter((f) => f.endsWith(".js"))
             .map((f) => readFileSync(f, "utf8"))
             .join("\n");
-    for (const mod of ["repo-prs", "repo-history"]) {
+    for (const mod of ["jig-prs", "jig-history"]) {
         const code = run(mod);
         // History opens a terminal for a diff; no other command that changes anything is named.
         assert.doesNotMatch(
@@ -192,11 +195,11 @@ test("the new repository panels read with git and gh and never write", () => {
             mod,
         );
     }
-    const worktrees = run("repo-worktrees");
+    const worktrees = run("jig-worktrees");
     assert.doesNotMatch(worktrees, /"--force"|"-D"|"-f"|"push"|"fetch"|"reset"/);
     assert.match(worktrees, /\["worktree", "remove", tree\.path\]/);
     assert.match(worktrees, /\["branch", "-d", tree\.branch\]/);
-    assert.doesNotMatch(run("repo-prs"), /"pr", "(?:merge|close|comment|review|edit|create)"/);
+    assert.doesNotMatch(run("jig-prs"), /"pr", "(?:merge|close|comment|review|edit|create)"/);
 });
 
 test("the sharing files are there: a recipe and a picture", () => {
@@ -246,7 +249,7 @@ test("the shipped config.json files name no machine, folder or palette of anyone
         prOwners: [],
         refreshSeconds: 60,
     });
-    const changes = JSON.parse(readFileSync(path.join(HERDR, "mods/repo-changes/config.json"), "utf8")) as unknown;
+    const changes = JSON.parse(readFileSync(path.join(HERDR, "mods/jig-repos/config.json"), "utf8")) as unknown;
     assert.deepEqual(changes, {
         newBranchPrefix: "feature/",
         baseBranch: null,
@@ -270,7 +273,7 @@ test("jig-tabs credits Herdr's tabs mod and its licence, and has the Panel and J
 test("the Jig icons are monochrome glyphs drawn in the text colour", () => {
     for (const file of [
         "mods/jig-tabs/jig.svg",
-        "mods/keep-awake/keep-awake.svg",
+        "mods/jig-keep-awake/jig-keep-awake.svg",
         "mods/jig-activity/icons/jig.svg",
         "mods/jig-activity/icons/context.svg",
     ]) {

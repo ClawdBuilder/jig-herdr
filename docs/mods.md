@@ -4,9 +4,9 @@ What each mod in `herdr/mods/` shows, what it reads and runs, and the props it t
 together. Back to the [Herdr app overview](../README.md); [How it works](how-it-works.md) explains a mod and the link to
 the agent's machine first.
 
-All of them are trusted code that runs inside the Herdr app, so this page says what each reaches. `jig-work` and `repo-prs`
-reach the network through `gh`, and `repo-changes` fetches, pulls and pushes with git (after a confirm), on the machine where the folders are.
-Three mods write with git: `repo-changes` and `repo-review` with [the git actions](#the-git-actions), and `repo-worktrees`
+All of them are trusted code that runs inside the Herdr app, so this page says what each reaches. `jig-work` and `jig-prs`
+reach the network through `gh`, and `jig-repos` fetches, pulls and pushes with git (after a confirm), on the machine where the folders are.
+Three mods write with git: `jig-repos` and `jig-review` with [the git actions](#the-git-actions), and `jig-worktrees`
 with its `Remove`. Each is a `main.js` with the helper files named below; the pure parts are in `lib.js` files, which the
 tests load.
 
@@ -24,7 +24,7 @@ headers:
   adds the review state and the checks. Failing ones first, with the names of their failing checks. A click opens it.
 - **Outputs:** the files the session created (`A`) or changed (`M`) outside any git repository, such as ticket notes, plans
   and reports, newest first (`No ticket files yet` when none), each with its short folder (the last two segments; full path
-  on hover). A click opens a `file-view` tab, or selects the one already open. Files inside repositories are not listed:
+  on hover). A click opens a `jig-file-view` tab, or selects the one already open. Files inside repositories are not listed:
   under the list a dim line, `N files changed in repositories → Changes`, shows the side panel on the Changes section. The
   status file's `repo` field says which is which; a session of an older `jig-session` has none, so all its outputs are
   listed, with the diff button on those that have changes in a repository.
@@ -42,9 +42,9 @@ headers:
   status file one `git rev-parse`/`git status` script when the list changes and every 30 s; pull requests through `gh`,
   cached 5 minutes per ticket in `localStorage`. Background runs are silent; a clicked refresh shows its busy state only
   after 400 ms and queues one more click instead of blocking.
-- **Opens:** links with this computer's browser (`explorer.exe`, `open` or `xdg-open`); files with `tab.new` and `file-view`;
-  diffs with `tab.new` and `repo-review`. A missing `file-view` gives a notification; a missing `repo-review` hides the button.
-- **Sets** `shared("file-view.tabs")`, the map of `<machine>|<path>` to the tab that shows it, so a second click selects it.
+- **Opens:** links with this computer's browser (`explorer.exe`, `open` or `xdg-open`); files with `tab.new` and `jig-file-view`;
+  diffs with `tab.new` and `jig-review`. A missing `jig-file-view` gives a notification; a missing `jig-review` hides the button.
+- **Sets** `shared("jig-file-view.tabs")`, the map of `<machine>|<path>` to the tab that shows it, so a second click selects it.
 - **Props:** none. Settings in `config.json`: `{ machine, stateDir, prOwners, refreshSeconds }`.
 
 ## jig-context: the Context panel
@@ -80,10 +80,10 @@ Herdr's shipped `tabs` mod (Apache-2.0; the file says so at its top), with the F
 - **`Jig`** selects the `jig-work` child of `panel-body` and shows the panel; a second click hides it. Lit while it shows.
 - **Props:** `{ panel, stack, jig }`, the ids of the panel row, its stack and the Jig child; default `panel`, `panel-body`,
   `jig-work`. The side panel is remembered per space, as in Herdr's bar.
-- **The sun** at its right is [Keep awake](#keep-awake-the-keep-awake-control): lit while the computer is held awake, a
+- **The sun** at its right is [Keep awake](#jig-keep-awake-the-jig-keep-awake-control): lit while the computer is held awake, a
   click turns it on or off, a right-click opens its three modes.
 
-## keep-awake: the Keep awake control
+## jig-keep-awake: the Keep awake control
 
 A sun in the tab bar that keeps the computer Herdr runs on from going to sleep on its idle timer, like a presentation mode:
 for a long build, or an agent working overnight. The request is held by a small helper process; nothing about the power
@@ -98,7 +98,7 @@ plan, the registry or the display is changed, and it needs no administrator righ
 - **The screen is kept on** by default (`display: true`), not only the system; the popup's switch writes `config.json` and
   restarts a running helper at once with the new flag, so the screen follows without waiting for it to die. A closed lid or
   the power button still sleeps the computer; the popup says so.
-- **One helper, never two.** Its PID is in `shared("keep-awake.helper")`, and a claim in `keep-awake.helper.json` in the app
+- **One helper, never two.** Its PID is in `shared("jig-keep-awake.helper")`, and a claim in `jig-keep-awake.helper.json` in the app
   folder lets only one worker start one (two Herdr windows share that folder). A second copy, a reload or a restart reuses
   it while it is alive and its command line is ours — the PowerShell with `-Owner <herdr pid>`, `caffeinate -w <herdr pid>`,
   or the `systemd-inhibit` line whose `--why` is ours — and starts a new one otherwise.
@@ -106,7 +106,7 @@ plan, the registry or the display is changed, and it needs no administrator righ
   another process, the record is dropped without touching anything; `taskkill` runs without `/T`, because the helper has no
   tree of its own. A copy loaded by `herdr-app check` has no window or layout and does nothing at all; only the copy that
   started a helper releases it when Herdr quits; otherwise the owner check ends it within about 5 seconds. The helper's
-  stop file, `keep-awake.stop` in the app folder, names the start that wrote it (`stop <token>`), so an old stop cannot end
+  stop file, `jig-keep-awake.stop` in the app folder, names the start that wrote it (`stop <token>`), so an old stop cannot end
   a new helper.
 - **It ends when Herdr does.** The helper checks its stop file and Herdr's own process every 5 seconds; on close the mod
   only writes `stop` (fast), so the helper is gone within about 5 seconds, and a crash cannot leave a computer awake for ever.
@@ -115,23 +115,23 @@ plan, the registry or the display is changed, and it needs no administrator righ
   lifetime, so nothing can outlive it.
 - **What it runs, on Herdr's computer** (`exec` without `on`, never on a space's machine):
   - **Windows:** a hidden, detached PowerShell (`Start-Process -WindowStyle Hidden`, every argument quoted for the child)
-    running `keep-awake.ps1`, which calls
+    running `jig-keep-awake.ps1`, which calls
     `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED [| ES_DISPLAY_REQUIRED])`, repeats it every 5 seconds, and
     exits when its owner is gone, is no longer `herdr-app`, or the stop file names its own start.
   - **macOS:** `caffeinate -i [-d] -w <herdr pid>`, in the background.
   - **Linux:** `systemd-inhibit --what=sleep[:idle] --why="Herdr keep awake" --mode=block sh -c 'while kill -0 <herdr pid>;
-    do sleep 20; done' keep-awake`, in the background: the helper watches Herdr itself, so it cannot outlive it, and its
+    do sleep 20; done' jig-keep-awake`, in the background: the helper watches Herdr itself, so it cannot outlive it, and its
     command line carries the marker and owner the mod recognises.
-- **Shared state:** `shared("keep-awake.mode")` (`"off"`, `"on"` or `"agents"`), `shared("keep-awake.display")` (the screen
-  setting for this session), `shared("keep-awake.active")` (whether the request is held now) and
-  `shared("keep-awake.helper")` (`{ pid, owner, at }`), so the tab bar, other layouts and the key all drive the same worker.
+- **Shared state:** `shared("jig-keep-awake.mode")` (`"off"`, `"on"` or `"agents"`), `shared("jig-keep-awake.display")` (the screen
+  setting for this session), `shared("jig-keep-awake.active")` (whether the request is held now) and
+  `shared("jig-keep-awake.helper")` (`{ pid, owner, at }`), so the tab bar, other layouts and the key all drive the same worker.
 - **Props:** none for the worker; `{ menu: true }` draws the mode popup. **Files:** `main.js`, `lib.js` (the mode decision
-  and idle timer, the commands for each platform, the PID bookkeeping and `config.json`), `keep-awake.ps1`,
-  `keep-awake.svg`, `config.json`. The Windows helper also checks that its owner process is still `herdr-app`, so a reused
+  and idle timer, the commands for each platform, the PID bookkeeping and `config.json`), `jig-keep-awake.ps1`,
+  `jig-keep-awake.svg`, `config.json`. The Windows helper also checks that its owner process is still `herdr-app`, so a reused
   PID cannot keep the computer awake. **Settings:** `idleMinutes` (5 by default; 0 stops as soon as the last agent does) and
   `display` (true by default: keep the screen on too; a hand edit made while Herdr was closed wins at the next start).
 
-## file-view: a file in a tab
+## jig-file-view: a file in a tab
 
 A read-only view of one file in a **tab** (it has no panel form: open it from Files or Work), with syntax colours, a line
 count, `Copy path`, `Refresh` and a soft-wrap toggle. Its props come from `tab.new`: `{ on, path }`. A 42 px header holds
@@ -144,7 +144,7 @@ config. A binary or missing file says so, and a tab without props says to open o
 A Markdown file (`.md`, `.markdown`, `.mdx`) opens rendered: headings, lists, tables, code blocks and links. `Source` in
 the header shows its text with syntax colours, and `Preview` goes back.
 
-## repo-changes: the Changes panel
+## jig-repos: the Changes panel
 
 Every git checkout under the folder the focused terminal is in, changed ones first, then a `Clean (N)` group; a filter box
 matches checkout names and file paths. A click on a file opens it in a `Review` tab. A checkout with commits its base
@@ -169,7 +169,7 @@ checkboxes and the buttons that appear on hover run [the git actions](#the-git-a
   commit line under every row.
 - **Worktrees fold under their main checkout.** Checkouts are grouped by their git common folder: a chevron on the main row
   hides or shows its worktrees (`▸`/`▾`; a folded one shows their count and a dot when one has changes or is ahead/behind, so
-  nothing hides). The choice is kept per repo path in `shared("repo-changes.folded")`, so it survives a reload and a folder
+  nothing hides). The choice is kept per repo path in `shared("jig-repos.folded")`, so it survives a reload and a folder
   switch; a repo no one has touched starts folded unless a worktree is the focused folder or has changes. The header's chevron
   folds or unfolds every repo. A worktree whose main checkout is not listed stands as a row of its own, and a main checkout
   that is clean, with every worktree clean, folds into `Clean (N)`.
@@ -206,9 +206,9 @@ checkboxes and the buttons that appear on hover run [the git actions](#the-git-a
   terminal inside the panel's folder goes working to idle or done, at once after an action, and on Refresh. Triggers are
   debounced for 500 ms; a backstop reads every `refreshSeconds` (60 by default, at least 15) while shown. Folded
   repositories are read when unfolded and by that backstop.
-- **Sets** `shared("badge.repo-changes")`: the number of checkouts (main or worktree) with changes, each counted once;
-  `shared("repo-changes.done")` after a branch switch or a push, so the panel says so and reads again; and
-  `shared("repo-changes.running")`, one `{ what, at }` entry per checkout, so the panel and its dialog never run two actions
+- **Sets** `shared("badge.jig-repos")`: the number of checkouts (main or worktree) with changes, each counted once;
+  `shared("jig-repos.done")` after a branch switch or a push, so the panel says so and reads again; and
+  `shared("jig-repos.running")`, one `{ what, at }` entry per checkout, so the panel and its dialog never run two actions
   in the same checkout (an entry older than 15 minutes is stale).
 - **Settings:** `refreshSeconds` in `config.json` sets the backstop (60 by default, at least 15). `exec` caps one read at
   30 s.
@@ -286,7 +286,7 @@ dialog, which stays open; a success closes it and the panel reports what happene
 | `remote`                | `"origin"`                                                                   | The remote to fetch, pull, push to and publish on                      |
 | `networkTimeoutSeconds` | `60`                                                                         | How long a fetch, pull or push may run (5 to 600) before it is stopped |
 
-## repo-review: the Review tab
+## jig-review: the Review tab
 
 One repository's changed files on the left and the diff of the chosen file on the right, with added and removed lines
 tinted and marked at the edge. The `j`, `k` and arrow keys step through files. It opens as a tab, so its props come from
@@ -295,7 +295,7 @@ or `"branch"`, working by default).
 
 It runs `git status` and `git diff HEAD` in the repository, and reads an untracked file to show it whole. Re-listing is
 every 5 seconds while the tab is shown. A second click on a file of the same repository retargets the open tab; its
-shared message `repo-review.open` is `{ repo, file, mode?, at }`, and one without `mode` means working changes.
+shared message `jig-review.open` is `{ repo, file, mode?, at }`, and one without `mode` means working changes.
 
 In **branch mode** the tab shows `git diff <merge base>`: the commits ahead of the base branch plus anything uncommitted, with
 untracked files added. The sidebar says `<branch> vs <base>`, the commit count and the latest commits, and the files carry
@@ -327,7 +327,7 @@ The diff's header has `Stage` or `Unstage` and `Discard…` for the shown file, 
 [the git actions](#the-git-actions). Its `lib.js` holds a copy of those three functions, since mods cannot import each other;
 a test runs both copies.
 
-## repo-history: the History panel
+## jig-history: the History panel
 
 A picker of the repositories under the space's folder and the commit graph of the chosen one, with lanes, branch and tag
 labels, the author's initials and the age. A click on a commit opens its message and files; a file, or `Open diff`, shows the
@@ -345,7 +345,7 @@ repositories and worktrees whose folder name or branch holds the typed text, suc
 - **Props:** none. **Shared state:** none.
 - **Files:** `main.js`, `lib.js` (the script, the log parsing, the lane layout, the subject and numstat readers).
 
-## repo-prs: the PR & CI panel
+## jig-prs: the PR & CI panel
 
 The `Workspace` tab lists the repositories that are on a feature branch with the pull request of that branch, its review
 state and its checks, failing ones first; repositories on `main`, `master`, `develop` or the remote's default branch fold
@@ -359,10 +359,10 @@ A click on a pull request or a check opens it in the browser; the summary row op
 - **Checks:** `FAILURE`, `ERROR`, `TIMED_OUT`, `ACTION_REQUIRED` and `STARTUP_FAILURE` are failed; `CANCELLED`, `SKIPPED`,
   `NEUTRAL` and `STALE` are skipped (a cancelled run is usually one that a newer push replaced); no result yet is pending.
 - **Sign-in:** `gh` is signed in by you. When it is not, or the network is down, the panel says so once and stops asking.
-- **Sets** `shared("badge.repo-prs")`: the number of open pull requests with a failing check, shown on its button.
+- **Sets** `shared("badge.jig-prs")`: the number of open pull requests with a failing check, shown on its button.
 - **Props:** none. **Files:** `main.js`, `lib.js`.
 
-## repo-worktrees: the Worktrees panel
+## jig-worktrees: the Worktrees panel
 
 The linked worktrees of every repository under the space's folder, grouped by repository, newest commit first. A row shows
 the branch, ahead and behind, uncommitted changes, unpushed commits, whether the remote branch is gone and the age. A click
@@ -378,13 +378,13 @@ opens the space at that folder or a new tab there.
 - **What it runs:** one `sh -c` script on the event triggers, with a 60-second backstop set by `refreshSeconds` (at least
   15), reading each repository once (`git worktree list --porcelain`, `rev-list`, `for-each-ref`, `status`), eight at a
   time. `exec` caps one read at 30 s.
-- **Sets** `shared("badge.repo-worktrees")`: the number of ready worktrees, shown on its button.
+- **Sets** `shared("badge.jig-worktrees")`: the number of ready worktrees, shown on its button.
 - **Props:** none. **Files:** `main.js`, `lib.js`.
 
 ## jig-files: the Files panel
 
 Herdr's shipped `files` mod (Apache-2.0; the file says so at its top), changed so that a click on a file opens it in a
-`file-view` tab, as `jig-work` does, and a second click selects that tab. Folders open in place and files with uncommitted
+`jig-file-view` tab, as `jig-work` does, and a second click selects that tab. Folders open in place and files with uncommitted
 changes carry a letter. A filter runs one bounded `find` per change (500 ms after typing) and per refresh, never once per
 tick; watcher events go through the refresh scheduler, so they debounce and a read in progress queues one more. It reads
 the folder on the space's machine through one listing function, with the filter's `find` bounded to 10 s where coreutils
@@ -429,18 +429,18 @@ notification. On this computer without `sh` (Windows), it uses the home folder a
 `layouts/jig.json` is written from Herdr's shipped `main` layout (Apache-2.0), with the right panel opened and our blocks
 added. The root has Herdr's `workspace-chrome`, `spaces` and `agents`, the `jig-tabs` bar and the terminals as cards
 (`pane`, the header always shown), and a `panel` row holding the `panel-body` stack and the `activity` bar. There is no
-status bar: `jig-theme-sync` and `keep-awake` sit in 0 px blocks at the bottom of the sidebar, above its footer, unseen;
+status bar: `jig-theme-sync` and `jig-keep-awake` sit in 0 px blocks at the bottom of the sidebar, above its footer, unseen;
 the first follows Pi's palette and the second holds the awake request. The theme is `jig-lime`, and the follower changes it.
 
-| Panel (stack child)                                          | Mod              | Icon                         |
-| ------------------------------------------------------------ | ---------------- | ---------------------------- |
-| `jig-work` (open first)                                      | `jig-work`       | `jig.svg`, ours              |
-| `jig-context` (a line under its button closes the Jig group) | `jig-context`    | `context.svg`, a gauge, ours |
-| `changes`                                                    | `repo-changes`   | `git-compare.svg`, Herdr's   |
-| `history`                                                    | `repo-history`   | `clock.svg`, Herdr's         |
-| `pr`                                                         | `repo-prs`       | `pr.svg`, ours               |
-| `worktrees`                                                  | `repo-worktrees` | `worktree.svg`, ours         |
-| `files`                                                      | `jig-files`      | `files.svg`, Herdr's         |
+| Panel (stack child)                                          | Mod             | Icon                         |
+| ------------------------------------------------------------ | --------------- | ---------------------------- |
+| `jig-work` (open first)                                      | `jig-work`      | `jig.svg`, ours              |
+| `jig-context` (a line under its button closes the Jig group) | `jig-context`   | `context.svg`, a gauge, ours |
+| `changes`                                                    | `jig-repos`     | `git-compare.svg`, Herdr's   |
+| `history`                                                    | `jig-history`   | `clock.svg`, Herdr's         |
+| `pr`                                                         | `jig-prs`       | `pr.svg`, ours               |
+| `worktrees`                                                  | `jig-worktrees` | `worktree.svg`, ours         |
+| `files`                                                      | `jig-files`     | `files.svg`, Herdr's         |
 
 The id `jig-work` is the one the tab bar's `Jig` button opens. To use a panel of your own, add a child to the stack with its
 `title` and `content.props.activity.icon`.

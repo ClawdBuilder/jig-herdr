@@ -1,4 +1,4 @@
-// The pure parts of the mods (their lib.js files), and the shell scripts of repo-changes and jig-work run on real files.
+// The pure parts of the mods (their lib.js files), and the shell scripts of jig-repos and jig-work run on real files.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -43,8 +43,8 @@ function repo(root: string, name: string, files: Record<string, string>): string
     return dir;
 }
 
-test("repo-changes lists every repository under a folder, nested ones too, with their changes", async () => {
-    const { SCRIPT, parseRepos } = await load<Changes>("mods/repo-changes/lib.js");
+test("jig-repos lists every repository under a folder, nested ones too, with their changes", async () => {
+    const { SCRIPT, parseRepos } = await load<Changes>("mods/jig-repos/lib.js");
     const root = mkdtempSync(path.join(tmpdir(), "jig-herdr-"));
     try {
         const orders = repo(root, "orders-api", { "src/a.ts": "one\n", "README.md": "x\n" });
@@ -78,8 +78,8 @@ test("repo-changes lists every repository under a folder, nested ones too, with 
     }
 });
 
-test("repo-changes reads a branch with a dot, ahead and behind, a detached head and an error", async () => {
-    const { parseRepos } = await load<Changes>("mods/repo-changes/lib.js");
+test("jig-repos reads a branch with a dot, ahead and behind, a detached head and an error", async () => {
+    const { parseRepos } = await load<Changes>("mods/jig-repos/lib.js");
     const out = [
         "@@repo /w/a",
         "## release/1.2...origin/release/1.2 [ahead 2, behind 1]",
@@ -98,8 +98,8 @@ test("repo-changes reads a branch with a dot, ahead and behind, a detached head 
     assert.equal(c?.error, "fatal: not a git repository");
 });
 
-test("repo-changes filters by repository name or file, and splits a path", async () => {
-    const { parseRepos, filterRepos, splitPath } = await load<Changes>("mods/repo-changes/lib.js");
+test("jig-repos filters by repository name or file, and splits a path", async () => {
+    const { parseRepos, filterRepos, splitPath } = await load<Changes>("mods/jig-repos/lib.js");
     const repos = parseRepos(
         [
             "@@repo /w/orders",
@@ -127,11 +127,11 @@ test("repo-changes filters by repository name or file, and splits a path", async
     assert.deepEqual(splitPath("a.ts"), { dir: "", name: "a.ts" });
 });
 
-test("repo-review numbers the lines of a diff and reads a status", async () => {
+test("jig-review numbers the lines of a diff and reads a status", async () => {
     const lib = await load<{
         diffRows(lines: string[]): { kind: string; number?: number; text: string }[];
         parseStatus(out: string): { branch: string; files: { status: string }[]; total: number };
-    }>("mods/repo-review/lib.js");
+    }>("mods/jig-review/lib.js");
     const rows = lib.diffRows(["@@ -3,2 +3,3 @@", " keep", "-gone", "+new", "+more"]);
     assert.deepEqual(
         rows.map((r) => [r.kind, r.number]),
@@ -151,7 +151,7 @@ test("repo-review numbers the lines of a diff and reads a status", async () => {
     assert.throws(() => lib.parseStatus("fatal: no"), /fatal: no/);
 });
 
-test("repo-review selects diff lines and copies their code", async () => {
+test("jig-review selects diff lines and copies their code", async () => {
     const lib = await load<{
         diffRows(lines: string[]): { kind: string; raw?: string }[];
         selectLine(
@@ -162,7 +162,7 @@ test("repo-review selects diff lines and copies their code", async () => {
         ): { anchor: number; end: number } | null;
         inSelection(sel: unknown, index: number): boolean;
         selectionCopy(rows: unknown[], sel: unknown): { text: string; lines: number } | null;
-    }>("mods/repo-review/lib.js");
+    }>("mods/jig-review/lib.js");
     // rows: 0 header, 1 context, 2 deleted, 3 added, 4 added blank, 5 context
     const rows = lib.diffRows(["@@ -1,3 +1,4 @@", " keep", "-gone", "+  new", "+", " end"]);
     const one = lib.selectLine(rows, null, 3, false);
@@ -188,13 +188,13 @@ test("repo-review selects diff lines and copies their code", async () => {
     assert.equal(lib.selectionCopy(rows, null), null);
 });
 
-test("repo-review picks a view and a language for the File and Patch editors", async () => {
+test("jig-review picks a view and a language for the File and Patch editors", async () => {
     const lib = await load<{
         PANES: string[];
         reviewPane(value: unknown): string;
         langFor(path: string): string;
         capText(text: string, max: number): string;
-    }>("mods/repo-review/lib.js");
+    }>("mods/jig-review/lib.js");
     assert.deepEqual(lib.PANES, ["diff", "file", "patch"]);
     assert.equal(lib.reviewPane("patch"), "patch");
     assert.equal(lib.reviewPane("file"), "file");
@@ -559,7 +559,7 @@ test("jig-work reads its config, words decisions, and knows when it is on screen
                         active: "changes",
                         children: [
                             { id: "jig-work", content: { mod: "jig-work" } },
-                            { id: "changes", content: { mod: "repo-changes" } },
+                            { id: "changes", content: { mod: "jig-repos" } },
                         ],
                     },
                 ],
@@ -567,10 +567,10 @@ test("jig-work reads its config, words decisions, and knows when it is on screen
         ],
     };
     assert.equal(lib.isShown(layout, "jig-work"), false);
-    assert.equal(lib.isShown(layout, "repo-changes"), true);
+    assert.equal(lib.isShown(layout, "jig-repos"), true);
     (layout.children[0] as { hidden?: boolean }).hidden = true;
-    assert.equal(lib.isShown(layout, "repo-changes"), false);
-    assert.equal(lib.isShown(layout, "file-view"), true, "a mod in a tab of its own counts as shown");
+    assert.equal(lib.isShown(layout, "jig-repos"), false);
+    assert.equal(lib.isShown(layout, "jig-file-view"), true, "a mod in a tab of its own counts as shown");
 });
 
 test("jig-activity draws a divider after a button that asks for one", async () => {
@@ -579,7 +579,7 @@ test("jig-activity draws a divider after a button that asks for one", async () =
         id: "body",
         children: [
             { id: "jig-work", content: { mod: "jig-work", props: { activity: { divider: true } } } },
-            { id: "changes", content: { mod: "repo-changes" } },
+            { id: "changes", content: { mod: "jig-repos" } },
         ],
     };
     assert.deepEqual(

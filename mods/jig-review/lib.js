@@ -1,5 +1,5 @@
 // Pure helpers for the review tab, kept apart from main.js so they can be tested outside Herdr.
-// Copied from repo-changes/lib.js (mods cannot import each other), cut down to one repo and the file actions.
+// Copied from jig-repos/lib.js (mods cannot import each other), cut down to one repo and the file actions.
 
 // Most changed files listed; a bigger change set is cut here.
 export const CAP = 500;
@@ -100,7 +100,7 @@ export const PANES = ["diff", "file", "patch"];
 /** A remembered or requested view, or "diff" when it is none of the three. */
 export const reviewPane = (value) => (PANES.includes(value) ? value : "diff");
 
-// Extensions the editor's highlighter names differently (the same map as file-view; mods cannot import each other).
+// Extensions the editor's highlighter names differently (the same map as jig-file-view; mods cannot import each other).
 const LANG = {
     ts: "js",
     tsx: "js",
@@ -157,7 +157,7 @@ export function selectionCopy(rows, sel) {
 }
 
 // ---- Stage, unstage and discard the shown file ----
-// Copied from repo-changes/lib.js, which documents them; a test runs both copies on the same repositories.
+// Copied from jig-repos/lib.js, which documents them; a test runs both copies on the same repositories.
 // Each takes `exec(cmd, args, { cwd })` and returns { ok, message }. No --force, no reset, no "discard all".
 
 const firstLine = (r) => (r.stderr || r.stdout || `git exited with ${r.code}`).trim().split("\n")[0];
@@ -238,7 +238,7 @@ export function effectiveMode(wanted, hasWorking, hasBranch) {
 /** Stage, unstage and discard only make sense for working changes. */
 export const canWrite = (mode) => mode !== "branch";
 
-/** The base branch a checkout is compared with, as in repo-changes' scan script: the closest of the candidates that exist
+/** The base branch a checkout is compared with, as in jig-repos' scan script: the closest of the candidates that exist
  * (origin/develop, origin's HEAD branch, origin/main, origin/master, develop, main, master), meaning the one whose merge
  * base with HEAD leaves the fewest commits, the earlier one on a tie; a local branch whose origin/ twin is the same commit
  * is skipped. Null when none exists, when the checkout is on develop, main, master or origin's HEAD branch, or when

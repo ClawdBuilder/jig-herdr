@@ -73,13 +73,13 @@
                     }
                 },
                 {
-                    "id": "keep-awake",
+                    "id": "jig-keep-awake",
                     "type": "block",
                     "size": {
                         "px": 0
                     },
                     "content": {
-                        "mod": "keep-awake"
+                        "mod": "jig-keep-awake"
                     }
                 },
                 {
@@ -194,7 +194,7 @@
                                             "type": "block",
                                             "title": "Changes",
                                             "content": {
-                                                "mod": "repo-changes",
+                                                "mod": "jig-repos",
                                                 "props": {
                                                     "activity": {
                                                         "icon": "mods/workspace-chrome/git-compare.svg"
@@ -207,7 +207,7 @@
                                             "type": "block",
                                             "title": "History",
                                             "content": {
-                                                "mod": "repo-history",
+                                                "mod": "jig-history",
                                                 "props": {
                                                     "activity": {
                                                         "icon": "mods/workspace-chrome/clock.svg"
@@ -220,7 +220,7 @@
                                             "type": "block",
                                             "title": "PR & CI",
                                             "content": {
-                                                "mod": "repo-prs",
+                                                "mod": "jig-prs",
                                                 "props": {
                                                     "activity": {
                                                         "icon": "mods/jig-activity/icons/pr.svg"
@@ -233,7 +233,7 @@
                                             "type": "block",
                                             "title": "Worktrees",
                                             "content": {
-                                                "mod": "repo-worktrees",
+                                                "mod": "jig-worktrees",
                                                 "props": {
                                                     "activity": {
                                                         "icon": "mods/jig-activity/icons/worktree.svg"
