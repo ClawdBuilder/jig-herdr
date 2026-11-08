@@ -862,7 +862,11 @@ test("the follow-state copies agree and pickRoot follows the focused terminal fi
     const root = new URL("../mods/", import.meta.url);
     const source = readFileSync(new URL("jig-repos/follow-state.js", root), "utf8");
     for (const mod of ["jig-history", "jig-prs", "jig-worktrees"])
-        assert.equal(readFileSync(new URL(`${mod}/follow-state.js`, root), "utf8"), source, mod);
+        assert.equal(
+            readFileSync(new URL(`${mod}/follow-state.js`, root), "utf8"),
+            source,
+            `${mod}/follow-state.js is the odd one out`,
+        );
     const { pickRoot } = await load<Lib>("mods/jig-repos/follow-state.js");
     assert.equal(pickRoot({ follow: true, focusedCwd: "/f", spaceFolder: "/s", first: "/1" }), "/f");
     assert.equal(pickRoot({ follow: false, focusedCwd: "/f", spaceFolder: "/s", first: "/1" }), "/s");

@@ -17,5 +17,9 @@ test("every panel carries the same checked copy of the follow helper", () => {
     const root = new URL("../mods/", import.meta.url);
     const source = readFileSync(new URL("jig-repos/follow.js", root), "utf8");
     for (const mod of ["jig-history", "jig-prs", "jig-worktrees"])
-        assert.equal(readFileSync(new URL(`${mod}/follow.js`, root), "utf8"), source, mod);
+        assert.equal(
+            readFileSync(new URL(`${mod}/follow.js`, root), "utf8"),
+            source,
+            `${mod}/follow.js is the odd one out`,
+        );
 });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
     BUSY_AFTER_MS,
@@ -96,8 +96,19 @@ test("every panel starts its first read from the constructor, not the timer", ()
 test("every panel starts its first read from the constructor, not the timer", () => {
     const root = new URL("../mods/", import.meta.url);
     const source = readFileSync(new URL("jig-repos/refresh.js", root), "utf8");
-    for (const mod of ["jig-history", "jig-prs", "jig-worktrees"])
-        assert.equal(readFileSync(new URL(`${mod}/refresh.js`, root), "utf8"), source, mod);
+    const mods = readdirSync(root).filter((mod) => {
+        try {
+            return readFileSync(new URL(`${mod}/refresh.js`, root)).length > 0;
+        } catch {
+            return false;
+        }
+    });
+    for (const mod of mods)
+        assert.equal(
+            readFileSync(new URL(`${mod}/refresh.js`, root), "utf8"),
+            source,
+            `${mod}/refresh.js is the odd one out`,
+        );
 });
 
 test("no sweep happens without a trigger before the backstop, and the backstop sweeps once", () => {
