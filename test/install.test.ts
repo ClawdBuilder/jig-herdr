@@ -76,7 +76,7 @@ test("running it again changes nothing", (t) => {
     install(target);
     const again = install(target);
     assert.deepEqual([again.added, again.updated, again.replaced, again.removed, again.skipped], [[], [], [], [], []]);
-    assert.deepEqual(again.keys, { added: [], kept: [] });
+    assert.deepEqual(again.keys, { added: [], migrated: [], kept: [] });
 });
 
 test("a file it installed is updated, unless you changed it", (t) => {
@@ -137,7 +137,7 @@ test("keys.json: other sections and keys stay, a key you bound differently is ke
     writeFileSync(
         path.join(target, "keys.json"),
         JSON.stringify({
-            global: { "alt-1": "space.select:1" },
+            global: { "alt-1": "space.select:1", "ctrl-shift-alt-k": "keep-awake.cycle" },
             "layout:jig": { "ctrl-shift-r": "tab.next", "ctrl-shift-y": "tab.prev" },
         }),
     );
@@ -147,7 +147,8 @@ test("keys.json: other sections and keys stay, a key you bound differently is ke
     assert.equal(keys["layout:jig"]?.["ctrl-shift-r"], "tab.next");
     assert.equal(keys["layout:jig"]?.["ctrl-shift-y"], "tab.prev");
     assert.deepEqual(report.keys.kept, ["layout:jig ctrl-shift-r (yours: tab.next)"]);
-    assert.deepEqual(report.keys.added, ["global ctrl-shift-alt-k"], "its own new key is added, the person's kept");
+    assert.deepEqual(report.keys.migrated, ["global ctrl-shift-alt-k (keep-awake.cycle -> jig-keep-awake.cycle)"]);
+    assert.deepEqual(report.keys.added, []);
 
     install(target, { force: true });
     assert.equal(readJson(target, "keys.json")["layout:jig"]?.["ctrl-shift-r"], "layout.toggle:panel");
@@ -156,6 +157,18 @@ test("keys.json: other sections and keys stay, a key you bound differently is ke
         "alt-1": "space.select:1",
         "ctrl-shift-alt-k": "jig-keep-awake.cycle",
     });
+});
+
+test("a binding for an old renamed mod action is migrated without force", (t) => {
+    const target = folder(t);
+    writeFileSync(
+        path.join(target, "keys.json"),
+        JSON.stringify({ global: { "ctrl-shift-alt-k": "keep-awake.cycle" } }),
+    );
+    const report = install(target);
+    assert.equal(readJson(target, "keys.json").global["ctrl-shift-alt-k"], "jig-keep-awake.cycle");
+    assert.deepEqual(report.keys.migrated, ["global ctrl-shift-alt-k (keep-awake.cycle -> jig-keep-awake.cycle)"]);
+    assert.equal(report.keys.kept.length, 0);
 });
 
 test("a keys.json that is not JSON is not touched", (t) => {
