@@ -198,7 +198,10 @@ export function isHelper(commandLine, script) {
     const name = String(script ?? "")
         .split(/[\\/]/)
         .pop();
-    return Boolean(name) && String(commandLine ?? "").includes(name);
+    if (!name) return false;
+    // A helper started by the previous release still runs keep-awake.ps1; accept both names until it is gone.
+    const names = [name, name === "jig-keep-awake.ps1" ? "keep-awake.ps1" : "jig-keep-awake.ps1"];
+    return names.some((candidate) => String(commandLine ?? "").includes(candidate));
 }
 
 /**

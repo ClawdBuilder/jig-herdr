@@ -195,6 +195,11 @@ test("a recorded helper is ours only per platform and owner, and is never killed
 
     assert.equal(isHelper("powershell -File C:/x/jig-keep-awake.ps1 -Owner 1", "C:/x/jig-keep-awake.ps1"), true);
     assert.equal(isHelper("powershell -File C:/x/other.ps1", "C:/x/jig-keep-awake.ps1"), false);
+    assert.equal(
+        isHelper("powershell -File C:/x/keep-awake.ps1 -Owner 4321", "C:/x/jig-keep-awake.ps1"),
+        true,
+        "a helper started under the old name is still ours",
+    );
     assert.equal(isHelper("", "C:/x/jig-keep-awake.ps1"), false);
 
     const script = "C:/x/jig-keep-awake.ps1";
