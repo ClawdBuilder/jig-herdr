@@ -1,0 +1,11 @@
+#!/bin/sh
+# Opt in with: git config core.hooksPath .githooks
+set -eu
+if [ -n "${JIG_COMMIT_RANGE:-}" ]; then
+  range=$JIG_COMMIT_RANGE
+elif git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
+  range='@{u}..HEAD'
+else
+  range='origin/main..HEAD'
+fi
+JIG_COMMIT_RANGE=$range node scripts/check-commit-emails.mjs

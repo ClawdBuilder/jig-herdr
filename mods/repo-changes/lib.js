@@ -840,9 +840,9 @@ export function shQuote(value) {
  * - the variables passed in, quoted;
  * - `GIT_SSH_COMMAND="ssh -o BatchMode=yes"` only when the machine has no GIT_SSH_COMMAND and the repository has no
  *   `core.sshCommand`, so the person's own ssh setup is never replaced;
- * - the command under `timeout` when the machine has it, else under a watchdog — a background `sleep`, a flag file in
- *   the temp folder, then `kill` of the command and its children — that stops it and exits 124, so a machine without
- *   `timeout` (macOS) still cannot hang the panel.
+ * - the command under `timeout` or `gtimeout` when the machine has one, else under a watchdog — a background `sleep`, a
+ *   flag file in the temp folder, then `kill` of the command and its children — that stops it and exits 124, so a
+ *   machine without either (macOS) still cannot hang the panel.
  * The command and its arguments arrive as `$@` (`sh -c SCRIPT sh <cmd> <args...>`), so nothing is re-quoted.
  */
 export function wrapperScript(env, timeout = NETWORK_TIMEOUT) {
@@ -853,7 +853,9 @@ export function wrapperScript(env, timeout = NETWORK_TIMEOUT) {
         `if [ -z "\${GIT_SSH_COMMAND+set}" ] && [ -z "\${GIT_SSH+set}" ] && ! git config --get core.sshCommand >/dev/null 2>&1; then export GIT_SSH_COMMAND=${shQuote("ssh -o BatchMode=yes")}; fi`,
     );
     const seconds = timeoutSeconds(timeout);
-    lines.push(`if command -v timeout >/dev/null 2>&1; then exec timeout ${seconds} "$@"; fi`);
+    lines.push(
+        `if command -v timeout >/dev/null 2>&1; then exec timeout ${seconds} "$@"; elif command -v gtimeout >/dev/null 2>&1; then exec gtimeout ${seconds} "$@"; fi`,
+    );
     lines.push(
         `flag=\${TMPDIR:-/tmp}/repo-changes-timeout-$$`,
         `done=\${TMPDIR:-/tmp}/repo-changes-done-$$`,

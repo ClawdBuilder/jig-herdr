@@ -44,7 +44,14 @@ import {
     since,
     toggleBranchPicker,
 } from "./lib.js";
-import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds, terminalFinished } from "./refresh.js";
+import {
+    focusRegained,
+    RefreshScheduler,
+    RefreshState,
+    refreshSeconds,
+    terminalFinished,
+    timedCommand,
+} from "./refresh.js";
 
 const onScreen = () => isOnScreen(layout(), "repo-history");
 const PAGE = 100; // commits per page
@@ -289,7 +296,7 @@ export default class RepoHistory extends View {
         this.loadingRepos = true;
         this.reposAt = Date.now();
         const run = ++this.reposGeneration;
-        const command = `if command -v timeout >/dev/null 2>&1; then exec timeout 20 sh -c "$1" sh "$2"; fi; exec sh -c "$1" sh "$2"`;
+        const command = `if command -v timeout >/dev/null 2>&1; then exec timeout 20 sh -c "$1" sh "$2"; elif command -v gtimeout >/dev/null 2>&1; then exec gtimeout 20 sh -c "$1" sh "$2"; fi; exec sh -c "$1" sh "$2"`;
         cx.spawn(async (cx) => {
             try {
                 const result = await exec("sh", ["-c", command, "sh", SCRIPT, root], { on });
@@ -469,8 +476,8 @@ export default class RepoHistory extends View {
         cx.spawn(async (cx) => {
             try {
                 const [log, status] = await Promise.all([
-                    exec("timeout", ["20", "git", ...logArgs], { cwd, on }),
-                    exec("timeout", ["20", "git", ...statusArgs], { cwd, on }),
+                    exec(...timedCommand("git", logArgs), { cwd, on }),
+                    exec(...timedCommand("git", statusArgs), { cwd, on }),
                 ]);
                 if (run !== this.logGeneration) return;
                 if (key !== this.logKey()) return;

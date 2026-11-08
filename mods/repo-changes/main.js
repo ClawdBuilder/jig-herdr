@@ -391,7 +391,7 @@ export default class RepoChanges extends View {
         this.loading = true;
         const run = ++this.readGeneration;
         const targets = full ? "" : this.visibleTargets();
-        const command = `if command -v timeout >/dev/null 2>&1; then exec timeout 20 sh -c "$1" sh "$2" "$3"; fi; exec sh -c "$1" sh "$2" "$3"`;
+        const command = `if command -v timeout >/dev/null 2>&1; then exec timeout 20 sh -c "$1" sh "$2" "$3"; elif command -v gtimeout >/dev/null 2>&1; then exec gtimeout 20 sh -c "$1" sh "$2" "$3"; fi; exec sh -c "$1" sh "$2" "$3"`;
         cx.spawn(async (cx) => {
             try {
                 const r = await exec("sh", ["-c", command, "sh", SCRIPT, root, targets], { on });

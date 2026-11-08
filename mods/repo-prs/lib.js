@@ -254,13 +254,13 @@ export async function loadRuns(ghImpl, slug, branch, on) {
     return { runs: reply.data ? shapeRuns(reply.data) : null, error: reply.data ? null : (reply.err ?? "gh failed") };
 }
 
-/** Wrap `gh` so it never prompts, and stops after 20 s where the machine has `timeout`. */
+/** Wrap `gh` so it never prompts, and stops after 20 s where the machine has `timeout` or `gtimeout`. */
 export function ghShell(args) {
     return {
         cmd: "sh",
         args: [
             "-c",
-            'export GIT_TERMINAL_PROMPT=0 GH_PROMPT_DISABLED=1; if command -v timeout >/dev/null 2>&1; then exec timeout 20 gh "$@"; fi; exec gh "$@"',
+            'export GIT_TERMINAL_PROMPT=0 GH_PROMPT_DISABLED=1; if command -v timeout >/dev/null 2>&1; then exec timeout 20 gh "$@"; elif command -v gtimeout >/dev/null 2>&1; then exec gtimeout 20 gh "$@"; fi; exec gh "$@"',
             "sh",
             ...args,
         ],

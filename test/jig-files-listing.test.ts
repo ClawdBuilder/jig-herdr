@@ -2,7 +2,7 @@
 // runs the real POSIX script over a temp folder instead of stubbing the listing away.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { TestContext } from "node:test";
@@ -56,4 +56,19 @@ test("the filter's find has a short timeout inside its script", async () => {
     const lib = await load<Lib>("mods/jig-files/lib.js");
     assert.match(lib.FIND, /timeout 10 find/);
     execFileSync("sh", ["-n", "-c", lib.FIND], { encoding: "utf8" });
+});
+
+test("the find script runs when timeout and gtimeout are absent", async (t) => {
+    const root = temp(t);
+    const bin = path.join(root, "bin");
+    mkdirSync(bin);
+    symlinkSync("/usr/bin/find", path.join(bin, "find"));
+    symlinkSync("/usr/bin/head", path.join(bin, "head"));
+    writeFileSync(path.join(root, "kept.txt"), "x");
+    const lib = await load<Lib>("mods/jig-files/lib.js");
+    const output = execFileSync("/bin/sh", ["-c", lib.FIND, "sh", root], {
+        encoding: "utf8",
+        env: { ...process.env, PATH: bin },
+    });
+    assert.match(output, /kept\.txt/);
 });
