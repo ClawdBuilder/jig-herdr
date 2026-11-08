@@ -5,7 +5,20 @@
 
 import { h_flex, v_flex } from "gpui-base";
 import { div, svg, View } from "gpui-kit";
-import { exec, focused, layout, panes, setShared, shared, spaces, theme, window } from "herdr";
+import {
+    appHome,
+    exec,
+    focused,
+    layout,
+    panes,
+    readTextFile,
+    setShared,
+    shared,
+    spaces,
+    terminals,
+    theme,
+    window,
+} from "herdr";
 import { location, readFollow, writeFollow } from "./follow.js";
 import { followReload } from "./follow-state.js";
 import {
@@ -30,10 +43,9 @@ import {
     since,
     watchdog,
 } from "./lib.js";
-import { RefreshState } from "./refresh.js";
+import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds, terminalFinished } from "./refresh.js";
 
 const onScreen = () => isOnScreen(layout(), "repo-prs");
-const REUSE_MS = 5 * 60000; // a result is reused this long; Refresh asks again
 const GH_AT_ONCE = 4;
 const MINE_UP_FRONT = 15; // "Mine": pull requests whose checks load without a click
 const OPEN_PAGE = 30;
@@ -159,6 +171,11 @@ export default class RepoPullRequests extends View {
         this.showDefaults = false;
         this.fetching = new Set();
         this.refreshState = new RefreshState();
+        this.configAt = 0;
+        this.refreshScheduler = new RefreshScheduler({ seconds: refreshSeconds(this.config, 180) });
+        this.seen = false;
+        this.lastTerminals = terminals();
+        this.windowActive = window()?.active === true;
         this.enter(whereToLook());
         cx.timer.every(1000, (cx) => this.tick(cx));
     }
@@ -192,12 +209,24 @@ export default class RepoPullRequests extends View {
         const where = whereToLook();
         if (JSON.stringify([where.root, where.on]) !== this.contextKey) {
             this.enter(where);
+            this.refreshScheduler.trigger();
             cx.notify();
         }
         this.updateBadge();
-        if (!onScreen() || this.loading) return;
-        const lastTry = Math.max(this.loadedAt[this.tab] ?? 0, this.triedAt[this.tab] ?? 0);
-        if (Date.now() - lastTry > REUSE_MS) this.load(cx);
+        const seen = onScreen();
+        const appeared = seen && !this.seen;
+        this.seen = seen;
+        if (!seen || !this.where?.root) return;
+        if (appeared) this.refreshScheduler.trigger();
+        this.loadConfig(cx);
+        this.refreshScheduler.setSeconds(refreshSeconds(this.config, 180));
+        const active = window()?.active === true;
+        if (focusRegained(this.windowActive, active)) this.refreshScheduler.trigger();
+        this.windowActive = active;
+        const currentTerminals = terminals();
+        if (terminalFinished(this.lastTerminals, currentTerminals, this.where.root)) this.refreshScheduler.trigger();
+        this.lastTerminals = currentTerminals;
+        if (!this.loading && this.refreshScheduler.due()) this.load(cx);
     }
 
     updateBadge() {
@@ -209,6 +238,21 @@ export default class RepoPullRequests extends View {
         publishBadge(failing.size);
     }
 
+    loadConfig(cx) {
+        if (this.configAt && Date.now() - this.configAt < 60000) return;
+        this.configAt = Date.now();
+        cx.spawn(async (cx) => {
+            const text = await readTextFile(`${appHome()}/mods/repo-prs/config.json`).catch(() => null);
+            try {
+                this.config = text ? JSON.parse(text) : {};
+            } catch {
+                this.config = {};
+            }
+            this.refreshScheduler.setSeconds(refreshSeconds(this.config, 180));
+            cx.notify();
+        });
+    }
+
     /** One load of the shown tab: never two at once, and a result for a folder that is no longer shown is dropped. */
     load(cx, user = false) {
         if (!this.where?.root) return;
@@ -217,6 +261,7 @@ export default class RepoPullRequests extends View {
         const tab = this.tab;
         const generation = ++this.generation;
         if (!this.refreshState.start({ user, first: this.data[tab] === undefined, notify: () => cx.notify() })) return;
+        this.refreshScheduler.sweep();
         this.loading = true;
         this.triedAt[tab] = Date.now();
         this.watchdogCancel = watchdog(
@@ -224,7 +269,10 @@ export default class RepoPullRequests extends View {
             () => {
                 if (!this.loading) return;
                 this.loading = false;
-                if (this.refreshState.finish()) this.triedAt[this.tab] = 0;
+                if (this.refreshState.finish()) {
+                    this.triedAt[this.tab] = 0;
+                    this.refreshScheduler.trigger();
+                }
                 this.error = "Timed out after 20 s — check your network or sign-in.";
                 cx.notify();
             },
@@ -252,7 +300,10 @@ export default class RepoPullRequests extends View {
             } finally {
                 this.watchdogCancel?.();
                 this.loading = false;
-                if (this.refreshState.finish()) this.triedAt[tab] = 0;
+                if (this.refreshState.finish()) {
+                    this.triedAt[tab] = 0;
+                    this.refreshScheduler.trigger();
+                }
                 cx.notify();
             }
         });
@@ -820,8 +871,7 @@ export default class RepoPullRequests extends View {
         if (this.tab === id) return;
         this.tab = id;
         cx.notify();
-        const lastTry = Math.max(this.loadedAt[id] ?? 0, this.triedAt[id] ?? 0);
-        if (onScreen() && Date.now() - lastTry > REUSE_MS) this.load(cx, true);
+        if (onScreen() && this.data[id] === undefined) this.load(cx, true);
     }
 
     render(_cx) {

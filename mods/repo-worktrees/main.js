@@ -6,7 +6,21 @@
 
 import { h_flex, v_flex } from "gpui-base";
 import { div, View } from "gpui-kit";
-import { exec, focused, layout, panes, run, setShared, shared, spaces, theme } from "herdr";
+import {
+    appHome,
+    exec,
+    focused,
+    layout,
+    panes,
+    readTextFile,
+    run,
+    setShared,
+    shared,
+    spaces,
+    terminals,
+    theme,
+    window,
+} from "herdr";
 import { location, readFollow, writeFollow } from "./follow.js";
 import { followReload } from "./follow-state.js";
 import {
@@ -28,10 +42,9 @@ import {
     since,
     terminalsInsideWorktree,
 } from "./lib.js";
-import { RefreshState } from "./refresh.js";
+import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds, terminalFinished } from "./refresh.js";
 
 const onScreen = () => isOnScreen(layout(), "repo-worktrees");
-const REUSE_MS = 30000; // a load is reused this long; Refresh asks again
 const WORKING = new Set(["working", "blocked"]);
 
 /** Git's raw failures as a line a person can act on. */
@@ -133,6 +146,11 @@ export default class RepoWorktrees extends View {
         this.loadedAt = 0;
         this.triedAt = 0;
         this.refreshState = new RefreshState();
+        this.configAt = 0;
+        this.refreshScheduler = new RefreshScheduler({ seconds: refreshSeconds(this.config) });
+        this.seen = false;
+        this.lastTerminals = terminals();
+        this.windowActive = window()?.active === true;
         this.enter(whereToLook());
         cx.timer.every(1000, (cx) => this.tick(cx));
     }
@@ -159,11 +177,39 @@ export default class RepoWorktrees extends View {
         const where = whereToLook();
         if (JSON.stringify([where.root, where.on]) !== this.contextKey) {
             this.enter(where);
+            this.refreshScheduler.trigger();
             cx.notify();
         }
         this.updateBadge();
-        if (!onScreen() || this.loading || this.removing || !this.where.root) return;
-        if (Date.now() - Math.max(this.loadedAt, this.triedAt) > REUSE_MS) this.load(cx);
+        const seen = onScreen();
+        const appeared = seen && !this.seen;
+        this.seen = seen;
+        if (!seen || !this.where.root) return;
+        if (appeared) this.refreshScheduler.trigger();
+        this.loadConfig(cx);
+        this.refreshScheduler.setSeconds(refreshSeconds(this.config));
+        const active = window()?.active === true;
+        if (focusRegained(this.windowActive, active)) this.refreshScheduler.trigger();
+        this.windowActive = active;
+        const currentTerminals = terminals();
+        if (terminalFinished(this.lastTerminals, currentTerminals, this.where.root)) this.refreshScheduler.trigger();
+        this.lastTerminals = currentTerminals;
+        if (!this.loading && !this.removing && this.refreshScheduler.due()) this.load(cx);
+    }
+
+    loadConfig(cx) {
+        if (this.configAt && Date.now() - this.configAt < 60000) return;
+        this.configAt = Date.now();
+        cx.spawn(async (cx) => {
+            const text = await readTextFile(`${appHome()}/mods/repo-worktrees/config.json`).catch(() => null);
+            try {
+                this.config = text ? JSON.parse(text) : {};
+            } catch {
+                this.config = {};
+            }
+            this.refreshScheduler.setSeconds(refreshSeconds(this.config));
+            cx.notify();
+        });
     }
 
     load(cx, user = false) {
@@ -173,6 +219,7 @@ export default class RepoWorktrees extends View {
         const started = Date.now();
         const generation = ++this.generation;
         if (!this.refreshState.start({ user, first: this.trees === null, notify: () => cx.notify() })) return;
+        this.refreshScheduler.sweep();
         this.loading = true;
         this.triedAt = started;
         cx.spawn(async (cx) => {
@@ -190,7 +237,10 @@ export default class RepoWorktrees extends View {
                 if (contextKey === this.contextKey) this.error = friendly(e?.message ?? e);
             } finally {
                 this.loading = false;
-                if (this.refreshState.finish()) this.triedAt = 0;
+                if (this.refreshState.finish()) {
+                    this.triedAt = 0;
+                    this.refreshScheduler.trigger();
+                }
                 cx.notify();
             }
         });

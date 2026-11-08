@@ -70,7 +70,11 @@ scan() {
 }
 tmp=$(mktemp -d) || exit 1
 trap 'rm -rf "$tmp"' EXIT
-if [ -n "$top" ]; then echo "$top"; else find_repos; fi | with_worktrees | awk '!seen[$0]++' > "$tmp/list"
+if [ -n "\${2-}" ]; then
+  printf '%s\n' "$2" > "$tmp/list"
+else
+  { if [ -n "$top" ]; then echo "$top"; else find_repos; fi; } | with_worktrees | awk '!seen[$0]++' > "$tmp/list"
+fi
 n=0
 while IFS= read -r repo; do
   [ -d "$repo" ] || continue
@@ -476,10 +480,11 @@ const DEFAULTS = {
     remote: "origin",
     networkTimeoutSeconds: 60,
     rowDetail: "compact",
+    refreshSeconds: 60,
 };
 
-/** config.json next to the mod: `{ newBranchPrefix, baseBranch, remote, networkTimeoutSeconds, rowDetail }`. A wrong
- * field keeps its default and is reported. `rowDetail` is "compact" (one line per checkout) or "full" (a commit line for
+/** config.json next to the mod: `{ newBranchPrefix, baseBranch, remote, networkTimeoutSeconds, rowDetail,
+ * refreshSeconds }`. A wrong field keeps its default and is reported. `rowDetail` is "compact" (one line per checkout) or "full" (a commit line for
  * every row, as the panel looked before). */
 export function parseConfig(text) {
     const config = { ...DEFAULTS, problems: [] };
@@ -517,6 +522,11 @@ export function parseConfig(text) {
     if (raw.rowDetail != null) {
         if (raw.rowDetail === "compact" || raw.rowDetail === "full") config.rowDetail = raw.rowDetail;
         else config.problems.push('"rowDetail" must be "compact" or "full"');
+    }
+    if (raw.refreshSeconds != null) {
+        if (Number.isInteger(raw.refreshSeconds) && raw.refreshSeconds >= 15 && raw.refreshSeconds <= 86_400)
+            config.refreshSeconds = raw.refreshSeconds;
+        else config.problems.push('"refreshSeconds" must be a whole number from 15 to 86400');
     }
     if (raw.networkTimeoutSeconds != null) {
         if (

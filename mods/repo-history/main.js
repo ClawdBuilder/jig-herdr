@@ -5,7 +5,23 @@
 
 import { h_flex, Input, InputState, v_flex } from "gpui-base";
 import { div, svg, View } from "gpui-kit";
-import { exec, focused, layout, openOverlay, panes, run, setShared, settings, shared, spaces, theme } from "herdr";
+import {
+    appHome,
+    exec,
+    focused,
+    layout,
+    openOverlay,
+    panes,
+    readTextFile,
+    run,
+    setShared,
+    settings,
+    shared,
+    spaces,
+    terminals,
+    theme,
+    window,
+} from "herdr";
 import { location, readFollow, writeFollow } from "./follow.js";
 import { followReload } from "./follow-state.js";
 import {
@@ -28,7 +44,7 @@ import {
     since,
     toggleBranchPicker,
 } from "./lib.js";
-import { RefreshState } from "./refresh.js";
+import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds, terminalFinished } from "./refresh.js";
 
 const onScreen = () => isOnScreen(layout(), "repo-history");
 const PAGE = 100; // commits per page
@@ -40,7 +56,6 @@ const STROKE = 2;
 const DOT = 10;
 const FILES_SHOWN = 12;
 const REPOS_EVERY_MS = 60000;
-const LOG_EVERY_MS = 10000;
 
 /** Colours for lanes, authors and chips. A theme's ANSI colours are tuned for text on a terminal, not for lines that run
  * next to each other, so the graph has its own. */
@@ -177,6 +192,11 @@ export default class RepoHistory extends View {
         this.filterBox = InputState.new({ placeholder: "Filter by message, author, hash or branch" });
         this.filterBox.on("change", (_e, cx) => cx.notify());
         this.refreshState = new RefreshState();
+        this.configAt = 0;
+        this.refreshScheduler = new RefreshScheduler({ seconds: refreshSeconds(this.config) });
+        this.seen = false;
+        this.lastTerminals = terminals();
+        this.windowActive = window()?.active === true;
         this.enter(whereToLook());
         cx.timer.every(1000, (cx) => this.tick(cx));
     }
@@ -221,12 +241,24 @@ export default class RepoHistory extends View {
         const where = whereToLook();
         if (JSON.stringify([where.root, where.on]) !== this.contextKey) {
             this.enter(where);
+            this.refreshScheduler.trigger();
             cx.notify();
         }
-        if (!onScreen() || !this.where.root) return;
+        const seen = onScreen();
+        const appeared = seen && !this.seen;
+        this.seen = seen;
+        if (!seen || !this.where.root) return;
+        if (appeared) this.refreshScheduler.trigger();
+        this.loadConfig(cx);
+        this.refreshScheduler.setSeconds(refreshSeconds(this.config));
+        const active = window()?.active === true;
+        if (focusRegained(this.windowActive, active)) this.refreshScheduler.trigger();
+        this.windowActive = active;
+        const currentTerminals = terminals();
+        if (terminalFinished(this.lastTerminals, currentTerminals, this.where.root)) this.refreshScheduler.trigger();
+        this.lastTerminals = currentTerminals;
         if (!this.loadingRepos && Date.now() - this.reposAt > REPOS_EVERY_MS) this.loadRepos(cx);
-        const stale = this.logFor !== this.logKey() || Date.now() - this.logAt > LOG_EVERY_MS;
-        if (this.repo && !this.loading && stale) this.loadLog(cx);
+        if (this.repo && !this.loading && this.refreshScheduler.due()) this.loadLog(cx);
     }
 
     logKey() {
@@ -261,7 +293,10 @@ export default class RepoHistory extends View {
                     repos.find((r) => r.dirty)?.path ??
                     repos[0]?.path ??
                     null;
-                if (choice !== this.repo) this.show(choice, false);
+                if (choice !== this.repo) {
+                    this.show(choice, false);
+                    this.refreshScheduler.trigger();
+                }
             } catch (e) {
                 if (contextKey === this.contextKey) this.reposError = String(e?.message ?? e).split("\n")[0];
             } finally {
@@ -375,6 +410,21 @@ export default class RepoHistory extends View {
         cx.notify();
     }
 
+    loadConfig(cx) {
+        if (this.configAt && Date.now() - this.configAt < 60000) return;
+        this.configAt = Date.now();
+        cx.spawn(async (cx) => {
+            const text = await readTextFile(`${appHome()}/mods/repo-history/config.json`).catch(() => null);
+            try {
+                this.config = text ? JSON.parse(text) : {};
+            } catch {
+                this.config = {};
+            }
+            this.refreshScheduler.setSeconds(refreshSeconds(this.config));
+            cx.notify();
+        });
+    }
+
     loadLog(cx, user = false) {
         if (!this.repo) return;
         const cwd = this.repo;
@@ -392,6 +442,7 @@ export default class RepoHistory extends View {
         ];
         const statusArgs = ["--no-optional-locks", "-c", "core.fsmonitor=false", "status", "--porcelain"];
         if (!this.refreshState.start({ user, first: this.commits === null, notify: () => cx.notify() })) return;
+        this.refreshScheduler.sweep();
         this.loading = true;
         const generation = ++this.generation;
         cx.spawn(async (cx) => {
@@ -418,7 +469,10 @@ export default class RepoHistory extends View {
                 this.logFor = key;
             } finally {
                 this.loading = false;
-                if (this.refreshState.finish()) this.logAt = 0;
+                if (this.refreshState.finish()) {
+                    this.logAt = 0;
+                    this.refreshScheduler.trigger();
+                }
                 cx.notify();
             }
         });

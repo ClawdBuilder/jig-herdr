@@ -248,6 +248,7 @@ test("the shipped config.json files name no machine, folder or palette of anyone
         remote: "origin",
         networkTimeoutSeconds: 60,
         rowDetail: "compact",
+        refreshSeconds: 60,
     });
 });
 
