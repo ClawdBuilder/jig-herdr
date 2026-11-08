@@ -28,6 +28,26 @@ export function parseConfig(text) {
     return config;
 }
 
+/** Whether a mod's block is on screen: nothing hidden on the way down, every stack showing the right child. */
+export function isShown(root, mod) {
+    const chain = (node) => {
+        if (!node) return null;
+        if (node.content?.mod === mod) return [node];
+        for (const child of node.children ?? []) {
+            const rest = chain(child);
+            if (rest) return [node, ...rest];
+        }
+        return null;
+    };
+    const path = chain(root);
+    if (!path) return true;
+    return path.every((node, i) => {
+        if (node.hidden) return false;
+        if (node.type !== "stack") return true;
+        return (node.active ?? node.children?.[0]?.id) === path[i + 1]?.id;
+    });
+}
+
 /** Run with `sh -c FIND sh <root>`: every file under root (no .git, no node_modules, six levels), one path per line. */
 export const FIND = `find "$1" -mindepth 1 -maxdepth 6 \\( -name .git -o -name node_modules \\) -prune -o -type f -print 2>/dev/null | head -n 5000`;
 
@@ -49,7 +69,9 @@ export function deletedPaths(status, root) {
 /** File paths from FIND output that match `query` on their path, case aside, relative to root; at most `limit`. */
 export function filterPaths(stdout, root, query, limit = 500) {
     const base = String(root ?? "").replace(/\/+$/, ""),
-        wanted = String(query ?? "").trim().toLowerCase();
+        wanted = String(query ?? "")
+            .trim()
+            .toLowerCase();
     if (!wanted) return [];
     const out = [];
     for (const line of String(stdout ?? "").split("\n")) {
