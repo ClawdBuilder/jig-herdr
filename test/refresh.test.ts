@@ -75,7 +75,7 @@ test("every panel calls the shared refresh helper, with no inline copy", () => {
         assert.match(source, /this\.refreshScheduler\.trigger\(/, `${mod}: trigger`);
         assert.match(source, /this\.refreshScheduler\.due\(/, `${mod}: due`);
         assert.match(source, /refreshSeconds\(this\.config/, `${mod}: config`);
-        assert.match(source, /timeout|timedCommand/, `${mod}: shell timeout`);
+        assert.match(source, /timeout|timedCommand|runCommand/, `${mod}: shell timeout`);
         assert.match(source, /refreshState\.finish\(\)/, `${mod}: finish`);
         const finish = source.indexOf("refreshState.finish()");
         assert.ok(source.indexOf("refreshScheduler.trigger()", finish) > finish, `${mod}: queued trigger`);

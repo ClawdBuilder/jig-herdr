@@ -26,6 +26,7 @@ import {
 } from "gpui-base";
 import { div, svg, View } from "gpui-kit";
 import { exec, props as modProps, panes, readTextFile, settings, shared, spaces, theme } from "herdr";
+import { run as runCommand } from "./refresh.js";
 import {
     branchFiles,
     canWrite,
@@ -179,7 +180,8 @@ export default class RepoReview extends View {
         this.loading = true;
         cx.spawn(async (cx) => {
             try {
-                const r = await exec(
+                const r = await runCommand(
+                    exec,
                     "git",
                     [...READ, "-c", "core.quotePath=false", "status", "--porcelain=v1", "-b", "--no-renames"],
                     { cwd: this.repo, on: this.on },
@@ -189,7 +191,7 @@ export default class RepoReview extends View {
                 // The base costs a dozen git calls: find it again only when HEAD moves, or after a minute (a fetch).
                 const head = s.unborn
                     ? null
-                    : await exec("git", [...READ, "rev-parse", "HEAD"], { cwd: this.repo, on: this.on });
+                    : await runCommand(exec, "git", [...READ, "rev-parse", "HEAD"], { cwd: this.repo, on: this.on });
                 const key = head?.code === 0 ? head.stdout.trim() : null;
                 if (!key) this.baseFor = null;
                 else if (key !== this.baseFor?.key || Date.now() - this.baseFor.at >= BASE_EVERY)
@@ -197,7 +199,8 @@ export default class RepoReview extends View {
                 const base = this.baseFor?.base ?? null;
                 let committed = [];
                 if (base) {
-                    const d = await exec(
+                    const d = await runCommand(
+                        exec,
                         "git",
                         [
                             ...READ,
@@ -241,7 +244,7 @@ export default class RepoReview extends View {
 
     /** Herdr's exec on the tab's machine, as lib.js takes it. */
     git() {
-        return (cmd, args, options) => exec(cmd, args, { ...options, on: this.on });
+        return (cmd, args, options) => runCommand(exec, cmd, args, { ...options, on: this.on });
     }
 
     // Which list to draw: the asked-for mode if it has anything, else the other.
@@ -291,7 +294,8 @@ export default class RepoReview extends View {
     async diffLines(file) {
         if (!(file.fresh || this.unborn)) {
             const from = this.view === "branch" && this.base ? this.base.mergeBase : "HEAD";
-            const r = await exec(
+            const r = await runCommand(
+                exec,
                 "git",
                 [...READ, "diff", from, "--no-ext-diff", "--no-textconv", "--no-color", "--", file.path],
                 { cwd: this.repo, on: this.on },
@@ -348,7 +352,10 @@ export default class RepoReview extends View {
     async fileText(file) {
         if (file.status === "D") {
             const from = this.view === "branch" && this.base ? this.base.mergeBase : "HEAD";
-            const r = await exec("git", [...READ, "show", `${from}:${file.path}`], { cwd: this.repo, on: this.on });
+            const r = await runCommand(exec, "git", [...READ, "show", `${from}:${file.path}`], {
+                cwd: this.repo,
+                on: this.on,
+            });
             if (r.code !== 0) throw new Error(r.stderr);
             return r.stdout;
         }
@@ -434,7 +441,7 @@ export default class RepoReview extends View {
         this.acting = true;
         this.confirming = null;
         const on = this.on;
-        const git = (cmd, args, options) => exec(cmd, args, { ...options, on });
+        const git = (cmd, args, options) => runCommand(exec, cmd, args, { ...options, on });
         cx.spawn(async (cx) => {
             try {
                 this.note = await fn(git);

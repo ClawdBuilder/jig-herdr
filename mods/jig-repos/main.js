@@ -81,7 +81,14 @@ import {
 } from "./lib.js";
 import { BranchPicker, DONE } from "./picker.js";
 import { PushConfirm } from "./push.js";
-import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds, terminalFinished } from "./refresh.js";
+import {
+    focusRegained,
+    RefreshScheduler,
+    RefreshState,
+    refreshSeconds,
+    run as runCommand,
+    terminalFinished,
+} from "./refresh.js";
 
 // Herdr can only watch folders on this computer, so a space on another machine is polled. All repos
 // take well under a second, so poll often, and at once when a terminal or agent changes state
@@ -391,10 +398,9 @@ export default class RepoChanges extends View {
         this.loading = true;
         const run = ++this.readGeneration;
         const targets = full ? "" : this.visibleTargets();
-        const command = `if command -v timeout >/dev/null 2>&1; then exec timeout 20 sh -c "$1" sh "$2" "$3"; elif command -v gtimeout >/dev/null 2>&1; then exec gtimeout 20 sh -c "$1" sh "$2" "$3"; fi; exec sh -c "$1" sh "$2" "$3"`;
         cx.spawn(async (cx) => {
             try {
-                const r = await exec("sh", ["-c", command, "sh", SCRIPT, root, targets], { on });
+                const r = await runCommand(exec, "sh", ["-c", SCRIPT, "sh", root, targets], { on });
                 if (run !== this.readGeneration || context !== this.context) return;
                 if (r.code !== 0) throw new Error((r.stderr || `exit ${r.code}`).trim().split("\n")[0]);
                 this.repos = parseRepos(r.stdout, root);

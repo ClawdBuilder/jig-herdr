@@ -13,6 +13,53 @@ export function timedCommand(program, args, seconds = 20) {
         `elif command -v gtimeout >/dev/null 2>&1; then exec gtimeout ${seconds} "$@"; fi; exec "$@"`;
     return ["sh", ["-c", wrapper, "sh", program, ...args]];
 }
+
+/** Herdr 0.1.14 caps exec at 10 minutes; keep the shell below it and the outer deadline just after, so the shell's own
+ *  timeout fires first and the result can say what happened. */
+export function execBudget(timeoutMs) {
+    const shellSeconds = Math.min(Math.max(1, Math.round((timeoutMs ?? 20_000) / 1000)), 595);
+    const shellTimeoutMs = shellSeconds * 1000;
+    return { shellSeconds, shellTimeoutMs, herdrTimeoutMs: Math.min(600_000, shellTimeoutMs + 5000) };
+}
+
+/** Quote one POSIX shell word. */
+function quoteOne(value) {
+    return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+/** The shell wrapper: the caller's variables, then timeout/gtimeout, then the command. */
+function runnerScript(env) {
+    const exports = Object.entries({ GIT_TERMINAL_PROMPT: "0", GH_PROMPT_DISABLED: "1", ...(env ?? {}) })
+        .filter(([key]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key))
+        .map(([key, value]) => `export ${key}=${quoteOne(value)}`)
+        .join("; ");
+    return `${exports}; if command -v timeout >/dev/null 2>&1; then exec timeout ${"$"}{SECONDS} "$@"; elif command -v gtimeout >/dev/null 2>&1; then exec gtimeout ${"$"}{SECONDS} "$@"; fi; exec "$@"`;
+}
+
+/** Run one command for a panel. Herdr gets a deadline after the shell's own, and a timeout is returned as code 124. */
+export async function run(exec, cmd, args, { cwd, on, seconds = 20, env } = {}) {
+    const budget = execBudget(seconds * 1000);
+    const script = runnerScript(env).replaceAll("${SECONDS}", String(budget.shellSeconds));
+    try {
+        const result = await exec("sh", ["-c", script, "sh", cmd, ...args], {
+            cwd,
+            on,
+            timeout: budget.herdrTimeoutMs,
+        });
+        return { ...result, seconds: budget.shellSeconds, timedOut: result.code === 124 };
+    } catch (error) {
+        const message = String(error?.message ?? error);
+        const timedOut = /tim(e|ed) out|timeout|took too long|abort|cancel/i.test(message);
+        return {
+            code: timedOut ? 124 : /not found|no such file|cannot find|not installed/i.test(message) ? 127 : 1,
+            stdout: "",
+            stderr: message,
+            seconds: budget.shellSeconds,
+            timedOut,
+        };
+    }
+}
+
 /** `refreshSeconds` from a config object or number, clamped to at least 15 s. */
 export function refreshSeconds(value, fallback = DEFAULT_REFRESH_SECONDS) {
     const wanted = typeof value === "object" && value !== null ? value.refreshSeconds : value;

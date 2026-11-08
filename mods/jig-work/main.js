@@ -63,7 +63,7 @@ import {
     stageSummary,
     terminalStateChanged,
 } from "./lib.js";
-import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds } from "./refresh.js";
+import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds, run as runCommand } from "./refresh.js";
 
 const MTIME_MS = 3000; // while the followed session works: a cheap mtime check
 const REPO_MS = 30000; // which outputs have changes in a repository
@@ -330,7 +330,7 @@ export default class JigWork extends View {
         this.repoKey = key;
         cx.spawn(async (cx) => {
             try {
-                const r = await exec("sh", ["-c", REPO_SCRIPT, "sh", ...files], { on: this.machine() });
+                const r = await runCommand(exec, "sh", ["-c", REPO_SCRIPT, "sh", ...files], { on: this.machine() });
                 this.repoInfo = { ...this.repoInfo, ...parseRepoInfo(r.stdout) };
                 cx.notify();
             } catch {
@@ -359,13 +359,13 @@ export default class JigWork extends View {
             try {
                 let urls = known;
                 if (urls.length === 0) {
-                    const r = await exec("gh", search, { on, timeout: 60000 });
+                    const r = await runCommand(exec, "gh", search, { on, seconds: 60 });
                     if (r.code !== 0) throw new Error((r.stderr || "gh search failed").trim().split("\n")[0]);
                     entry.searched = JSON.parse(r.stdout || "[]");
                     urls = entry.searched.map((p) => p.url);
                 }
                 for (const url of urls.slice(0, 4)) {
-                    const r = await exec("gh", ["pr", "view", url, "--json", VIEW], { on, timeout: 60000 });
+                    const r = await runCommand(exec, "gh", ["pr", "view", url, "--json", VIEW], { on, seconds: 60 });
                     if (r.code === 0) entry.details[url] = JSON.parse(r.stdout || "{}");
                 }
             } catch (e) {

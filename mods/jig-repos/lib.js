@@ -1,3 +1,7 @@
+import { execBudget } from "./refresh.js";
+
+export { execBudget };
+
 // Helpers of the Changes panel that need no Herdr: the read script and its parsing, how checkouts nest, and the git
 // actions. They live apart from main.js so the tests can load them outside Herdr and run the actions on real repositories.
 
@@ -834,17 +838,6 @@ export function networkExec(exec, on) {
             timeout: budget.herdrTimeoutMs,
         });
     };
-}
-
-/** The seconds a timeout stands for, at least one. */
-const timeoutSeconds = (timeout) => Math.max(1, Math.round((timeout ?? NETWORK_TIMEOUT) / 1000));
-
-/** Herdr 0.1.14 caps exec at 10 minutes. Keep the shell just below it, and the outer Herdr deadline 5 s later, so the
- *  wrapper's own watchdog fires first and reports our timeout message. */
-export function execBudget(timeout = NETWORK_TIMEOUT) {
-    const shellSeconds = Math.min(timeoutSeconds(timeout), 595);
-    const shellTimeoutMs = shellSeconds * 1000;
-    return { shellSeconds, shellTimeoutMs, herdrTimeoutMs: Math.min(600000, shellTimeoutMs + 5000) };
 }
 
 /** What a stopped command says: never git's bare exit code. */

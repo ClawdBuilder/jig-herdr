@@ -48,7 +48,7 @@ import {
     RefreshState,
     refreshSeconds,
     terminalFinished,
-    timedCommand,
+    run as runCommand,
 } from "./refresh.js";
 
 const onScreen = () => isOnScreen(layout(), "jig-worktrees");
@@ -245,10 +245,7 @@ export default class RepoWorktrees extends View {
         cx.spawn(async (cx) => {
             try {
                 const work = (async () => {
-                    const result = await exec(...timedCommand("sh", ["-c", SCRIPT, "sh", root]), {
-                        on,
-                        timeout: 25000,
-                    });
+                    const result = await runCommand(exec, "sh", ["-c", SCRIPT, "sh", root], { on });
                     if (run !== this.readGeneration || contextKey !== this.contextKey) return;
                     if (result.code !== 0)
                         throw new Error((result.stderr || `exit ${result.code}`).trim().split("\n")[0]);
@@ -317,11 +314,11 @@ export default class RepoWorktrees extends View {
         const contextKey = ctx?.contextKey ?? this.contextKey;
         cx.spawn(async (cx) => {
             try {
-                const git = (args, cwd) => exec("git", args, { cwd, on });
+                const git = (args, cwd) => runCommand(exec, "git", args, { cwd, on });
                 const cwds = panes().map((p) => p.cwd);
                 if (
                     await terminalsInsideWorktree(
-                        (cmd, args, opts) => exec(cmd, args, { ...opts, on }),
+                        (cmd, args, opts) => runCommand(exec, cmd, args, { ...opts, on }),
                         tree.path,
                         cwds,
                     )

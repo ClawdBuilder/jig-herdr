@@ -26,7 +26,7 @@ import {
 } from "herdr";
 
 import { deletedPaths, FIND, filterPaths, listDirectory, parseConfig, searchDue } from "./lib.js";
-import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds } from "./refresh.js";
+import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds, run as runCommand } from "./refresh.js";
 
 function location() {
     const space = spaces().find((s) => s.active),
@@ -241,12 +241,13 @@ export default class Files extends View {
                     if (!this.current(context)) return;
                     await this.loadFolder(path, context);
                 }
-                const top = await exec("git", ["rev-parse", "--show-toplevel"], { cwd, on }).catch(() => null);
+                const top = await runCommand(exec, "git", ["rev-parse", "--show-toplevel"], { cwd, on });
                 const marks = {};
                 let deleted = [];
                 if (top?.code === 0) {
                     // Writes nothing under .git (index lock, fsmonitor cookie): the folder watch would refresh again.
-                    const status = await exec(
+                    const status = await runCommand(
+                        exec,
                         "git",
                         [
                             "--no-optional-locks",

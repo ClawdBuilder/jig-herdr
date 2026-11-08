@@ -50,7 +50,7 @@ import {
     RefreshState,
     refreshSeconds,
     terminalFinished,
-    timedCommand,
+    run as runCommand,
 } from "./refresh.js";
 
 const onScreen = () => isOnScreen(layout(), "jig-history");
@@ -296,10 +296,9 @@ export default class RepoHistory extends View {
         this.loadingRepos = true;
         this.reposAt = Date.now();
         const run = ++this.reposGeneration;
-        const command = `if command -v timeout >/dev/null 2>&1; then exec timeout 20 sh -c "$1" sh "$2"; elif command -v gtimeout >/dev/null 2>&1; then exec gtimeout 20 sh -c "$1" sh "$2"; fi; exec sh -c "$1" sh "$2"`;
         cx.spawn(async (cx) => {
             try {
-                const result = await exec("sh", ["-c", command, "sh", SCRIPT, root], { on });
+                const result = await runCommand(exec, "sh", ["-c", SCRIPT, "sh", root], { on });
                 if (run !== this.reposGeneration) return;
                 if (contextKey !== this.contextKey) return;
                 if (result.code !== 0) throw new Error((result.stderr || `exit ${result.code}`).trim().split("\n")[0]);
@@ -346,7 +345,8 @@ export default class RepoHistory extends View {
         this.branchOpen = toggleBranchPicker(this.branchOpen);
         if (this.branchOpen && !this.branches) {
             cx.spawn(async (cx) => {
-                const result = await exec(
+                const result = await runCommand(
+                    exec,
                     "git",
                     [
                         "--no-optional-locks",
@@ -420,7 +420,8 @@ export default class RepoHistory extends View {
             return;
         }
         cx.spawn(async (cx) => {
-            const result = await exec(
+            const result = await runCommand(
+                exec,
                 "git",
                 [
                     "--no-optional-locks",
@@ -476,8 +477,8 @@ export default class RepoHistory extends View {
         cx.spawn(async (cx) => {
             try {
                 const [log, status] = await Promise.all([
-                    exec(...timedCommand("git", logArgs), { cwd, on }),
-                    exec(...timedCommand("git", statusArgs), { cwd, on }),
+                    runCommand(exec, "git", logArgs, { cwd, on }),
+                    runCommand(exec, "git", statusArgs, { cwd, on }),
                 ]);
                 if (run !== this.logGeneration) return;
                 if (key !== this.logKey()) return;
@@ -519,7 +520,8 @@ export default class RepoHistory extends View {
         const cwd = this.repo;
         const on = this.where.on;
         cx.spawn(async (cx) => {
-            const result = await exec(
+            const result = await runCommand(
+                exec,
                 "git",
                 ["--no-optional-locks", "show", "--numstat", "--find-renames", "--format=%B%x1e", commit.hash],
                 { cwd, on },

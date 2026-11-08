@@ -48,8 +48,8 @@ import {
     RefreshScheduler,
     RefreshState,
     refreshSeconds,
+    run as runCommand,
     terminalFinished,
-    timedCommand,
 } from "./refresh.js";
 
 const onScreen = () => isOnScreen(layout(), "jig-prs");
@@ -132,7 +132,7 @@ function openLink(url) {
 /** `gh` with json output: `{ data }` or `{ err, auth, net, none }`. "No pull request for this branch" is `none`. */
 async function gh(args, on) {
     const shell = ghShell(args);
-    const result = await exec(shell.cmd, shell.args, { on, timeout: 25000 });
+    const result = await runCommand(exec, shell.cmd, shell.args, { on });
     if (result.code !== 0) {
         const failure = ghError(result.stderr);
         return {
@@ -287,7 +287,7 @@ export default class RepoPullRequests extends View {
         cx.spawn(async (cx) => {
             try {
                 const work = (async () => {
-                    const found = await exec(...timedCommand("sh", ["-c", SCRIPT, "sh", root]), { on, timeout: 25000 });
+                    const found = await runCommand(exec, "sh", ["-c", SCRIPT, "sh", root], { on });
                     if (run !== this.readGeneration) return;
                     if (found.code !== 0) throw new Error((found.stderr || `exit ${found.code}`).trim().split("\n")[0]);
                     if (contextKey !== this.contextKey) return;
