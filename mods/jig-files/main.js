@@ -242,7 +242,6 @@ export default class Files extends View {
             run = ++this.readGeneration;
         this.loading = true;
         cx.spawn(async (cx) => {
-            let timedOut = false;
             try {
                 for (const path of ["", ...this.folders]) {
                     if (!this.current(context)) return;
@@ -281,11 +280,9 @@ export default class Files extends View {
                 this.watch(cwd, cx);
             } catch (e) {
                 if (run !== this.readGeneration) return;
-                timedOut = String(e?.message ?? e).includes("Reading timed out");
-                if (timedOut) this.readGeneration++;
-                else if (this.current(context)) this.error = String(e);
+                if (this.current(context)) this.error = String(e);
             } finally {
-                if (run === this.readGeneration || timedOut) {
+                if (run === this.readGeneration) {
                     this.loading = false;
                     const again = this.refreshState.finish();
                     if (again) this.refreshScheduler.trigger();
