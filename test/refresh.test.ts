@@ -88,7 +88,15 @@ test("every panel starts its first read from the constructor, not the timer", ()
 test("every panel starts its first read from the constructor, not the timer", () => {
     const root = new URL("../mods/", import.meta.url);
     const source = readFileSync(new URL("repo-changes/refresh.js", root), "utf8");
-    for (const mod of ["repo-history", "repo-prs", "repo-worktrees"])
+    for (const mod of [
+        "repo-history",
+        "repo-prs",
+        "repo-worktrees",
+        "jig-work",
+        "jig-context",
+        "jig-files",
+        "file-view",
+    ])
         assert.equal(readFileSync(new URL(`${mod}/refresh.js`, root), "utf8"), source, mod);
 });
 

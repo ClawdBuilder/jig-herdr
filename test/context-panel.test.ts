@@ -15,7 +15,12 @@ type Segment = { key: string; label: string; color: string; tokens: number | nul
 type Context = {
     SCRIPT: string;
     WRITE: string;
-    parseConfig(text: string | null): { machine: string | null; stateDir: string | null; problems: string[] };
+    parseConfig(text: string | null): {
+        machine: string | null;
+        stateDir: string | null;
+        refreshSeconds: number;
+        problems: string[];
+    };
     parseSessions(stdout: string): { file: string; alive: boolean; status: Record<string, unknown> }[];
     pickSession(
         sessions: unknown[],
@@ -96,6 +101,7 @@ test("jig-context finds sessions as jig-work does: the same script and the same 
     assert.deepEqual(ctx.parseConfig('{ "machine": "dev-box", "stateDir": "~/state", "prOwners": [] }'), {
         machine: "dev-box",
         stateDir: "~/state",
+        refreshSeconds: 60,
         problems: [],
     });
     assert.equal(ctx.parseConfig("{").problems.length, 1);

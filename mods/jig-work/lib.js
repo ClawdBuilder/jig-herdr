@@ -1,30 +1,17 @@
 // Pure helpers of jig-work, kept apart from main.js so they can be tested outside Herdr.
 
-// Run with `sh -c SCRIPT sh <state folder or "">` on the machine where Pi runs. Prints each status file jig-session wrote in
-// <state folder>/sessions with a line before it: "@@file <1 if its pid runs, else 0> <path>". With no folder it uses
-// jig-core's rule: $JIG_STATE_DIR, else ${XDG_STATE_HOME:-~/.local/state}/jig. Reads only; at most 64 files of 256 KiB.
-// (No dollar-brace in here except the escaped ones: this is a JS template string.)
-export const SCRIPT = `base=$1
-case $base in
-  "") base=\${JIG_STATE_DIR:-}
-      if [ -z "$base" ]; then
-        case \${XDG_STATE_HOME:-} in /*) base="$XDG_STATE_HOME/jig";; *) base="$HOME/.local/state/jig";; esac
-      fi;;
-  "~") base=$HOME;;
-  "~/"*) base="$HOME/\${base#\\~/}";;
-esac
-d="$base/sessions"
-printf '@@dir %s\\n' "$d"
-n=0
-for f in "$d"/*.json; do
-  [ -f "$f" ] || continue
-  n=$((n + 1)); [ $n -gt 64 ] && break
-  pid=$(sed -n 's/^ *"pid": *\\([0-9][0-9]*\\).*/\\1/p' "$f" | head -n 1)
-  alive=0
-  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then alive=1; fi
-  printf '\\n@@file %s %s\\n' "$alive" "$f"
-  head -c 262144 "$f"
-done`;
+export {
+    addressOf,
+    changedSince,
+    MTIMES,
+    mergeSessions,
+    parseMtimes,
+    parseSessions,
+    pickSession,
+    READ,
+    SCRIPT,
+    terminalStateChanged,
+} from "./sessions.js";
 
 // Run with `sh -c REPO_SCRIPT sh <path>...`: for each path, a line "path<TAB>repository root<TAB>git status letters".
 // The root is empty outside a repository, the letters empty for a file without changes. Reads only, no locks.
@@ -35,9 +22,10 @@ export const REPO_SCRIPT = `for f in "$@"; do
   printf '%s\\t%s\\t%s\\n' "$f" "$top" "$st"
 done`;
 
-export const DEFAULTS = { machine: null, stateDir: null, prOwners: [] };
+export const DEFAULTS = { machine: null, stateDir: null, prOwners: [], refreshSeconds: 60 };
 
-// config.json as { machine, stateDir, problems }. Anything missing or of the wrong kind takes its default.
+// config.json as { machine, stateDir, prOwners, refreshSeconds, problems }. Anything missing or of the wrong kind takes
+// its default.
 export function parseConfig(text) {
     const config = { ...DEFAULTS, prOwners: [], problems: [] };
     if (text == null || text.trim() === "") return config;
@@ -57,6 +45,11 @@ export function parseConfig(text) {
         if (typeof raw[key] === "string" && raw[key].trim() !== "") config[key] = raw[key].trim();
         else config.problems.push(`"${key}" must be a non-empty string or null`);
     }
+    if (raw.refreshSeconds != null) {
+        if (Number.isInteger(raw.refreshSeconds) && raw.refreshSeconds >= 15 && raw.refreshSeconds <= 86_400)
+            config.refreshSeconds = raw.refreshSeconds;
+        else config.problems.push('"refreshSeconds" must be a whole number from 15 to 86400');
+    }
     if (raw.prOwners != null) {
         const ok =
             Array.isArray(raw.prOwners) && raw.prOwners.every((o) => typeof o === "string" && /^[\w.-]+$/.test(o));
@@ -67,50 +60,14 @@ export function parseConfig(text) {
 }
 
 // The script's output as [{ file, alive, status }]; a file that is not a status of schema 1 is left out.
-export function parseSessions(stdout) {
-    const sessions = [];
-    const parts = stdout.split(/\n@@file /);
-    for (const part of parts.slice(1)) {
-        const nl = part.indexOf("\n");
-        const head = nl < 0 ? part : part.slice(0, nl);
-        const body = nl < 0 ? "" : part.slice(nl + 1);
-        const [alive, ...file] = head.split(" ");
-        let status;
-        try {
-            status = JSON.parse(body);
-        } catch {
-            continue; // being written, or not ours
-        }
-        if (status?.schema !== 1 || typeof status.session !== "string") continue;
-        sessions.push({ file: file.join(" "), alive: alive === "1", status });
-    }
-    return sessions;
-}
 
 // The address Herdr gives the session's terminal: "t7" here, "<machine>/t7" on another machine. Only a terminal named by
 // herdr-core (`terminalFrom` HC_TERMINAL_ID) has one; a tmux pane inside it does not.
-export function addressOf(status, machine) {
-    if (typeof status?.terminal !== "string" || status.terminal === "") return null;
-    if (status.terminalFrom != null && status.terminalFrom !== "HC_TERMINAL_ID") return null;
-    return machine ? `${machine}/${status.terminal}` : status.terminal;
-}
 
 const updated = (s) => Date.parse(s.status.updatedAt ?? "") || 0;
 
 // The session to show: the one whose terminal is focused (or is the agent shown), else the one picked before while it
 // lives, else the one updated last. `live` sessions only; returns { session, by } with by "focus", "picked" or "recent".
-export function pickSession(sessions, { machine = null, focused = null, agent = null, picked = null } = {}) {
-    const live = sessions.filter((s) => s.alive);
-    if (live.length === 0) return { session: null, by: null };
-    for (const address of [focused, agent]) {
-        if (!address) continue;
-        const hit = live.find((s) => addressOf(s.status, machine) === address);
-        if (hit) return { session: hit, by: "focus" };
-    }
-    const kept = picked && live.find((s) => s.status.session === picked);
-    if (kept) return { session: kept, by: "picked" };
-    return { session: [...live].sort((a, b) => updated(b) - updated(a))[0], by: "recent" };
-}
 
 // The stages as a progress line: [{ id, goal, state: "done" | "current" | "todo" }]. A current stage the workflow does not
 // list is added at the end, so the line always shows where the work is.

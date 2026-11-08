@@ -504,11 +504,18 @@ test("jig-work lists only outputs outside repositories, and counts the rest for 
 
 test("jig-work reads its config, words decisions, and knows when it is on screen", async () => {
     const lib = await load<Work>("mods/jig-work/lib.js");
-    assert.deepEqual(lib.parseConfig(null), { machine: null, stateDir: null, prOwners: [], problems: [] });
+    assert.deepEqual(lib.parseConfig(null), {
+        machine: null,
+        stateDir: null,
+        prOwners: [],
+        refreshSeconds: 60,
+        problems: [],
+    });
     assert.deepEqual(lib.parseConfig('{ "machine": "dev-box", "stateDir": "~/state", "prOwners": ["acme"] }'), {
         machine: "dev-box",
         stateDir: "~/state",
         prOwners: ["acme"],
+        refreshSeconds: 60,
         problems: [],
     });
     assert.equal(lib.parseConfig('{ "prOwners": "acme" }').problems.length, 1);
