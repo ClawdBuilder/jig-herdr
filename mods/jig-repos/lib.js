@@ -823,8 +823,29 @@ export const NETWORK_ENV = { GIT_TERMINAL_PROMPT: "0", GH_PROMPT_DISABLED: "1" }
  * GIT_SSH_COMMAND here wins). The shell wrapper adds the BatchMode ssh command only when the machine has neither one. */
 export const networkEnv = (existing = {}) => ({ ...NETWORK_ENV, ...(existing ?? {}) });
 
+/** The exec a network action calls: the shell wrapper and Herdr's outer timeout come from the same budget. */
+export function networkExec(exec, on) {
+    return (cmd, args, options = {}) => {
+        if (!options.env && !options.timeout) return exec(cmd, args, { cwd: options.cwd, on });
+        const budget = execBudget(options.timeout);
+        return exec("sh", ["-c", wrapperScript(options.env, options.timeout), "sh", cmd, ...args], {
+            cwd: options.cwd,
+            on,
+            timeout: budget.herdrTimeoutMs,
+        });
+    };
+}
+
 /** The seconds a timeout stands for, at least one. */
 const timeoutSeconds = (timeout) => Math.max(1, Math.round((timeout ?? NETWORK_TIMEOUT) / 1000));
+
+/** Herdr 0.1.14 caps exec at 10 minutes. Keep the shell just below it, and the outer Herdr deadline 5 s later, so the
+ *  wrapper's own watchdog fires first and reports our timeout message. */
+export function execBudget(timeout = NETWORK_TIMEOUT) {
+    const shellSeconds = Math.min(timeoutSeconds(timeout), 595);
+    const shellTimeoutMs = shellSeconds * 1000;
+    return { shellSeconds, shellTimeoutMs, herdrTimeoutMs: Math.min(600000, shellTimeoutMs + 5000) };
+}
 
 /** What a stopped command says: never git's bare exit code. */
 export const timeoutMessage = (timeout = NETWORK_TIMEOUT) =>
@@ -852,7 +873,7 @@ export function wrapperScript(env, timeout = NETWORK_TIMEOUT) {
     lines.push(
         `if [ -z "\${GIT_SSH_COMMAND+set}" ] && [ -z "\${GIT_SSH+set}" ] && ! git config --get core.sshCommand >/dev/null 2>&1; then export GIT_SSH_COMMAND=${shQuote("ssh -o BatchMode=yes")}; fi`,
     );
-    const seconds = timeoutSeconds(timeout);
+    const { shellSeconds: seconds } = execBudget(timeout);
     lines.push(
         `if command -v timeout >/dev/null 2>&1; then exec timeout ${seconds} "$@"; elif command -v gtimeout >/dev/null 2>&1; then exec gtimeout ${seconds} "$@"; fi`,
     );

@@ -48,6 +48,9 @@ From **herdr.dev**: coming soon. The listings will be installable there; until t
 unbounded up to Herdr's own 30-second cap. Everything runs on the machine the space is on. Linux, WSL and macOS work; a
 Windows-local space without WSL has no POSIX `sh` and the git panels will not work.
 
+Network commands longer than 30 seconds need **Herdr 0.1.14 or newer**; older versions ignore the `exec` timeout and
+still stop them at 30 seconds.
+
 The panels show what is there: no approval, no merge, no comment, no write except the explicit stage, commit, discard,
 worktree-remove and fetch/pull/push actions above.
 

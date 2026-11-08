@@ -359,13 +359,13 @@ export default class JigWork extends View {
             try {
                 let urls = known;
                 if (urls.length === 0) {
-                    const r = await exec("gh", search, { on });
+                    const r = await exec("gh", search, { on, timeout: 60000 });
                     if (r.code !== 0) throw new Error((r.stderr || "gh search failed").trim().split("\n")[0]);
                     entry.searched = JSON.parse(r.stdout || "[]");
                     urls = entry.searched.map((p) => p.url);
                 }
                 for (const url of urls.slice(0, 4)) {
-                    const r = await exec("gh", ["pr", "view", url, "--json", VIEW], { on });
+                    const r = await exec("gh", ["pr", "view", url, "--json", VIEW], { on, timeout: 60000 });
                     if (r.code === 0) entry.details[url] = JSON.parse(r.stdout || "{}");
                 }
             } catch (e) {

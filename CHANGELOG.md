@@ -23,6 +23,11 @@
 
 ### Fixed
 
+- Network actions in Repos get the configured `networkTimeoutSeconds` again on Herdr 0.1.14: both wrappers pass Herdr an
+  `exec` timeout five seconds past their shell watchdog, with the shell clamped to 595 seconds at the 600-second edge.
+  Older Herdr ignores the option and still stops at 30 seconds. Jig-work's CI reads and the worktree scan also carry
+  deadlines that leave their own wrappers time to report first.
+
 - Keep awake can start its Windows helper again: the script is installed as `jig-keep-awake.ps1`, and the mod still
   recognises and stops a helper left running under the old `keep-awake.ps1` name. The installer keeps that old script
   while a helper may still be using it.

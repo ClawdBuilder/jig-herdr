@@ -245,7 +245,10 @@ export default class RepoWorktrees extends View {
         cx.spawn(async (cx) => {
             try {
                 const work = (async () => {
-                    const result = await exec(...timedCommand("sh", ["-c", SCRIPT, "sh", root]), { on });
+                    const result = await exec(...timedCommand("sh", ["-c", SCRIPT, "sh", root]), {
+                        on,
+                        timeout: 25000,
+                    });
                     if (run !== this.readGeneration || contextKey !== this.contextKey) return;
                     if (result.code !== 0)
                         throw new Error((result.stderr || `exit ${result.code}`).trim().split("\n")[0]);

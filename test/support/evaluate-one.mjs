@@ -41,7 +41,11 @@ const noop = () => {};
 const empty = () => [];
 const stub = new Proxy(function () {}, { get: (_t, k) => (k === "then" ? undefined : chain), apply: () => chain });
 export const agents = empty, appHome = () => "/tmp", closeOverlay = noop;
-export const exec = async () => { globalThis.__jigExecCalls = (globalThis.__jigExecCalls ?? 0) + 1; return { code: 0, stdout: "", stderr: "" }; };
+export const exec = async (_cmd, _args, options = {}) => {
+    globalThis.__jigExecCalls = (globalThis.__jigExecCalls ?? 0) + 1;
+    globalThis.__jigExecOptions = options;
+    return { code: 0, stdout: "", stderr: "" };
+};
 export const focused = () => ({ cwd: "/tmp/jig-eval" }), home = "/tmp", layout = () => ({ children: [] });
 export const nextCommand = () => new Promise(() => {});
 export const notify = noop, openOverlay = noop, panes = empty, props = () => ({}), readTextFile = async () => null;
