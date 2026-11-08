@@ -57,7 +57,16 @@ test("a click during a refresh queues exactly one more run", () => {
 
 test("every panel calls the shared refresh helper, with no inline copy", () => {
     const root = new URL("../mods/", import.meta.url);
-    for (const mod of ["repo-changes", "repo-history", "repo-prs", "repo-worktrees"]) {
+    for (const mod of [
+        "repo-changes",
+        "repo-history",
+        "repo-prs",
+        "repo-worktrees",
+        "jig-work",
+        "jig-context",
+        "jig-files",
+        "file-view",
+    ]) {
         const source = readFileSync(new URL(`${mod}/main.js`, root), "utf8");
         assert.match(source, /from "\.\/refresh\.js"/, `${mod}: import`);
         assert.match(source, /this\.refreshState = new RefreshState\(\)/, `${mod}: state`);
@@ -146,4 +155,23 @@ test("refreshSeconds clamps at 15 and reads the config object", () => {
     assert.equal(refreshSeconds({ refreshSeconds: 20 }), 20);
     assert.equal(refreshSeconds({}), 60);
     assert.equal(refreshSeconds({ refreshSeconds: 1 }, 180), 15);
+});
+
+test("the session panels read by mtime while working; no panel keeps a fast polling timer", () => {
+    const root = new URL("../mods/", import.meta.url);
+    for (const mod of ["jig-work", "jig-context"]) {
+        const source = readFileSync(new URL(`${mod}/main.js`, root), "utf8");
+        assert.match(source, /MTIMES/, `${mod}: the cheap check`);
+        assert.match(source, /checkMtimes\(/, `${mod}: the working check`);
+        assert.match(source, /changedSince\(/, `${mod}: only moved files`);
+        assert.doesNotMatch(source, /EVERY_MS\s*=\s*2000/, `${mod}: no 2 s loop`);
+        assert.doesNotMatch(source, /setInterval|setTimeout\([^)]*(2000|5000|10000)/, `${mod}: no fast timer`);
+    }
+    for (const mod of ["jig-files", "file-view"]) {
+        const source = readFileSync(new URL(`${mod}/main.js`, root), "utf8");
+        assert.match(source, /refreshScheduler\.trigger\(/, `${mod}: event trigger`);
+        assert.match(source, /refreshScheduler\.due\(/, `${mod}: backstop check`);
+        assert.doesNotMatch(source, /timer\.every\((5000|10000)/, `${mod}: no old interval`);
+        assert.doesNotMatch(source, /EVERY\s*=\s*(5000|10000)/, `${mod}: no old interval constant`);
+    }
 });

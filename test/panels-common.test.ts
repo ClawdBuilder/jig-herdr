@@ -16,11 +16,7 @@ type Sessions = {
     parseSessions(text: string): { file: string; alive: boolean; status: Record<string, unknown> }[];
     parseMtimes(text: string): Record<string, number>;
     changedSince(previous: Record<string, number>, next: Record<string, number>): string[];
-    mergeSessions(
-        previous: { file: string }[],
-        incoming: { file: string }[],
-        present: string[],
-    ): { file: string }[];
+    mergeSessions(previous: { file: string }[], incoming: { file: string }[], present: string[]): { file: string }[];
     terminalStateChanged(
         previous: { address: string; status: string }[],
         current: { address: string; status: string }[],
@@ -91,17 +87,18 @@ test("the mtime check finds only the files that moved, and merges their sessions
     const read = parseSessions(sh(READ, ...changed));
     assert.equal(read.length, 1);
     assert.equal(read[0].status.session, "a2");
-    const merged = mergeSessions(
-        [{ file: path.join(dir, "a.json") }, { file: path.join(dir, "b.json") }],
-        read,
-        [path.join(dir, "a.json"), path.join(dir, "b.json")],
-    );
+    const merged = mergeSessions([{ file: path.join(dir, "a.json") }, { file: path.join(dir, "b.json") }], read, [
+        path.join(dir, "a.json"),
+        path.join(dir, "b.json"),
+    ]);
     assert.deepEqual(merged.map((s) => s.file).sort(), [path.join(dir, "a.json"), path.join(dir, "b.json")].sort());
     // a file that vanished is dropped
     assert.deepEqual(
-        mergeSessions([{ file: path.join(dir, "a.json") }, { file: path.join(dir, "b.json") }], [], [
-            path.join(dir, "a.json"),
-        ]),
+        mergeSessions(
+            [{ file: path.join(dir, "a.json") }, { file: path.join(dir, "b.json") }],
+            [],
+            [path.join(dir, "a.json")],
+        ),
         [{ file: path.join(dir, "a.json") }],
     );
     // the full read still works
@@ -129,10 +126,7 @@ test("the new config files parse refreshSeconds, and Files knows deleted and fil
     }
     assert.match(files.FIND, /-name \.git/);
     execFileSync("sh", ["-n", "-c", files.FIND], { encoding: "utf8" });
-    assert.deepEqual(files.deletedPaths(" D src/a.ts\0 M src/b.ts\0D  old.ts\0", "/w"), [
-        "/w/src/a.ts",
-        "/w/old.ts",
-    ]);
+    assert.deepEqual(files.deletedPaths(" D src/a.ts\0 M src/b.ts\0D  old.ts\0", "/w"), ["/w/src/a.ts", "/w/old.ts"]);
     const listing = ["/w/src/a.ts", "/w/docs/plan.md", "/w/src/deep/b.ts", "/w/other.txt", "/elsewhere/x.ts"];
     assert.deepEqual(files.filterPaths(listing.join("\n"), "/w", "src"), ["src/a.ts", "src/deep/b.ts"]);
     assert.deepEqual(files.filterPaths(listing.join("\n"), "/w", "PLAN"), ["docs/plan.md"]);

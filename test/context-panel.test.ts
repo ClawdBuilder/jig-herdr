@@ -194,11 +194,11 @@ test("jig-context writes only the request file, and approves nothing", () => {
     const code = ["main.js", "lib.js"]
         .map((f) => readFileSync(path.join(HERDR, "mods/jig-context", f), "utf8"))
         .join("\n");
-    // Its one write: the request, through WRITE. No program but sh, no app command, no file written another way.
-    assert.deepEqual(
-        [...code.matchAll(/exec\("([^"]+)"/g)].map((m) => m[1]),
-        ["sh", "sh", "sh"],
-    );
+    // Its one write: the request, through WRITE. Every command is sh (the status reads and the request write), no app
+    // command, no file written another way.
+    const programs = [...code.matchAll(/exec\("([^"]+)"/g)].map((m) => m[1]);
+    assert.ok(programs.length >= 4, `the reader's commands: ${programs.join(",")}`);
+    assert.deepEqual([...new Set(programs)], ["sh"]);
     assert.doesNotMatch(code, /writeTextFile|\brun\(|\bhc\(|setShared\(/);
     for (const m of code.matchAll(/(?<![.\w])(?:exec|readTextFile)\([^;]*;/gs)) assert.match(m[0], /\{ on/, m[0]);
 });
