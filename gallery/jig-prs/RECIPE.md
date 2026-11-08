@@ -1,15 +1,45 @@
-# Prs
+# PR & CI
 
-TODO: A will replace this placeholder with the real recipe.
+Pull requests and their checks for the space's folder, read through `gh`. Inside one repository it lists that repository's
+PRs; on a folder of many repositories it lists the open PR of each feature branch, and a second tab lists all of yours.
+Read-only. From Jig (https://github.com/ClawdBuilder/jig). No Jig required.
 
-![Prs](preview.png)
+![PR & CI](preview.png)
 
-**What you see:** TODO.
+**What you see:**
 
-**How it behaves:** TODO.
+A header with the folder and a refresh button; two tabs, **Open** in one repository or **Workspace** on many, and **Mine**; rows with number, title,
+branch, author, review state, age, and a check summary (`✓` pass, `×` fail, `•` pending, `–` skip, with counts). Expanding a
+PR shows checks grouped by name and the latest run, with a link that opens in the browser. The panel marks a failing check
+on the activity bar with a count and `blocked` tone. Empty, no-git, `gh` missing, signed-out and rate-limit states are one
+line.
 
-**Built from:** TODO.
+**How it behaves:**
 
-**Watch out:** TODO.
+Click a PR row to expand its checks; click a check/run link to open the GitHub URL in this computer's browser. **Mine**
+shows PRs authored by the signed-in `gh` user. Refresh on mount/shown/focus/a terminal in the panel's folder finishing a command, and on the backstop
+(default 180 s for this panel, never below 15 s). A user refresh shows busy after 400 ms; automatic refreshes are silent.
+Opening a link uses the workspace opener (`open`, `xdg-open`, `start`) and never fetches the page itself. A PR with no
+checks says so; a cancelled run is shown as skipped, not failed.
 
-**Done when:** TODO.
+**Built from:**
+
+`main.js` + `lib.js` + `refresh.js`; no props. Herdr: `focused`, `panes`, `spaces`, `exec`, `appHome`, `readTextFile`,
+`shared`/`setShared`, `theme`, `layout`, `terminals`; network URLs opened through the workspace opener. Shared keys
+`badge.jig-prs` and the tab's own state. Config `${appHome()}/mods/jig-prs/config.json` (refresh settings).
+
+Programs: `gh` (`pr list`, `pr view`, `run list`/`run view` JSON), `git config` reads, `sh` for the script,
+`timeout`/`gtimeout` when present (20 s). Network: `gh` to GitHub (read-only API); no `git fetch`. Files read: the
+repository's git metadata and `config.json`; nothing is written to the repository.
+
+**Watch out:**
+
+Requires `gh` on PATH and signed in; missing auth/rate limits are reported, not retried. The 30 s exec cap can end a slow
+GitHub call. No write actions: no comment, approve, merge or rerun. A Windows-local space without WSL has no POSIX `sh`.
+The API's own limits apply; a very large PR list is capped and says so. Link opening depends on the desktop opener.
+
+**Done when:**
+
+`herdr-app check mods/jig-prs` passes; a demo folder with `ClawdBuilder/jig` shows PRs and checks; **Mine** switches; the first tab is **Open** in one repository and **Workspace** on many; a
+failure count appears on the activity bar; a missing `gh`, signed-out and rate-limit response each show one line; a check
+link opens in the browser; refresh twice leaves the rows stable.
