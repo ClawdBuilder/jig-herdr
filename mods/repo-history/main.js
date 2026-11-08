@@ -44,7 +44,15 @@ import {
     since,
     toggleBranchPicker,
 } from "./lib.js";
-import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds, terminalFinished } from "./refresh.js";
+import {
+    focusRegained,
+    RefreshScheduler,
+    RefreshState,
+    readDeadline,
+    readTimeoutSeconds,
+    refreshSeconds,
+    terminalFinished,
+} from "./refresh.js";
 
 const onScreen = () => isOnScreen(layout(), "repo-history");
 const PAGE = 100; // commits per page
