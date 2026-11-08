@@ -13,7 +13,7 @@
     },
     "devDependencies": {
         "@biomejs/biome": "2.6.4",
-        "@clawdbuilder/jig": "file:../jig-contracts.tgz",
+        "@clawdbuilder/jig": "0.5.2",
         "@types/node": "26.6.6",
         "typescript": "7.0.2"
     }

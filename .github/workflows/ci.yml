@@ -29,16 +29,6 @@ jobs:
                   node-version: ${{ matrix.node }}
                   cache: npm
 
-            # Until @clawdbuilder/jig@0.5.2 is published, the dependency is a local tarball. Build it from Jig's main, which
-            # has the contracts, so the same workflow works before and after the one-line dependency change.
-            - name: Provide the local contracts tarball
-              run: |
-                  if grep -q 'file:../jig-contracts.tgz' package.json; then
-                    git clone --depth 1 --branch main https://github.com/ClawdBuilder/jig.git ../jig-contracts-src
-                    (cd ../jig-contracts-src && npm pack --pack-destination ..)
-                    mv ../clawdbuilder-jig-*.tgz ../jig-contracts.tgz
-                  fi
-
             - name: Install dependencies
               run: npm ci
 
