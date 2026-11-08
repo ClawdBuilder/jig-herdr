@@ -83,7 +83,7 @@ export async function listDirectory(path, on, run, platform = null) {
 }
 
 /** Run with `sh -c FIND sh <root>`: every file under root (no .git, no node_modules, six levels), one path per line. */
-export const FIND = `if command -v timeout >/dev/null 2>&1; then F="timeout 10 find"; else F=find; fi; $F "$1" -mindepth 1 -maxdepth 6 \\( -name .git -o -name node_modules \\) -prune -o -type f -print 2>/dev/null | head -n 5000`;
+export const FIND = `if command -v timeout >/dev/null 2>&1; then F="timeout 10 find"; elif command -v gtimeout >/dev/null 2>&1; then F="gtimeout 10 find"; else F=find; fi; $F "$1" -mindepth 1 -maxdepth 6 \\( -name .git -o -name node_modules \\) -prune -o -type f -print 2>/dev/null | head -n 5000`;
 
 /**
  * Deleted paths from `git status --porcelain=v1 -z --no-renames` in `root`: the entries whose worktree or index side is

@@ -6,10 +6,11 @@
     "type": "module",
     "license": "MIT",
     "scripts": {
-        "check": "tsc -p tsconfig.json && biome ci . && node scripts/scan-company-strings.mjs",
+        "check": "tsc -p tsconfig.json && biome ci . && node scripts/scan-company-strings.mjs && node scripts/check-commit-emails.mjs",
         "test": "node --import ./test/support/git-env.mjs --test \"test/*.test.ts\"",
         "build:themes": "node scripts/build-themes.ts",
-        "scan": "node scripts/scan-company-strings.mjs"
+        "scan": "node scripts/scan-company-strings.mjs",
+        "check:emails": "node scripts/check-commit-emails.mjs"
     },
     "devDependencies": {
         "@biomejs/biome": "2.6.4",

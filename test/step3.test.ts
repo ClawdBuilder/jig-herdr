@@ -162,7 +162,7 @@ test("3b: the mount read counts as the shown read, so the first tick does not re
         ["jig-files", "this.refresh(cx, false);", "this.seen = true;"],
         ["file-view", "this.load(cx);", "this.wasShown = true;"],
     ]) {
-        const match = /init\([^)]*\) \{([\s\S]*?)\n    \}/.exec(source(`${mod}/main.js`));
+        const match = /init\([^)]*\) \{([\s\S]*?)\n {4}\}/.exec(source(`${mod}/main.js`));
         assert.ok(match, `${mod}: init`);
         const init = match[1];
         assert.ok(init.includes(mount), `${mod}: mount read`);
