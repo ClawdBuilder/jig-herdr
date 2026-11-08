@@ -7,7 +7,7 @@
     "license": "MIT",
     "scripts": {
         "check": "tsc -p tsconfig.json && biome ci . && node scripts/scan-company-strings.mjs",
-        "test": "node --test \"test/*.test.ts\"",
+        "test": "node --import ./test/support/git-env.mjs --test \"test/*.test.ts\"",
         "build:themes": "node scripts/build-themes.ts",
         "scan": "node scripts/scan-company-strings.mjs"
     },
