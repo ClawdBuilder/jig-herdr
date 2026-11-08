@@ -154,3 +154,29 @@ test("8: file-view keeps its refresh button at 300 px, and the PR note is proper
     assert.equal(work.detailsNote(1), "Details unavailable for 1 pull request.");
     assert.equal(work.detailsNote(2), "Details unavailable for 2 pull requests.");
 });
+
+test("3b: the mount read counts as the shown read, so the first tick does not read again", () => {
+    for (const [mod, mount, flag] of [
+        ["jig-work", "this.readAll(cx, false);", "this.wasSeen = true;"],
+        ["jig-context", "this.readAll(cx, false);", "this.wasSeen = true;"],
+        ["jig-files", "this.refresh(cx, false);", "this.seen = true;"],
+        ["file-view", "this.load(cx);", "this.wasShown = true;"],
+    ]) {
+        const match = /init\([^)]*\) \{([\s\S]*?)\n    \}/.exec(source(`${mod}/main.js`));
+        assert.ok(match, `${mod}: init`);
+        const init = match[1];
+        assert.ok(init.includes(mount), `${mod}: mount read`);
+        assert.ok(init.indexOf(flag) > init.indexOf(mount), `${mod}: the mount read counts as shown`);
+    }
+});
+
+test("4b: checkMtimes cannot overwrite a newer full read", () => {
+    for (const mod of ["jig-work", "jig-context"]) {
+        const src = source(`${mod}/main.js`),
+            start = src.indexOf("checkMtimes(cx, session) {"),
+            body = src.slice(start, src.indexOf("\n    }", start));
+        assert.ok(start > 0, `${mod}: checkMtimes`);
+        assert.match(body, /const run = this\.readGeneration;/, `${mod}: captures the generation`);
+        assert.match(body, /run !== this\.readGeneration/, `${mod}: drops its result if a full read took over`);
+    }
+});
