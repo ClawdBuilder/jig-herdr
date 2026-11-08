@@ -6,6 +6,9 @@ export const DEBOUNCE_MS = 500;
 export const MIN_REFRESH_SECONDS = 15;
 export const DEFAULT_REFRESH_SECONDS = 60;
 
+/** Flags every read-only git command uses: no optional locks and no fsmonitor side effects. */
+export const GIT_READ = ["--no-optional-locks", "-c", "core.fsmonitor=false"];
+
 /** A shell argv for a command under coreutils `timeout`, GNU `gtimeout` on macOS, or with no wrapper. */
 export function timedCommand(program, args, seconds = 20) {
     const wrapper =

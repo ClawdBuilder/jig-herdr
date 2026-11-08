@@ -48,6 +48,7 @@ import {
     RefreshState,
     refreshSeconds,
     terminalFinished,
+    GIT_READ,
     run as runCommand,
 } from "./refresh.js";
 
@@ -324,11 +325,11 @@ export default class RepoWorktrees extends View {
                     )
                 )
                     throw new Error("A terminal is inside this worktree. Nothing was removed.");
-                const list = await git(["worktree", "list", "--porcelain", "-z"], tree.main);
+                const list = await git([...GIT_READ, "worktree", "list", "--porcelain", "-z"], tree.main);
                 const refusal = removalRefusal(tree, parseWorktreeListZ(list.stdout ?? ""));
                 if (list.code !== 0 || refusal)
                     throw new Error(`${refusal ?? "the worktree list failed"}. Nothing was removed.`);
-                const status = await git(["--no-optional-locks", "status", "--porcelain", "--ignored"], tree.path);
+                const status = await git([...GIT_READ, "status", "--porcelain", "--ignored"], tree.path);
                 const changed = (status.stdout ?? "").split("\n").filter((line) => line && !line.startsWith("!! "));
                 const ignored = dangerousIgnored(status.stdout);
                 if (status.code !== 0 || changed.length > 0 || ignored.length > 0)
@@ -339,10 +340,10 @@ export default class RepoWorktrees extends View {
                     );
                 const ref = tree.branch || "HEAD";
                 const [ahead, unpushed, upstream, created] = await Promise.all([
-                    git(["rev-list", "--count", `${tree.base ?? "HEAD"}..${ref}`], tree.path),
-                    git(["rev-list", "--count", ref, "--not", "--remotes"], tree.path),
-                    git(["for-each-ref", "--format=%(upstream:short)", `refs/heads/${ref}`], tree.path),
-                    git(["reflog", "show", "--format=%H", ref], tree.path),
+                    git([...GIT_READ, "rev-list", "--count", `${tree.base ?? "HEAD"}..${ref}`], tree.path),
+                    git([...GIT_READ, "rev-list", "--count", ref, "--not", "--remotes"], tree.path),
+                    git([...GIT_READ, "for-each-ref", "--format=%(upstream:short)", `refs/heads/${ref}`], tree.path),
+                    git([...GIT_READ, "reflog", "show", "--format=%H", ref], tree.path),
                 ]);
                 const live = parseWorktreeListZ(list.stdout ?? "").find((entry) => entry.path === tree.path);
                 const facts = {

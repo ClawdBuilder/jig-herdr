@@ -26,7 +26,14 @@ import {
 } from "herdr";
 
 import { deletedPaths, FIND, filterPaths, listDirectory, parseConfig, searchDue } from "./lib.js";
-import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds, run as runCommand } from "./refresh.js";
+import {
+    focusRegained,
+    GIT_READ,
+    RefreshScheduler,
+    RefreshState,
+    refreshSeconds,
+    run as runCommand,
+} from "./refresh.js";
 
 function location() {
     const space = spaces().find((s) => s.active),
@@ -241,7 +248,7 @@ export default class Files extends View {
                     if (!this.current(context)) return;
                     await this.loadFolder(path, context);
                 }
-                const top = await runCommand(exec, "git", ["rev-parse", "--show-toplevel"], { cwd, on });
+                const top = await runCommand(exec, "git", [...GIT_READ, "rev-parse", "--show-toplevel"], { cwd, on });
                 const marks = {};
                 let deleted = [];
                 if (top?.code === 0) {
@@ -249,16 +256,7 @@ export default class Files extends View {
                     const status = await runCommand(
                         exec,
                         "git",
-                        [
-                            "--no-optional-locks",
-                            "-c",
-                            "core.fsmonitor=false",
-                            "status",
-                            "--porcelain=v1",
-                            "-z",
-                            "--no-renames",
-                            "--untracked-files=normal",
-                        ],
+                        [...GIT_READ, "status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=normal"],
                         { cwd, on },
                     ).catch(() => null);
                     if (status?.code === 0) {

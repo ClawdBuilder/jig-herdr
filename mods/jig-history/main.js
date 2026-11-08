@@ -50,6 +50,7 @@ import {
     RefreshState,
     refreshSeconds,
     terminalFinished,
+    GIT_READ,
     run as runCommand,
 } from "./refresh.js";
 
@@ -468,7 +469,7 @@ export default class RepoHistory extends View {
             ...(this.branchFilter ? ["--end-of-options", this.branchFilter] : []),
             ...SCOPE_ARGS[this.scope],
         ];
-        const statusArgs = ["--no-optional-locks", "-c", "core.fsmonitor=false", "status", "--porcelain"];
+        const statusArgs = [...GIT_READ, "status", "--porcelain"];
         if (!this.refreshState.start({ user, first: this.commits === null, notify: () => cx.notify() })) return;
         this.refreshScheduler.sweep();
         this.loading = true;

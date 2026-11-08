@@ -26,7 +26,7 @@ import {
 } from "gpui-base";
 import { div, svg, View } from "gpui-kit";
 import { exec, props as modProps, panes, readTextFile, settings, shared, spaces, theme } from "herdr";
-import { run as runCommand } from "./refresh.js";
+import { GIT_READ, run as runCommand } from "./refresh.js";
 import {
     branchFiles,
     canWrite,
@@ -59,7 +59,7 @@ const MAX = 400000; // most characters the File and Patch editors show; more is 
 const PANE_LABEL = { diff: "Diff", file: "File", patch: "Patch" };
 const ICON = (name) => `mods/workspace-chrome/${name}.svg`;
 // Reads write nothing under .git (same flags as jig-repos).
-const READ = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "diff.autoRefreshIndex=false"];
+const READ = [...GIT_READ, "-c", "diff.autoRefreshIndex=false"];
 
 // The file list's width, remembered in the mod's own storage (every Review tab shares it, and a restart keeps it).
 function readSideWidth() {
