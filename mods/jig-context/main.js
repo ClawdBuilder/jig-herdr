@@ -18,7 +18,6 @@ import {
     changedSince,
     folderName,
     headline,
-    isShown,
     MTIMES,
     mergeSessions,
     parseConfig,
@@ -139,7 +138,7 @@ export default class JigContext extends View {
     // Once a second: focus/session change, window focus and the followed terminal's status trigger a read; the backstop
     // covers the rest; while the session works, a cheap mtime check every 3 s reads only the files that moved.
     tick(cx) {
-        if (!isShown(layout(), "jig-context")) return;
+        if (!this.lastRenderAt || Date.now() - this.lastRenderAt > 2500) return;
         const current = this.current(),
             id = current.session?.status.session ?? null;
         if (id !== this.selectedId) {
@@ -769,6 +768,7 @@ export default class JigContext extends View {
     }
 
     render(cx) {
+        this.lastRenderAt = Date.now();
         const t = theme();
         const { session, by } = this.current();
         const live = this.sessions.filter((s) => s.alive);

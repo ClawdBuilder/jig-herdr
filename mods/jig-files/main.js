@@ -23,7 +23,7 @@ import {
     watchFolder,
     window,
 } from "herdr";
-import { deletedPaths, FIND, filterPaths, isShown, parseConfig } from "./lib.js";
+import { deletedPaths, FIND, filterPaths, parseConfig } from "./lib.js";
 import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds } from "./refresh.js";
 
 function location() {
@@ -155,7 +155,7 @@ export default class Files extends View {
     }
 
     tick(cx) {
-        const shown = isShown(layout(), "jig-files");
+        const shown = Boolean(this.lastRenderAt) && Date.now() - this.lastRenderAt < 2500;
         if (!shown) {
             this.seen = false;
             return;
@@ -377,7 +377,7 @@ export default class Files extends View {
                     .rounded(7)
                     .cursor_pointer()
                     .hover((s) => s.bg(t.hover))
-                    .tooltip(entry.dir ? `${this.root}/${path}` : undefined)
+                    .when(entry.dir, (el) => el.tooltip(`${this.root}/${path}`))
                     .on_click((_e, cx) => (entry.dir ? this.toggle(path, cx) : this.open(path)))
                     .child(
                         entry.dir
@@ -469,6 +469,7 @@ export default class Files extends View {
     }
 
     render(_cx) {
+        this.lastRenderAt = Date.now();
         const t = theme();
         if (key() !== this.context?.key) this.refreshScheduler.trigger();
         return v_flex()

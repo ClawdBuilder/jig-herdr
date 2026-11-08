@@ -6,10 +6,10 @@
 // click selects the tab instead of opening another, and so that this copy knows which tab is its own.
 
 import { Editor, EditorState, h_flex, TextView, v_flex } from "gpui-base";
-import { div, View } from "gpui-kit";
+import { div, svg, View } from "gpui-kit";
 import { appHome, props as modProps, panes, readTextFile, settings, shared, spaces, theme, window } from "herdr";
-import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds } from "./refresh.js";
 import { isMarkdown, parseConfig, splitPath, wrapDefault } from "./lib.js";
+import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds } from "./refresh.js";
 
 // Same extension mapping and limits as the shipped Files preview.
 const LANG = {

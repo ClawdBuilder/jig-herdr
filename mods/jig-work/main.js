@@ -33,7 +33,6 @@ import {
     clock,
     decisionText,
     folderName,
-    isShown,
     MTIMES,
     mergeSessions,
     missingDetails,
@@ -193,7 +192,7 @@ export default class JigWork extends View {
     // Herdr status), the backstop, and a cheap mtime check while the session works. No 2 s body polling.
     tick(cx) {
         this.claim();
-        if (!isShown(layout(), "jig-work")) return;
+        if (!this.lastRenderAt || Date.now() - this.lastRenderAt > 2500) return;
         const now = Date.now();
         if (now - this.modsAt > MODS_MS) this.checkMods(cx);
         const current = this.current(),
@@ -1058,6 +1057,7 @@ export default class JigWork extends View {
     }
 
     render(cx) {
+        this.lastRenderAt = Date.now();
         const t = theme();
         const live = this.sessions.filter((s) => s.alive);
         const { session, by } = this.current();
