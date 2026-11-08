@@ -1,7 +1,7 @@
 // Every git checkout under the folder the focused terminal is in (or the space's folder: the header's toggle), with their
 // changes and what is waiting on origin: a VS Code-style source control list. A main checkout shows its linked worktrees
 // under it as "↳ <folder>" rows. One shell script per refresh reads them all (see lib.js); a click on a file opens it in a
-// full-size Review tab (see ../repo-review).
+// full-size Review tab (see ../jig-review).
 // Git actions, all in lib.js and each refreshing the list at once: a checkbox per file stages or unstages it, hover
 // buttons stage or unstage a checkout's files and discard one file (after an inline confirm), a message box commits the
 // staged files (Commit & Push too), and the branch chip opens the branch picker (picker.js). Fetch and Pull run at once;
@@ -89,9 +89,9 @@ import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds, terminal
 const NOTE_MS = 12000; // how long an action's result stays under its checkout
 const CONFIG_MS = 60000; // how long config.json is trusted before it is read again
 const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-const visible = () => shown(layout(), "repo-changes");
+const visible = () => shown(layout(), "jig-repos");
 const ICON = (name) => `mods/workspace-chrome/${name}.svg`;
-const OWN = (name) => `mods/repo-changes/${name}.svg`;
+const OWN = (name) => `mods/jig-repos/${name}.svg`;
 const lastSegment = (path) =>
     String(path ?? "")
         .replace(/\/+$/, "")
@@ -128,7 +128,7 @@ function location(follow) {
 // Count for the panel's icon on the activity bar; only on change, since setting re-renders every mod.
 function badge(count) {
     const value = { count, tone: "accent" };
-    if (JSON.stringify(shared("badge.repo-changes")) !== JSON.stringify(value)) setShared("badge.repo-changes", value);
+    if (JSON.stringify(shared("badge.jig-repos")) !== JSON.stringify(value)) setShared("badge.jig-repos", value);
 }
 
 /** A small square icon or glyph button that stops the click from reaching the row under it. */
@@ -294,7 +294,7 @@ export default class RepoChanges extends View {
         if (this.configAt && Date.now() - this.configAt < CONFIG_MS) return;
         this.configAt = Date.now();
         cx.spawn(async (cx) => {
-            const text = await readTextFile(`${appHome()}/mods/repo-changes/config.json`).catch(() => null);
+            const text = await readTextFile(`${appHome()}/mods/jig-repos/config.json`).catch(() => null);
             this.config = parseConfig(text);
             this.refreshScheduler.setSeconds(refreshSeconds(this.config));
             cx.notify();
@@ -578,7 +578,7 @@ export default class RepoChanges extends View {
                 return;
             }
             openOverlay({
-                mod: "repo-changes",
+                mod: "jig-repos",
                 kind: "dialog",
                 width: 440,
                 props: {
@@ -667,10 +667,10 @@ export default class RepoChanges extends View {
             return run("tab.new", {
                 space,
                 name,
-                mod: "repo-review",
+                mod: "jig-review",
                 props: { on, repo: repo.path, name: repo.name, file: file?.path, mode },
             });
-        setShared("repo-review.open", { repo: repo.path, file: file?.path ?? null, mode, at: Date.now() });
+        setShared("jig-review.open", { repo: repo.path, file: file?.path ?? null, mode, at: Date.now() });
         run("tab.select", { id: tab.id });
     }
 
@@ -678,7 +678,7 @@ export default class RepoChanges extends View {
     openPicker(repo) {
         if (this.switching) return;
         openOverlay({
-            mod: "repo-changes",
+            mod: "jig-repos",
             kind: "popup",
             width: 360,
             height: 440,
@@ -1551,7 +1551,7 @@ export default class RepoChanges extends View {
         const empty = items.length ? null : this.emptyState(there);
         const narrow = this.width > 0 && this.width < 380;
         return v_flex()
-            .id("repo-changes")
+            .id("jig-repos")
             .size_full()
             .min_h(0)
             .rounded(10)

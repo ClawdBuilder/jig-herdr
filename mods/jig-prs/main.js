@@ -52,7 +52,7 @@ import {
     timedCommand,
 } from "./refresh.js";
 
-const onScreen = () => isOnScreen(layout(), "repo-prs");
+const onScreen = () => isOnScreen(layout(), "jig-prs");
 const GH_AT_ONCE = 4;
 const MINE_UP_FRONT = 15; // "Mine": pull requests whose checks load without a click
 const OPEN_PAGE = 30;
@@ -153,7 +153,7 @@ async function gh(args, on) {
  * state redraws every mod. */
 function publishBadge(count) {
     const next = { count, tone: "blocked" };
-    if (JSON.stringify(shared("badge.repo-prs")) !== JSON.stringify(next)) setShared("badge.repo-prs", next);
+    if (JSON.stringify(shared("badge.jig-prs")) !== JSON.stringify(next)) setShared("badge.jig-prs", next);
 }
 
 /** A small clickable text link, like "Refresh". */
@@ -261,7 +261,7 @@ export default class RepoPullRequests extends View {
         if (this.configAt && Date.now() - this.configAt < 60000) return;
         this.configAt = Date.now();
         cx.spawn(async (cx) => {
-            const text = await readTextFile(`${appHome()}/mods/repo-prs/config.json`).catch(() => null);
+            const text = await readTextFile(`${appHome()}/mods/jig-prs/config.json`).catch(() => null);
             try {
                 this.config = text ? JSON.parse(text) : {};
             } catch {
@@ -928,7 +928,7 @@ export default class RepoPullRequests extends View {
                 ),
             );
         return v_flex()
-            .id("repo-prs")
+            .id("jig-prs")
             .size_full()
             .min_h(0)
             .rounded(10)

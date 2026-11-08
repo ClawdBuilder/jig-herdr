@@ -1,7 +1,7 @@
 // The tab bar of the jig layout: Herdr's shipped `tabs` mod with its Files and Changes buttons replaced by two:
 // "Panel" shows or hides the side panel on the section it showed last, and "Jig" shows it on the Jig Work section
 // (or hides it when that is what it shows). The side panel is still remembered per space. A third control keeps the
-// computer awake: a lit sun when the keep-awake worker holds the request; a click turns it on or off, a right click
+// computer awake: a lit sun when the jig-keep-awake worker holds the request; a click turns it on or off, a right click
 // opens its three modes (Off, On, While agents work).
 //
 // Derived from the `tabs` mod shipped with the Herdr app (mods/tabs/main.js), Copyright the Herdr authors,
@@ -175,11 +175,11 @@ export default class JigTabs extends View {
             body = find(root, names.stack);
         this.syncPanel(space, panel, body, names);
         // Keep awake: the worker owns the request; this only says what the person wants.
-        const awakeMode = ["off", "on", "agents"].includes(shared("keep-awake.mode"))
-                ? shared("keep-awake.mode")
+        const awakeMode = ["off", "on", "agents"].includes(shared("jig-keep-awake.mode"))
+                ? shared("jig-keep-awake.mode")
                 : "off",
-            awake = shared("keep-awake.active") === true,
-            screenOn = shared("keep-awake.display") !== false,
+            awake = shared("jig-keep-awake.active") === true,
+            screenOn = shared("jig-keep-awake.display") !== false,
             awakeLabel =
                 awakeMode === "on"
                     ? "On until switched off or Herdr closes"
@@ -187,7 +187,7 @@ export default class JigTabs extends View {
                       ? "While agents work"
                       : "Off",
             awakeButton = div()
-                .id("keep-awake")
+                .id("jig-keep-awake")
                 .size(26)
                 .flex_none()
                 .flex()
@@ -208,7 +208,7 @@ export default class JigTabs extends View {
                 .on_mouse_down("right", (_e, cx) => {
                     cx.stop_propagation();
                     openOverlay({
-                        mod: "keep-awake",
+                        mod: "jig-keep-awake",
                         kind: "popup",
                         width: 330,
                         height: 252,
@@ -217,9 +217,9 @@ export default class JigTabs extends View {
                 })
                 .on_click((_e, cx) => {
                     cx.stop_propagation();
-                    setShared("keep-awake.mode", awakeMode === "off" ? "on" : "off");
+                    setShared("jig-keep-awake.mode", awakeMode === "off" ? "on" : "off");
                 })
-                .child(svg("mods/keep-awake/keep-awake.svg").size(15));
+                .child(svg("mods/jig-keep-awake/jig-keep-awake.svg").size(15));
         const open = Boolean(panel && !panel.hidden),
             onJig = open && body?.active === names.jig;
         const hasJig = Boolean(body?.children?.some((c) => c.id === names.jig));

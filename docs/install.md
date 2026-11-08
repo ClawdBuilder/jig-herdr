@@ -23,8 +23,8 @@ restart.
 ## What it copies
 
 - **`layouts/`:** `jig.json` and `jig.svg`, the picture the settings screen shows.
-- **`mods/`:** `jig-work`, `jig-context`, `jig-tabs`, `jig-activity`, `jig-theme-sync`, `jig-files`, `file-view`, `repo-changes`, `repo-review`,
-  `repo-history`, `repo-prs` and `repo-worktrees`.
+- **`mods/`:** `jig-work`, `jig-context`, `jig-tabs`, `jig-activity`, `jig-theme-sync`, `jig-files`, `jig-file-view`, `jig-repos`, `jig-review`,
+  `jig-history`, `jig-prs` and `jig-worktrees`.
 - **`themes/`:** one theme for each Jig palette.
 - **`keys.json`:** merged, not copied: only the section `layout:jig` is added or changed.
 

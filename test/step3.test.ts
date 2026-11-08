@@ -41,11 +41,11 @@ test("1: a filtered Files search runs once per change, not on every tick", async
     assert.doesNotMatch(src, /Date\.now\(\) - this\.filterAt > 500/, "no per-tick time check that re-runs find");
 });
 
-test("2: Context, Files and file-view read once on mount too", () => {
+test("2: Context, Files and jig-file-view read once on mount too", () => {
     for (const [mod, call] of [
         ["jig-context", "this.readAll(cx"],
         ["jig-files", "this.refresh(cx"],
-        ["file-view", "this.load(cx"],
+        ["jig-file-view", "this.load(cx"],
     ]) {
         const match = /init\([^)]*\) \{([\s\S]*?)\n {4}\}/.exec(source(`${mod}/main.js`));
         assert.ok(match, `${mod}: an init block`);
@@ -55,7 +55,7 @@ test("2: Context, Files and file-view read once on mount too", () => {
 });
 
 test("3: the panels use exec and no timer-based deadline", async () => {
-    for (const mod of ["jig-work", "jig-context", "jig-files", "file-view"]) {
+    for (const mod of ["jig-work", "jig-context", "jig-files", "jig-file-view"]) {
         const src = source(`${mod}/main.js`);
         assert.doesNotMatch(src, /readDeadline\(/, `${mod}: no readDeadline call`);
         assert.doesNotMatch(src, /readTimeoutSeconds/, `${mod}: no read-timeout setting`);
@@ -126,8 +126,8 @@ test("6: Work and Context read again when the panel is shown after being hidden"
     }
 });
 
-test("7: no busy on a backstop after an error; file-view queues clicks and keeps hidden tabs quiet", () => {
-    for (const mod of ["jig-work", "jig-context", "jig-files", "file-view"]) {
+test("7: no busy on a backstop after an error; jig-file-view queues clicks and keeps hidden tabs quiet", () => {
+    for (const mod of ["jig-work", "jig-context", "jig-files", "jig-file-view"]) {
         const src = source(`${mod}/main.js`);
         assert.doesNotMatch(src, /first: !this\.loaded/, `${mod}: first is not every unloaded backstop`);
         assert.match(src, /first: !this\.started/, `${mod}: first only before the first read`);
@@ -135,7 +135,7 @@ test("7: no busy on a backstop after an error; file-view queues clicks and keeps
     for (const mod of ["jig-work", "jig-context"]) {
         assert.doesNotMatch(source(`${mod}/main.js`), /!this\.loaded && !this\.loading/, `${mod}: no retry every tick`);
     }
-    const view = source("file-view/main.js");
+    const view = source("jig-file-view/main.js");
     assert.doesNotMatch(view, /if \(this\.loading \|\| !this\.path\) return;/, "a click during a load is queued");
     const tick = view.slice(view.indexOf("tick(cx) {"), view.indexOf("tick(cx) {") + 600);
     assert.ok(tick.indexOf("shown") < tick.indexOf("loadConfig"), "a hidden tab does not read its config");
@@ -144,11 +144,11 @@ test("7: no busy on a backstop after an error; file-view queues clicks and keeps
     assert.match(work, /detailsNote\(/, "singular/plural through one helper");
 });
 
-test("8: file-view keeps its refresh button at 300 px, and the PR note is proper English", async () => {
+test("8: jig-file-view keeps its refresh button at 300 px, and the PR note is proper English", async () => {
     for (const mod of ["jig-work", "jig-context"]) {
         assert.doesNotMatch(source(`${mod}/main.js`), /!this\.loaded && !this\.loading/, `${mod}: no retry every tick`);
     }
-    const view = source("file-view/main.js");
+    const view = source("jig-file-view/main.js");
     assert.match(view, /narrow \?/, "narrow labels");
     const work = await load<Work>("mods/jig-work/lib.js");
     assert.equal(work.detailsNote(1), "Details unavailable for 1 pull request.");
@@ -160,7 +160,7 @@ test("3b: the mount read counts as the shown read, so the first tick does not re
         ["jig-work", "this.readAll(cx, false);", "this.wasSeen = true;"],
         ["jig-context", "this.readAll(cx, false);", "this.wasSeen = true;"],
         ["jig-files", "this.refresh(cx, false);", "this.seen = true;"],
-        ["file-view", "this.load(cx);", "this.wasShown = true;"],
+        ["jig-file-view", "this.load(cx);", "this.wasShown = true;"],
     ]) {
         const match = /init\([^)]*\) \{([\s\S]*?)\n {4}\}/.exec(source(`${mod}/main.js`));
         assert.ok(match, `${mod}: init`);

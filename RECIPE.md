@@ -67,7 +67,7 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
 - **Work.** Every 2 seconds while it is on screen, one `sh` on the machine where Pi runs reads the status files the Pi
   extension writes and checks that each Pi still runs. The session shown is the focused terminal's, else the one picked in
   the list, else the one updated last. A click on the ticket key or a pull request opens the browser; on an output, a file
-  tab (`file-view`, selected again if open); on its diff button, the `Review` tab. Pull requests are read with `gh` at most
+  tab (`jig-file-view`, selected again if open); on its diff button, the `Review` tab. Pull requests are read with `gh` at most
   every 5 minutes per ticket; `Refresh` reads them now. Nothing in the panel approves or changes anything.
 - **Context.** Read with Work's script every 2 seconds while shown. A switch or `Reload` writes the session's request file
   through a temporary file and a rename, carrying every switch not answered yet, and shows dimmed until the session's
@@ -80,7 +80,7 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
   the helper at once), whether the request is held and that a lid or the power button still sleeps the computer.
   `Ctrl+Shift+Alt+K` cycles the modes. The helper is a hidden PowerShell (`SetThreadExecutionState`) on Windows,
   `caffeinate -i [-d] -w <herdr pid>` on macOS, or `systemd-inhibit --what=sleep[:idle] --mode=block sh -c 'while kill -0
-  <herdr pid> ...' keep-awake` on Linux, started on Herdr's own computer and stopped when it is no longer wanted or Herdr
+  <herdr pid> ...' jig-keep-awake` on Linux, started on Herdr's own computer and stopped when it is no longer wanted or Herdr
   exits; its request ends with its process.
 - **Changes.** It follows the focused terminal's folder (its checkout and linked worktrees, else the repositories below it),
   or the space's folder when the header's toggle says `Space`; the choice is kept per space in `localStorage`, and a switch
@@ -113,12 +113,12 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
   and the work in the base or the remote branch deleted. `Remove` asks twice and runs `git worktree remove` (no `--force`)
   and `git branch -d` (never `-D`).
 - **Files.** A tree of the folder, lazily read; folders open in place, a letter marks files with changes, a click opens the
-  file in a `file-view` tab (a second click selects it).
+  file in a `jig-file-view` tab (a second click selects it).
 - **Review.** Arrow keys and `j` and `k` move between files; `‹` `›` too. The list is read again every 5 seconds while the
   tab is on screen; an unchanged diff keeps its scroll position.
 - **Theme follower.** Every 5 seconds it reads Pi's `theme` setting, makes a Herdr theme from that palette and switches to
   it. Nothing shows it: a problem comes as a notification. Dark palettes keep the black window.
-- **Badges.** `repo-changes` sets `shared("badge.repo-changes")` to the number of checkouts with changes. The icon bar
+- **Badges.** `jig-repos` sets `shared("badge.jig-repos")` to the number of checkouts with changes. The icon bar
   shows a badge for `shared("badge.<mod>")` on the button of that mod.
 
 ## Built from
@@ -128,7 +128,7 @@ The layout is `layouts/jig.json`, rewritten from Herdr's shipped `main` layout. 
 - `root` (row; theme `jig-lime`, `background: canvas`, `terminal_padding: [14, 12]`, 1 px `border` dividers, `preview:
   layouts/jig.svg`)
   - `sidebar` (column, 300 px, min 44, max 520) with `brand`, `sidebar-lists` (`spaces`, `agents`), `jig-theme` (0 px,
-    mod `jig-theme-sync`), `keep-awake` (a 0 px block, mod `keep-awake`) and `sidebar-footer`
+    mod `jig-theme-sync`), `jig-keep-awake` (a 0 px block, mod `jig-keep-awake`) and `sidebar-footer`
   - `work` (column) with `tabs` (mod `jig-tabs`) and `work-body`
     - `work-body` (row, padding 8, gap 8): `main` (`{ tab: "active", pane: {...} }`) and `panel` (row, 420 px)
     - `panel`: `panel-body` (stack, active `jig-work`) and `activity` (block, 40 px, not resizable;
@@ -136,64 +136,64 @@ The layout is `layouts/jig.json`, rewritten from Herdr's shipped `main` layout. 
 
 Each child of `panel-body` is a block with a `title` and a mod, and its `content.props.activity` holds `{ icon, end? }`:
 
-| id            | title         | mod              | icon                                                             |
-| ------------- | ------------- | ---------------- | ---------------------------------------------------------------- |
-| `jig-work`    | Jig · Work    | `jig-work`       | `mods/jig-activity/icons/jig.svg`                                |
-| `jig-context` | Jig · Context | `jig-context`    | `mods/jig-activity/icons/context.svg` (a gauge), `divider: true` |
-| `changes`     | Changes       | `repo-changes`   | `mods/workspace-chrome/git-compare.svg`                          |
-| `history`     | History       | `repo-history`   | `mods/workspace-chrome/clock.svg`                                |
-| `pr`          | PR & CI       | `repo-prs`       | `mods/jig-activity/icons/pr.svg`                                 |
-| `worktrees`   | Worktrees     | `repo-worktrees` | `mods/jig-activity/icons/worktree.svg`                           |
-| `files`       | Files         | `jig-files`      | `mods/workspace-chrome/files.svg`                                |
+| id            | title         | mod             | icon                                                             |
+| ------------- | ------------- | --------------- | ---------------------------------------------------------------- |
+| `jig-work`    | Jig · Work    | `jig-work`      | `mods/jig-activity/icons/jig.svg`                                |
+| `jig-context` | Jig · Context | `jig-context`   | `mods/jig-activity/icons/context.svg` (a gauge), `divider: true` |
+| `changes`     | Changes       | `jig-repos`     | `mods/workspace-chrome/git-compare.svg`                          |
+| `history`     | History       | `jig-history`   | `mods/workspace-chrome/clock.svg`                                |
+| `pr`          | PR & CI       | `jig-prs`       | `mods/jig-activity/icons/pr.svg`                                 |
+| `worktrees`   | Worktrees     | `jig-worktrees` | `mods/jig-activity/icons/worktree.svg`                           |
+| `files`       | Files         | `jig-files`     | `mods/workspace-chrome/files.svg`                                |
 
 The mods, all in `mods/`, each with `mod.json` `{ "place": "none", "title": "..." }`:
 
 - **`jig-work`** (props: none; settings in `config.json`: `{ machine, stateDir, prOwners }`). `exec("sh", ["-c", SCRIPT, "sh", stateDir],
   { on })` for the status files, `exec("sh", ...)` for git on the outputs, `exec("gh", ...)` for pull requests, `exec` of the
   browser opener here, `focused()`, `spaces()`, `panes()`, `layout()`, `run("tab.new" | "tab.select")`, `setShared` of
-  `file-view.tabs` and `repo-review.open`, `notify`. Files: `main.js`, `lib.js` (the scripts, the parsing, which session).
+  `jig-file-view.tabs` and `jig-review.open`, `notify`. Files: `main.js`, `lib.js` (the scripts, the parsing, which session).
 - **`jig-context`** (props: none; reads `mods/jig-work/config.json` for `machine` and `stateDir`). The same `exec("sh",
   ["-c", SCRIPT, "sh", stateDir], { on })`, and for a switch or Reload one `exec("sh", ["-c", 'printf %s "$2" > "$1.tmp" &&
   mv "$1.tmp" "$1"', "sh", requestFile, json], { on })`; `focused()`, `spaces()`, `layout()`, `localStorage` for the open
   lists. Files: `main.js`, `lib.js` (a copy of Work's session finding, the bar, the request).
 - **`jig-tabs`** (props `{ panel, stack, jig }`). Herdr's `tabs` mod (Apache-2.0) with the two buttons and the sun;
-  `run("layout.select" | "layout.show" | "layout.hide")`, `setShared("keep-awake.mode", ...)` from the sun, and
-  `openOverlay({ mod: "keep-awake", kind: "popup", props: { menu: true } })` on a right click; icons
-  `mods/jig-tabs/jig.svg`, `mods/keep-awake/keep-awake.svg`, `mods/workspace-chrome/panel-right.svg`, and Herdr's window
+  `run("layout.select" | "layout.show" | "layout.hide")`, `setShared("jig-keep-awake.mode", ...)` from the sun, and
+  `openOverlay({ mod: "jig-keep-awake", kind: "popup", props: { menu: true } })` on a right click; icons
+  `mods/jig-tabs/jig.svg`, `mods/jig-keep-awake/jig-keep-awake.svg`, `mods/workspace-chrome/panel-right.svg`, and Herdr's window
   buttons from `mods/tabs/`.
-- **`keep-awake`** (props: none, or `{ menu: true }` for its popup; settings in `config.json`: `{ idleMinutes, display }`).
-  Reads `agents()`, `window()`, `shared("keep-awake.mode")`; sets `shared("keep-awake.mode" | "active" | "helper")`; runs
+- **`jig-keep-awake`** (props: none, or `{ menu: true }` for its popup; settings in `config.json`: `{ idleMinutes, display }`).
+  Reads `agents()`, `window()`, `shared("jig-keep-awake.mode")`; sets `shared("jig-keep-awake.mode" | "active" | "helper")`; runs
   `exec` on Herdr's own computer for the helper (`powershell`'s `Start-Process -WindowStyle Hidden`, `sh` for `caffeinate`
   or `systemd-inhibit`), for `appPidCommand`, `aliveCommand`, `commandLineCommand` and `stopCommand`; reads and writes
-  `keep-awake.stop` in the app folder with `readTextFile`/`writeTextFile`; `notify` on a failure. A 1-second timer decides,
+  `jig-keep-awake.stop` in the app folder with `readTextFile`/`writeTextFile`; `notify` on a failure. A 1-second timer decides,
   a 10-second check asks whether the helper is still ours, and a `nextCommand()` loop serves `cycle`, `on`, `off` and
-  `agents`. Files: `main.js`, `lib.js`, `keep-awake.ps1`, `keep-awake.svg`, `config.json`.
-- **`file-view`** (props `{ on, path }` from `tab.new`). `readTextFile(path, { on })`, `EditorState` and `Editor` from
+  `agents`. Files: `main.js`, `lib.js`, `jig-keep-awake.ps1`, `jig-keep-awake.svg`, `config.json`.
+- **`jig-file-view`** (props `{ on, path }` from `tab.new`). `readTextFile(path, { on })`, `EditorState` and `Editor` from
   `gpui-base`, read-only.
-- **`repo-changes`** (props: none; `{ picker }` for its branch popup, `{ push }` for its push dialog; settings in
+- **`jig-repos`** (props: none; `{ picker }` for its branch popup, `{ push }` for its push dialog; settings in
   `config.json`: `{ newBranchPrefix, baseBranch, remote, networkTimeoutSeconds }`). Reads `spaces()`, `panes()`,
-  `focused()`, `terminals()`, `layout()`, `appHome()`, `shared("repo-changes.running")`; reads its `config.json` with
+  `focused()`, `terminals()`, `layout()`, `appHome()`, `shared("jig-repos.running")`; reads its `config.json` with
   `readTextFile`; runs `exec("sh", ["-c", SCRIPT, "sh", root], { on })` with the space's machine, `exec("git", ..., { cwd,
   on })` for the actions, and the network ones through one `sh -c` that sets the environment and a `timeout` (or a
   watchdog); `openOverlay` for the picker (`kind: "popup"`) and the push dialog (`kind: "dialog"`, 440 wide); `run("tab.new", ...)` for the Review tab and terminals; `setShared` for the
-  badge and `repo-changes.done`. `InputState` and `Input` for the filter, the commit messages (made in the timer, never in
+  badge and `jig-repos.done`. `InputState` and `Input` for the filter, the commit messages (made in the timer, never in
   `render`) and the picker. Icons: its own `fetch`, `pull`, `push`, `refresh`, and `mods/workspace-chrome/`
   `branch`, `check`, `chevron-down`, `chevron-right`, `folder`, `minus`, `plus`, `terminal`. Files: `main.js` (the panel),
   `picker.js`, `push.js` (the confirm dialog), `lib.js` (the script, the parsing, the grouping and the git actions, each
   taking `exec` and returning `{ ok, message }`), `layout.js`, `config.json`, `RECIPE.md`, `preview.png`.
-- **`repo-review`** (props `{ on, repo, name, file? }` from `tab.new`; read them with `props()`). `exec("git", ...)` and
+- **`jig-review`** (props `{ on, repo, name, file? }` from `tab.new`; read them with `props()`). `exec("git", ...)` and
   `readTextFile` with `{ on }`; `v_virtual_list` and `Scrollbar` from `gpui-base`. Its `lib.js` copies the stage, unstage
-  and discard functions of `repo-changes`.
-- **`repo-history`** (props: none). `exec("sh", ["-c", SCRIPT, "sh", root], { on })` for the repositories, `exec("git", ...,
+  and discard functions of `jig-repos`.
+- **`jig-history`** (props: none). `exec("sh", ["-c", SCRIPT, "sh", root], { on })` for the repositories, `exec("git", ...,
   { cwd, on })` for `log`, `status` and `show`, `run("terminal.open", ...)` for a diff. `InputState` and `Input` from
   `gpui-base` for the filter and the picker. Files: `main.js`, `lib.js`.
-- **`repo-prs`** (props: none). `exec("sh", ...)` for the repositories, `exec("gh", ...)` for `pr view`, `pr list` and `search
+- **`jig-prs`** (props: none). `exec("sh", ...)` for the repositories, `exec("gh", ...)` for `pr view`, `pr list` and `search
   prs` (four at a time, cached 5 minutes in `localStorage`), `exec` of the browser opener here, `setShared` for the badge.
   Files: `main.js`, `lib.js`.
-- **`repo-worktrees`** (props: none). `exec("sh", ...)` for the worktrees, `spaces()`, `panes()` for who is at a checkout,
+- **`jig-worktrees`** (props: none). `exec("sh", ...)` for the worktrees, `spaces()`, `panes()` for who is at a checkout,
   `run("space.select" | "tab.new")`, and for Remove only `exec("git", ["worktree", "remove", path])` and `exec("git",
   ["branch", "-d", branch])`. `setShared` for the badge. Files: `main.js`, `lib.js`.
-- **`jig-files`** (props: none). Herdr's `files` mod (Apache-2.0, header kept) with `run("tab.new", { mod: "file-view" })`
+- **`jig-files`** (props: none). Herdr's `files` mod (Apache-2.0, header kept) with `run("tab.new", { mod: "jig-file-view" })`
   instead of an in-panel preview; icons from `mods/workspace-chrome/`. File: `main.js`.
 - **`jig-activity`** (props `{ stack }`; a child's `activity` may have `divider: true`). `layout()`, `shared()`, `readTextFile` of `mods/<mod>/mod.json` to see which mods exist,
   `run("layout.select", { stack, child })`. Icons in `mods/jig-activity/icons/`: 24 px viewBox, stroke `currentColor`, 1.5.
@@ -224,15 +224,15 @@ Work panel needs Jig's Pi plugin `jig-session` loaded in Pi: it writes the statu
 - **A terminal's address has its machine in front** in the app (`dev-box/t7`), but herdr-core sets only `t7` in the terminal
   (`HC_TERMINAL_ID`). Put the machine in front before comparing with `focused().terminal`.
 - **`tab.new` does not give a mod the new tab's id.** Find it as the tab that was not there before, and keep the map in
-  `shared("file-view.tabs")` so a second click selects it.
-- **A block of 0 px still runs its mod.** Its timers run, so `jig-theme-sync` syncs and `keep-awake` watches agents without
+  `shared("jig-file-view.tabs")` so a second click selects it.
+- **A block of 0 px still runs its mod.** Its timers run, so `jig-theme-sync` syncs and `jig-keep-awake` watches agents without
   taking a line of the sidebar.
 - **Pane headers stay `"reveal": "always"`.** On hover the header is drawn over the terminal and hides its prompt line.
 - **Poll only while shown.** A mod's timers run while its block is hidden; check `layout()` (no hidden node, every stack on
   the way showing it) before reading.
 - **A block whose mod is missing** shows `<mod> did not load` and adds an error to `herdr-app status`; the rest still works.
   `jig-activity` leaves out that panel's button.
-- **Mods cannot import each other,** so `lib.js` of `repo-review` is a cut-down copy of `repo-changes`'s, `jig-context` copies
+- **Mods cannot import each other,** so `lib.js` of `jig-review` is a cut-down copy of `jig-repos`'s, `jig-context` copies
   `jig-work`'s session finding, and every panel
   has its own check that its block is on screen.
 - **Every git write is a click, with git's own safety.** No `--force`, `-D`, `reset`, `--amend`, `--no-verify` or push;

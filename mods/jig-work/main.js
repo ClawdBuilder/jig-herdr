@@ -5,8 +5,8 @@
 // While the panel is on screen it reads the status files every 2 seconds with one `sh` on the machine where Pi runs
 // (config.json's `machine`, else the shown space's machine). The session shown is the one whose terminal is focused, else the
 // one picked, else the one updated last. Pull requests come from the workflow's readings; with none, from one `gh search prs`
-// for the ticket (in config.json's `prOwners`, else involving you), kept 5 minutes. A file opens in a `file-view` tab; one
-// with changes in a git repository can open in the `repo-review` tab. Links open in this computer's browser. It approves
+// for the ticket (in config.json's `prOwners`, else involving you), kept 5 minutes. A file opens in a `jig-file-view` tab; one
+// with changes in a git repository can open in the `jig-review` tab. Links open in this computer's browser. It approves
 // nothing and writes nothing on that machine.
 
 import { h_flex, v_flex } from "gpui-base";
@@ -68,7 +68,7 @@ import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds } from ".
 const MTIME_MS = 3000; // while the followed session works: a cheap mtime check
 const REPO_MS = 30000; // which outputs have changes in a repository
 const PR_MS = 5 * 60000; // pull requests, per ticket
-const MODS_MS = 30000; // whether file-view and repo-review are installed
+const MODS_MS = 30000; // whether jig-file-view and jig-review are installed
 const SEARCH = "number,title,url,state,isDraft,repository,updatedAt";
 const VIEW = "title,state,isDraft,reviewDecision,statusCheckRollup";
 const ICON = (name) => `mods/workspace-chrome/${name}.svg`;
@@ -148,7 +148,7 @@ export default class JigWork extends View {
         this.repoAt = 0;
         this.prs = readCache(); // ticket key -> { at, searched, details, error }
         this.prLoading = false;
-        this.mods = { "file-view": true, "repo-review": true };
+        this.mods = { "jig-file-view": true, "jig-review": true };
         this.modsAt = 0;
         this.opening = [];
         this.warned = new Set();
@@ -389,7 +389,7 @@ export default class JigWork extends View {
     // tab.new does not give a mod the new tab's id: it is found as the tab that was not there before (as Files does).
     claim() {
         if (!this.opening.length) return;
-        const map = shared("file-view.tabs") ?? {};
+        const map = shared("jig-file-view.tabs") ?? {};
         const taken = new Set(Object.values(map));
         const found = {};
         this.opening = this.opening.filter((o) => {
@@ -407,7 +407,7 @@ export default class JigWork extends View {
         if (!Object.keys(found).length) return;
         const live = new Set(spaces().flatMap((s) => s.tabs.map((t) => t.id)));
         setShared(
-            "file-view.tabs",
+            "jig-file-view.tabs",
             Object.fromEntries(Object.entries({ ...map, ...found }).filter(([, id]) => live.has(id))),
         );
     }
@@ -415,16 +415,17 @@ export default class JigWork extends View {
     openFile(path) {
         const space = spaces().find((s) => s.active);
         if (!space) return;
-        if (!this.mods["file-view"]) return this.warn("Install the file-view mod to open files from the Work panel.");
+        if (!this.mods["jig-file-view"])
+            return this.warn("Install the jig-file-view mod to open files from the Work panel.");
         const on = this.machine();
         const key = `${on ?? ""}|${path}`;
         const name = splitPath(path).name;
-        const id = shared("file-view.tabs")?.[key];
-        if (id && space.tabs.some((t) => t.id === id) && panes().some((p) => p.tab === id && p.mod === "file-view"))
+        const id = shared("jig-file-view.tabs")?.[key];
+        if (id && space.tabs.some((t) => t.id === id) && panes().some((p) => p.tab === id && p.mod === "jig-file-view"))
             return run("tab.select", { id });
         if (this.opening.some((o) => o.key === key)) return;
         this.opening.push({ key, space: space.id, name, before: new Set(space.tabs.map((t) => t.id)), at: Date.now() });
-        run("tab.new", { space: space.id, name, mod: "file-view", props: { on, path } });
+        run("tab.new", { space: space.id, name, mod: "jig-file-view", props: { on, path } });
     }
 
     openReview(target) {
@@ -436,10 +437,10 @@ export default class JigWork extends View {
             return run("tab.new", {
                 space: space.id,
                 name,
-                mod: "repo-review",
+                mod: "jig-review",
                 props: { on: this.machine(), repo: target.repo, name: target.name, file: target.file },
             });
-        setShared("repo-review.open", { repo: target.repo, file: target.file, at: Date.now() });
+        setShared("jig-review.open", { repo: target.repo, file: target.file, at: Date.now() });
         run("tab.select", { id: tab.id });
     }
 
@@ -917,7 +918,7 @@ export default class JigWork extends View {
                         list.map((o, i) => {
                             const { dir, name } = splitPath(o.path);
                             const info = this.repoInfo[o.path];
-                            const target = info?.status && this.mods["repo-review"] ? reviewTarget(o.path, info) : null;
+                            const target = info?.status && this.mods["jig-review"] ? reviewTarget(o.path, info) : null;
                             const created = o.action === "created";
                             return h_flex()
                                 .id(`jw-out-${i}`)

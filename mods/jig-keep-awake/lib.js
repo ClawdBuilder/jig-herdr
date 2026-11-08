@@ -122,7 +122,7 @@ export function startCommand(platform, { ownerPid, script, stopFile, display, to
                   "sh",
                   "-c",
                   linuxLoop(ownerPid, stopFile, token),
-                  "keep-awake",
+                  "jig-keep-awake",
               ];
     return { cmd: "sh", args: ["-c", `nohup ${program.map(shQuote).join(" ")} >/dev/null 2>&1 & echo $!`] };
 }
@@ -203,7 +203,7 @@ export function isHelper(commandLine, script) {
 
 /**
  * Whether a process's command line is this mod's helper on that platform, owned by that Herdr: the PowerShell running
- * `keep-awake.ps1` with `-Owner <owner>`; `caffeinate … -w <owner>`; or the `systemd-inhibit` line whose `--why` is ours
+ * `jig-keep-awake.ps1` with `-Owner <owner>`; `caffeinate … -w <owner>`; or the `systemd-inhibit` line whose `--why` is ours
  * (the new owner loop, or the old `sleep infinity` one it replaces).
  */
 export function matchesHelper(commandLine, platform, { script, owner } = {}) {
@@ -216,7 +216,7 @@ export function matchesHelper(commandLine, platform, { script, owner } = {}) {
     if (platform === "macos")
         return /(^|[\\/\s"])caffeinate(?:\.exe)?(\s|$)/.test(said) && said.includes("-w") && owned;
     if (said.includes("Herdr keep awake") && said.includes("sleep infinity")) return true; // the older helper, ours
-    return said.includes("Herdr keep awake") && said.includes("keep-awake") && owned;
+    return said.includes("Herdr keep awake") && said.includes("jig-keep-awake") && owned;
 }
 
 /**
@@ -322,7 +322,7 @@ export function setDisplay(text, display) {
     return `${JSON.stringify({ ...raw, idleMinutes: config.idleMinutes, display: Boolean(display) }, null, 4)}\n`;
 }
 
-/** The helper's stop file: `${appHome}/keep-awake.stop`, one file for every helper. Its content names the start that
+/** The helper's stop file: `${appHome}/jig-keep-awake.stop`, one file for every helper. Its content names the start that
  * wrote it ("run <token>", "stop <token>"), so a "stop" left by an earlier helper can never end a new one and nothing
  * accumulates. */
 /** The Linux helper's loop: Herdr's PID alive and still named herdr-app, no stop for its own token, every 5 seconds. */
@@ -333,7 +333,7 @@ function linuxLoop(ownerPid, stopFile, token) {
     return `while kill -0 ${owner} 2>/dev/null && [ "$(ps -p ${owner} -o comm= 2>/dev/null)" = "herdr-app" ] && ! ( [ -f ${file} ] && [ "$(cat ${file} 2>/dev/null)" = ${shQuote(stop)} ] ); do sleep 5; done`;
 }
 
-export const stopFileIn = (appHome) => `${String(appHome).replace(/\/+$/, "")}/keep-awake.stop`;
+export const stopFileIn = (appHome) => `${String(appHome).replace(/\/+$/, "")}/jig-keep-awake.stop`;
 
 /** A stop line for a start token: "run <token>" or "stop <token>". */
 export const stopLine = (action, token) => `${action}${token ? ` ${token}` : ""}`;
@@ -344,8 +344,8 @@ export function stopSays(text, token) {
     return said === "stop" || (Boolean(token) && said === `stop ${token}`);
 }
 
-/** Where the claim that one worker is starting a helper lives: `${appHome}/keep-awake.helper.json`. */
-export const helperFileIn = (appHome) => `${String(appHome).replace(/\/+$/, "")}/keep-awake.helper.json`;
+/** Where the claim that one worker is starting a helper lives: `${appHome}/jig-keep-awake.helper.json`. */
+export const helperFileIn = (appHome) => `${String(appHome).replace(/\/+$/, "")}/jig-keep-awake.helper.json`;
 
 /** How long a start claim holds before another worker may take over. */
 export const CLAIM_MS = 30000;
@@ -377,7 +377,8 @@ export function displaySource({ firstRead, edited, fileDisplay, sharedDisplay })
 }
 
 /** The helper's script in this mod's folder, named for the platform. */
-export const helperScriptIn = (appHome) => `${String(appHome).replace(/\/+$/, "")}/mods/keep-awake/keep-awake.ps1`;
+export const helperScriptIn = (appHome) =>
+    `${String(appHome).replace(/\/+$/, "")}/mods/jig-keep-awake/jig-keep-awake.ps1`;
 
 /** How long "While agents work" stays on after the last busy agent, in milliseconds. */
 export const idleMsOf = (config) => Math.max(0, Number(config?.idleMinutes) || 0) * 60000;

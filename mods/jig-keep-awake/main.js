@@ -5,9 +5,9 @@
 // cannot leave a computer awake for ever. No power plan, registry or administrator right is involved, and a closed lid or
 // the power button still sleeps the machine.
 //
-// It shows nothing: the jig layout gives it a block of 0 px. The tab bar's button (jig-tabs) and the keep-awake.cycle key
-// drive shared("keep-awake.mode"); shared("keep-awake.active") says whether the request is held now, and
-// shared("keep-awake.helper") records the helper's PID so a second copy never starts another one.
+// It shows nothing: the jig layout gives it a block of 0 px. The tab bar's button (jig-tabs) and the jig-keep-awake.cycle key
+// drive shared("jig-keep-awake.mode"); shared("jig-keep-awake.active") says whether the request is held now, and
+// shared("jig-keep-awake.helper") records the helper's PID so a second copy never starts another one.
 
 import { h_flex, v_flex } from "gpui-base";
 import { div, svg, View } from "gpui-kit";
@@ -58,10 +58,10 @@ import {
     withDeadline,
 } from "./lib.js";
 
-const MODE = "keep-awake.mode";
-const ACTIVE = "keep-awake.active";
-const HELPER = "keep-awake.helper";
-const DISPLAY = "keep-awake.display";
+const MODE = "jig-keep-awake.mode";
+const ACTIVE = "jig-keep-awake.active";
+const HELPER = "jig-keep-awake.helper";
+const DISPLAY = "jig-keep-awake.display";
 const EVERY = 1000;
 /** No exec may keep a step (and its flag) waiting longer than this; a timeout counts as "could not ask". */
 const EXEC_MS = 8000;
@@ -69,13 +69,13 @@ const EXEC_MS = 8000;
 const STUCK_MS = 20000; // the mode, the agents and the idle timer, every second
 const VERIFY_MS = 10000; // how often a running helper is asked whether it is still ours
 const CONFIG_MS = 60000; // how long config.json is trusted
-const ICON = "mods/keep-awake/keep-awake.svg";
+const ICON = "mods/jig-keep-awake/jig-keep-awake.svg";
 const CHECK = "mods/workspace-chrome/check.svg";
 
 /** A mode row in the popup: the mode, a tick when it is the current one, and what it means. */
 function menuRow(t, mode, hint, current) {
     return h_flex()
-        .id(`keep-awake-${mode}`)
+        .id(`jig-keep-awake-${mode}`)
         .h(30)
         .flex_none()
         .px(9)
@@ -126,7 +126,7 @@ function toggle(t, id, on) {
 }
 
 /** config.json next to the mod. */
-const configPath = () => `${appHome()}/mods/keep-awake/config.json`;
+const configPath = () => `${appHome()}/mods/jig-keep-awake/config.json`;
 
 /** The popup the tab bar's button opens: the three modes, what is happening now, and what it cannot do. */
 class Menu {
@@ -167,7 +167,7 @@ class Menu {
             active = shared(ACTIVE) === true,
             idle = this.config.idleMinutes;
         return v_flex()
-            .id("keep-awake-menu")
+            .id("jig-keep-awake-menu")
             .w_full()
             .min_h(0)
             .p(8)
@@ -205,7 +205,7 @@ class Menu {
             .child(div().flex_none().h(1).mx(9).my(5).bg(t.border))
             .child(
                 h_flex()
-                    .id("keep-awake-display")
+                    .id("jig-keep-awake-display")
                     .h(30)
                     .flex_none()
                     .px(9)
@@ -226,7 +226,7 @@ class Menu {
                             .text_color(t.dim)
                             .child(this.display ? "on" : "off"),
                     )
-                    .child(toggle(t, "keep-awake-display-switch", this.display)),
+                    .child(toggle(t, "jig-keep-awake-display-switch", this.display)),
             )
             .when(Boolean(this.failed), (el) =>
                 el.child(div().flex_none().px(9).pt(2).text_size(11).text_color(t.blocked).child(this.failed)),
@@ -589,7 +589,7 @@ export default class KeepAwake extends View {
         if (!r || r.code !== 0 || !pid) {
             await this.clearClaim(claim, cx);
             this.warn(
-                `The keep-awake helper did not start: ${(r?.stderr || r?.stdout || "no answer").trim().split("\n")[0]}`,
+                `The jig-keep-awake helper did not start: ${(r?.stderr || r?.stdout || "no answer").trim().split("\n")[0]}`,
             );
             return;
         }
@@ -599,7 +599,7 @@ export default class KeepAwake extends View {
         setShared(HELPER, this.helper);
         if (await this.recordHelper(claim, this.helper, cx)) return;
         // Another worker recorded its own between our claim and this write: ours is the duplicate.
-        this.warn("Another window started a keep-awake helper first; this one was stopped.");
+        this.warn("Another window started a jig-keep-awake helper first; this one was stopped.");
         await this.release(this.helper, cx);
         this.helper = shared(HELPER) ?? null;
         this.verifiedAt = 0;
@@ -636,7 +636,7 @@ export default class KeepAwake extends View {
         this.stoppingAt = Date.now();
         cx.spawn(async (cx) => {
             const released = await this.release(recorded, cx);
-            if (!released) this.warn("The keep-awake helper could not be checked; trying again next tick.");
+            if (!released) this.warn("The jig-keep-awake helper could not be checked; trying again next tick.");
             this.stopping = false;
             this.stoppingAt = 0;
             cx.notify();

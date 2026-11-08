@@ -51,7 +51,7 @@ import {
     timedCommand,
 } from "./refresh.js";
 
-const onScreen = () => isOnScreen(layout(), "repo-worktrees");
+const onScreen = () => isOnScreen(layout(), "jig-worktrees");
 const WORKING = new Set(["working", "blocked"]);
 
 /** Git's raw failures as a line a person can act on. */
@@ -220,7 +220,7 @@ export default class RepoWorktrees extends View {
         if (this.configAt && Date.now() - this.configAt < 60000) return;
         this.configAt = Date.now();
         cx.spawn(async (cx) => {
-            const text = await readTextFile(`${appHome()}/mods/repo-worktrees/config.json`).catch(() => null);
+            const text = await readTextFile(`${appHome()}/mods/jig-worktrees/config.json`).catch(() => null);
             try {
                 this.config = text ? JSON.parse(text) : {};
             } catch {
@@ -289,8 +289,8 @@ export default class RepoWorktrees extends View {
      * redraws every mod. */
     updateBadge() {
         const next = { count: this.rows().filter((row) => row.ready).length, tone: "done" };
-        if (JSON.stringify(shared("badge.repo-worktrees")) !== JSON.stringify(next))
-            setShared("badge.repo-worktrees", next);
+        if (JSON.stringify(shared("badge.jig-worktrees")) !== JSON.stringify(next))
+            setShared("badge.jig-worktrees", next);
     }
 
     /** A click on a row: the space open at that folder, else a new tab there. */

@@ -6,19 +6,19 @@ import { spawn } from "node:child_process";
 import { test } from "node:test";
 
 const mods = [
-    "file-view",
+    "jig-file-view",
     "jig-activity",
     "jig-context",
     "jig-files",
     "jig-tabs",
     "jig-theme-sync",
     "jig-work",
-    "keep-awake",
-    "repo-changes",
-    "repo-history",
-    "repo-prs",
-    "repo-review",
-    "repo-worktrees",
+    "jig-keep-awake",
+    "jig-repos",
+    "jig-history",
+    "jig-prs",
+    "jig-review",
+    "jig-worktrees",
 ];
 
 for (const name of mods) {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
     BUSY_AFTER_MS,
@@ -12,7 +12,7 @@ import {
     refreshSeconds,
     terminalFinished,
     timedCommand,
-} from "../mods/repo-changes/refresh.js";
+} from "../mods/jig-repos/refresh.js";
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -65,7 +65,7 @@ test("timedCommand runs without timeout or gtimeout", () => {
 
 test("every panel calls the shared refresh helper, with no inline copy", () => {
     const root = new URL("../mods/", import.meta.url);
-    for (const mod of ["repo-changes", "repo-history", "repo-prs", "repo-worktrees"]) {
+    for (const mod of ["jig-repos", "jig-history", "jig-prs", "jig-worktrees"]) {
         const source = readFileSync(new URL(`${mod}/main.js`, root), "utf8");
         assert.match(source, /from "\.\/refresh\.js"/, `${mod}: import`);
         assert.match(source, /this\.refreshState = new RefreshState\(\)/, `${mod}: state`);
@@ -85,7 +85,7 @@ test("every panel calls the shared refresh helper, with no inline copy", () => {
 
 test("every panel starts its first read from the constructor, not the timer", () => {
     const root = new URL("../mods/", import.meta.url);
-    for (const mod of ["repo-changes", "repo-history", "repo-prs", "repo-worktrees"]) {
+    for (const mod of ["jig-repos", "jig-history", "jig-prs", "jig-worktrees"]) {
         const source = readFileSync(new URL(`${mod}/main.js`, root), "utf8");
         assert.match(source, /this\.initialRead\(cx\);/, `${mod}: constructor call`);
         assert.match(source, /initialRead\(cx\)\s*\{[\s\S]*?cx\.spawn\(/, `${mod}: spawn`);
@@ -95,9 +95,20 @@ test("every panel starts its first read from the constructor, not the timer", ()
 
 test("every panel starts its first read from the constructor, not the timer", () => {
     const root = new URL("../mods/", import.meta.url);
-    const source = readFileSync(new URL("repo-changes/refresh.js", root), "utf8");
-    for (const mod of ["repo-history", "repo-prs", "repo-worktrees"])
-        assert.equal(readFileSync(new URL(`${mod}/refresh.js`, root), "utf8"), source, mod);
+    const source = readFileSync(new URL("jig-repos/refresh.js", root), "utf8");
+    const mods = readdirSync(root).filter((mod) => {
+        try {
+            return readFileSync(new URL(`${mod}/refresh.js`, root)).length > 0;
+        } catch {
+            return false;
+        }
+    });
+    for (const mod of mods)
+        assert.equal(
+            readFileSync(new URL(`${mod}/refresh.js`, root), "utf8"),
+            source,
+            `${mod}/refresh.js is the odd one out`,
+        );
 });
 
 test("no sweep happens without a trigger before the backstop, and the backstop sweeps once", () => {

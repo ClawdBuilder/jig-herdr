@@ -1,4 +1,4 @@
-// The Keep awake mod's pure parts (mods/keep-awake/lib.js): the mode state machine with its idle timer, the commands
+// The Keep awake mod's pure parts (mods/jig-keep-awake/lib.js): the mode state machine with its idle timer, the commands
 // that hold a computer awake on each platform, the helper's process bookkeeping and config.json.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -9,7 +9,7 @@ import { HERDR, load } from "./support.ts";
 
 type Lib = Record<string, any>;
 
-const lib = async () => load<Lib>("mods/keep-awake/lib.js");
+const lib = async () => load<Lib>("mods/jig-keep-awake/lib.js");
 
 test("a mode is off unless it is one of the three, and clicks and keys move it where the brief says", async () => {
     const { modeOf, toggleMode, nextMode, tooltip } = await lib();
@@ -76,7 +76,7 @@ test("config.json keeps the screen on by default, and the popup's switch writes 
     assert.equal(parseConfig('{ "idleMinutes": -1, "display": "yes" }').problems.length, 2);
     assert.equal(parseConfig("{").problems.length, 1);
     assert.match(parseConfig("{").problems[0], /not valid JSON/);
-    const shipped = parseConfig(readFileSync(path.join(HERDR, "mods/keep-awake/config.json"), "utf8"));
+    const shipped = parseConfig(readFileSync(path.join(HERDR, "mods/jig-keep-awake/config.json"), "utf8"));
     assert.deepEqual(shipped, { idleMinutes: 5, display: true, problems: [] });
 
     // The switch's write: the other settings and fields survive, and the result is valid JSON.
@@ -103,11 +103,11 @@ test("the helper starts hidden and detached on Windows, and in the background on
     const { startCommand } = await lib();
     const where = {
         ownerPid: 4321,
-        script: "C:/Users/Jane Doe/it's/keep-awake.ps1",
-        stopFile: "C:/Users/Jane Doe/it's/keep-awake.stop",
+        script: "C:/Users/Jane Doe/it's/jig-keep-awake.ps1",
+        stopFile: "C:/Users/Jane Doe/it's/jig-keep-awake.stop",
         display: false,
         token: "abc123",
-        recordFile: "C:/Users/Jane Doe/it's/keep-awake.helper.json",
+        recordFile: "C:/Users/Jane Doe/it's/jig-keep-awake.helper.json",
     };
     const win = startCommand("windows", where);
     assert.equal(win.cmd, "powershell");
@@ -118,19 +118,19 @@ test("the helper starts hidden and detached on Windows, and in the background on
     assert.match(line, /\$p\.Id/, "the launcher is told the hidden process's PID");
     assert.match(line, /-ArgumentList \$q/, "one properly quoted argument string, not a joined list");
     assert.match(line, /-join ' '/);
-    assert.match(line, /keep-awake\.ps1/);
+    assert.match(line, /jig-keep-awake\.ps1/);
     assert.match(line, /-Owner/);
     assert.match(line, /4321/);
     assert.match(line, /-OwnerName/, "the helper checks the owner's process name too");
     assert.match(line, /-Display/);
     assert.match(line, /-Seconds/, "the helper polls every few seconds, so close can be a write");
     // Each argument is quoted for the child command line, so a folder with a space (and a quote for PowerShell) works.
-    assert.match(line, /"C:\/Users\/Jane Doe\/it''s\/keep-awake\.ps1"/);
-    assert.match(line, /"C:\/Users\/Jane Doe\/it''s\/keep-awake\.stop"/);
+    assert.match(line, /"C:\/Users\/Jane Doe\/it''s\/jig-keep-awake\.ps1"/);
+    assert.match(line, /"C:\/Users\/Jane Doe\/it''s\/jig-keep-awake\.stop"/);
     assert.match(line, /"0"/, "the display flag is a quoted word of its own");
     assert.match(line, /-Token/, "and the stop token, so a stale stop cannot end it");
     assert.match(line, /-RecordFile/, "and the record file, so an extra helper exits when another is recorded");
-    assert.match(line, /"C:\/Users\/Jane Doe\/it''s\/keep-awake\.helper\.json"/);
+    assert.match(line, /"C:\/Users\/Jane Doe\/it''s\/jig-keep-awake\.helper\.json"/);
     assert.match(startCommand("windows", { ...where, display: true }).args.join(" "), /"1"/);
 
     const mac = startCommand("macos", { ...where, ownerPid: 99 });
@@ -147,7 +147,7 @@ test("the helper starts hidden and detached on Windows, and in the background on
     assert.match(linux.args[1], /herdr-app/, "by name");
     assert.match(linux.args[1], /stop abc123/, "and stops for its own token");
     assert.match(linux.args[1], /sleep 5/, "checking every five seconds");
-    assert.match(linux.args[1], /'keep-awake'/, "and carries a marker the mod can recognise");
+    assert.match(linux.args[1], /'jig-keep-awake'/, "and carries a marker the mod can recognise");
     assert.match(startCommand("linux", { ...where, ownerPid: 99, display: true }).args[1], /--what=sleep:idle'/);
     // The loop, stop check and quoting are real shell: sh -n must accept the whole command line.
     execFileSync("sh", ["-n", "-c", linux.args[1]], { encoding: "utf8" });
@@ -193,14 +193,15 @@ test("a recorded helper is ours only per platform and owner, and is never killed
     assert.equal(parsePid(" 42 "), 42);
     assert.equal(parsePid("7"), null, "a one-digit number is not a PID");
 
-    assert.equal(isHelper("powershell -File C:/x/keep-awake.ps1 -Owner 1", "C:/x/keep-awake.ps1"), true);
-    assert.equal(isHelper("powershell -File C:/x/other.ps1", "C:/x/keep-awake.ps1"), false);
-    assert.equal(isHelper("", "C:/x/keep-awake.ps1"), false);
+    assert.equal(isHelper("powershell -File C:/x/jig-keep-awake.ps1 -Owner 1", "C:/x/jig-keep-awake.ps1"), true);
+    assert.equal(isHelper("powershell -File C:/x/other.ps1", "C:/x/jig-keep-awake.ps1"), false);
+    assert.equal(isHelper("", "C:/x/jig-keep-awake.ps1"), false);
 
-    const script = "C:/x/keep-awake.ps1";
-    const win = "powershell -File C:/x/keep-awake.ps1 -Owner 4321 -StopFile C:/x/s.123 -Display 1 -OwnerName herdr-app";
+    const script = "C:/x/jig-keep-awake.ps1";
+    const win =
+        "powershell -File C:/x/jig-keep-awake.ps1 -Owner 4321 -StopFile C:/x/s.123 -Display 1 -OwnerName herdr-app";
     const quotedWin =
-        '"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" "-NoProfile" "-File" "C:/x/keep-awake.ps1" "-Owner" "4321" "-Token" "abc"';
+        '"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" "-NoProfile" "-File" "C:/x/jig-keep-awake.ps1" "-Owner" "4321" "-Token" "abc"';
     assert.equal(matchesHelper(quotedWin, "windows", { script, owner: 4321 }), true, "quoted arguments count");
     assert.equal(matchesHelper(win, "windows", { script, owner: 4321 }), true);
     assert.equal(matchesHelper(win, "windows", { script, owner: 9999 }), false, "another Herdr's helper");
@@ -215,7 +216,7 @@ test("a recorded helper is ours only per platform and owner, and is never killed
     assert.equal(matchesHelper("caffeinate -u -t 600", "macos", { owner: 4321 }), false, "not ours to hold");
 
     const linux =
-        "systemd-inhibit --what=sleep --why=Herdr keep awake --mode=block sh -c while kill -0 4321 2>/dev/null; do sleep 20; done keep-awake";
+        "systemd-inhibit --what=sleep --why=Herdr keep awake --mode=block sh -c while kill -0 4321 2>/dev/null; do sleep 20; done jig-keep-awake";
     assert.equal(matchesHelper(linux, "linux", { owner: 4321 }), true);
     assert.equal(matchesHelper(linux, "linux", { owner: 9999 }), false);
     assert.equal(
@@ -267,7 +268,7 @@ test("a recorded helper is ours only per platform and owner, and is never killed
     assert.equal(helperToRelease(false, { pid: 7 }, false), null);
     assert.equal(helperToRelease(false, null, true), null);
 
-    assert.equal(stopFileIn("/home/me/.config/herdr-app/"), "/home/me/.config/herdr-app/keep-awake.stop");
+    assert.equal(stopFileIn("/home/me/.config/herdr-app/"), "/home/me/.config/herdr-app/jig-keep-awake.stop");
     assert.equal(stopLine("run", "abc"), "run abc");
     assert.equal(stopLine("stop", "abc"), "stop abc");
     assert.equal(stopLine("stop", ""), "stop", "an older record without a token");
@@ -277,7 +278,7 @@ test("a recorded helper is ours only per platform and owner, and is never killed
     assert.equal(stopSays("run abc", "abc"), false);
     assert.equal(stopSays("stop", "abc"), true, "an older helper's plain stop still says stop");
     assert.equal(stopSays("", "abc"), false);
-    assert.equal(helperScriptIn("C:\\Users\\me\\h"), "C:\\Users\\me\\h/mods/keep-awake/keep-awake.ps1");
+    assert.equal(helperScriptIn("C:\\Users\\me\\h"), "C:\\Users\\me\\h/mods/jig-keep-awake/jig-keep-awake.ps1");
     assert.equal(idleMsOf({ idleMinutes: 5 }), 300_000);
     assert.equal(idleMsOf({ idleMinutes: 0 }), 0);
     assert.equal(idleMsOf({}), 0);

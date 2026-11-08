@@ -1,6 +1,6 @@
 {
     "global": {
-        "ctrl-shift-alt-k": "keep-awake.cycle"
+        "ctrl-shift-alt-k": "jig-keep-awake.cycle"
     },
     "layout:jig": {
         "ctrl-shift-r": "layout.toggle:panel"

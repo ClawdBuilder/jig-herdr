@@ -30,14 +30,14 @@ test("a first install copies the layout, the mods and the themes, and adds the k
         "mods/jig-context/main.js",
         "mods/jig-activity/icons/context.svg",
         "mods/jig-tabs/main.js",
-        "mods/keep-awake/main.js",
-        "mods/keep-awake/config.json",
-        "mods/file-view/main.js",
-        "mods/repo-changes/main.js",
-        "mods/repo-review/main.js",
-        "mods/repo-prs/main.js",
-        "mods/repo-worktrees/main.js",
-        "mods/repo-history/main.js",
+        "mods/jig-keep-awake/main.js",
+        "mods/jig-keep-awake/config.json",
+        "mods/jig-file-view/main.js",
+        "mods/jig-repos/main.js",
+        "mods/jig-review/main.js",
+        "mods/jig-prs/main.js",
+        "mods/jig-worktrees/main.js",
+        "mods/jig-history/main.js",
         "mods/jig-files/main.js",
         "themes/jig-lime.json",
     ]) {
@@ -55,13 +55,13 @@ test("a mod's mod.json is written before its other files, so Herdr never docks a
         "jig-work",
         "jig-context",
         "jig-tabs",
-        "keep-awake",
-        "file-view",
-        "repo-changes",
-        "repo-review",
-        "repo-prs",
-        "repo-worktrees",
-        "repo-history",
+        "jig-keep-awake",
+        "jig-file-view",
+        "jig-repos",
+        "jig-review",
+        "jig-prs",
+        "jig-worktrees",
+        "jig-history",
         "jig-files",
     ]) {
         const mine = report.added.filter((f) => f.startsWith(`mods/${mod}/`));
@@ -108,18 +108,18 @@ test("a file it installed is updated, unless you changed it", (t) => {
 
 test("a file that was already there is left alone, and replaced only with force", (t) => {
     const target = folder(t);
-    mkdirSync(path.join(target, "mods/repo-changes"), { recursive: true });
-    writeFileSync(path.join(target, "mods/repo-changes/main.js"), "// my own");
+    mkdirSync(path.join(target, "mods/jig-repos"), { recursive: true });
+    writeFileSync(path.join(target, "mods/jig-repos/main.js"), "// my own");
     const report = install(target);
     assert.deepEqual(report.skipped, [
-        { file: "mods/repo-changes/main.js", reason: "it was not installed by this script" },
+        { file: "mods/jig-repos/main.js", reason: "it was not installed by this script" },
     ]);
-    assert.equal(read(target, "mods/repo-changes/main.js"), "// my own");
+    assert.equal(read(target, "mods/jig-repos/main.js"), "// my own");
     assert.ok(report.added.length > 10, "everything else was installed");
 
     const forced = install(target, { force: true });
-    assert.deepEqual(forced.replaced, ["mods/repo-changes/main.js"]);
-    assert.notEqual(read(target, "mods/repo-changes/main.js"), "// my own");
+    assert.deepEqual(forced.replaced, ["mods/jig-repos/main.js"]);
+    assert.notEqual(read(target, "mods/jig-repos/main.js"), "// my own");
 });
 
 test("config.json is yours: written once, and kept even with force", (t) => {
@@ -143,7 +143,7 @@ test("keys.json: other sections and keys stay, a key you bound differently is ke
     );
     const report = install(target);
     const keys = readJson(target, "keys.json");
-    assert.deepEqual(keys.global, { "alt-1": "space.select:1", "ctrl-shift-alt-k": "keep-awake.cycle" });
+    assert.deepEqual(keys.global, { "alt-1": "space.select:1", "ctrl-shift-alt-k": "jig-keep-awake.cycle" });
     assert.equal(keys["layout:jig"]?.["ctrl-shift-r"], "tab.next");
     assert.equal(keys["layout:jig"]?.["ctrl-shift-y"], "tab.prev");
     assert.deepEqual(report.keys.kept, ["layout:jig ctrl-shift-r (yours: tab.next)"]);
@@ -154,7 +154,7 @@ test("keys.json: other sections and keys stay, a key you bound differently is ke
     assert.equal(readJson(target, "keys.json")["layout:jig"]?.["ctrl-shift-y"], "tab.prev");
     assert.deepEqual(readJson(target, "keys.json").global, {
         "alt-1": "space.select:1",
-        "ctrl-shift-alt-k": "keep-awake.cycle",
+        "ctrl-shift-alt-k": "jig-keep-awake.cycle",
     });
 });
 
@@ -224,4 +224,39 @@ test("a dry run writes nothing", (t) => {
 
 test("a folder that does not exist is an error", (t) => {
     assert.throws(() => install(path.join(folder(t), "nope")), /not a folder/);
+});
+
+test("an old mod's config.json moves to its new name, and the old folder is kept", (t) => {
+    const target = folder(t);
+    mkdirSync(path.join(target, "mods/repo-changes"), { recursive: true });
+    writeFileSync(
+        path.join(target, "mods/repo-changes/config.json"),
+        JSON.stringify({ newBranchPrefix: "old/", rowDetail: "full" }),
+    );
+    const report = install(target);
+    const moved = JSON.parse(read(target, "mods/jig-repos/config.json")) as Record<string, unknown>;
+    assert.equal(moved.newBranchPrefix, "old/");
+    assert.equal(moved.rowDetail, "full");
+    assert.deepEqual(report.migrated, ["mods/repo-changes/config.json -> mods/jig-repos/config.json"]);
+    assert.deepEqual(report.oldKept, ["mods/repo-changes"]);
+    assert.ok(existsSync(path.join(target, "mods/repo-changes/config.json")), "the old file stays");
+});
+
+test("an existing new config wins over the old file, which only fills gaps", (t) => {
+    const target = folder(t);
+    install(target);
+    writeFileSync(
+        path.join(target, "mods/jig-repos/config.json"),
+        JSON.stringify({ newBranchPrefix: "new/", rowDetail: "compact" }),
+    );
+    mkdirSync(path.join(target, "mods/repo-changes"), { recursive: true });
+    writeFileSync(
+        path.join(target, "mods/repo-changes/config.json"),
+        JSON.stringify({ newBranchPrefix: "old/", baseBranch: "develop" }),
+    );
+    install(target);
+    const merged = JSON.parse(read(target, "mods/jig-repos/config.json")) as Record<string, unknown>;
+    assert.equal(merged.newBranchPrefix, "new/");
+    assert.equal(merged.rowDetail, "compact");
+    assert.equal(merged.baseBranch, "develop");
 });

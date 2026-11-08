@@ -16,6 +16,16 @@ const OWN = new Set(["config.json"]);
 const MANIFEST = ".jig-herdr-install.json";
 /** The folders of herdr/ that are copied. RECIPE.md, preview.png, docs, scripts and tests are not for a Herdr folder. */
 const FOLDERS = ["themes", "mods", "layouts"];
+/** The 0.1.2 mod names and the names this version gives them. Their config.json is the person's. */
+const RENAMED: ReadonlyArray<[string, string]> = [
+    ["repo-changes", "jig-repos"],
+    ["repo-history", "jig-history"],
+    ["repo-prs", "jig-prs"],
+    ["repo-worktrees", "jig-worktrees"],
+    ["repo-review", "jig-review"],
+    ["keep-awake", "jig-keep-awake"],
+    ["file-view", "jig-file-view"],
+];
 const SOURCE = path.resolve(import.meta.dirname, "..");
 /** Files the Herdr app writes into every mod folder for editors. A folder left with only these is a removed mod's. */
 const APP_WRITTEN = new Set(["gpui-kit.d.ts", "jsconfig.json"]);
@@ -44,6 +54,10 @@ export interface Report {
     removed: string[];
     /** keys.json: keys added, and keys kept because the file already binds that key to something else. */
     keys: { added: string[]; kept: string[]; error?: string };
+    /** Old mod configs copied to their new names (the default values fill anything missing). */
+    migrated: string[];
+    /** Old mod folders left in place, because they still hold the person's config.json. */
+    oldKept: string[];
 }
 
 type Manifest = { version: 1; files: Record<string, string> };
@@ -125,6 +139,45 @@ function removeEmptiedMods(target: string, removed: readonly string[]): void {
     }
 }
 
+/** Copy an old mod's config.json to its new folder. New values fill what the old file does not set; the old file wins
+ *  where both have a key, and an existing new file is never overwritten. The old folder stays: it is the person's. */
+function migrateConfigs(target: string, options: Options, report: Report): void {
+    for (const [oldName, newName] of RENAMED) {
+        const oldFile = path.join(target, "mods", oldName, "config.json");
+        if (!existsSync(oldFile)) continue;
+        const newFile = path.join(target, "mods", newName, "config.json");
+        let old: unknown;
+        try {
+            old = JSON.parse(readFileSync(oldFile, "utf8"));
+        } catch {
+            report.skipped.push({ file: `mods/${oldName}/config.json`, reason: "not valid JSON; left as it is" });
+            continue;
+        }
+        if (typeof old !== "object" || old === null || Array.isArray(old)) {
+            report.skipped.push({ file: `mods/${oldName}/config.json`, reason: "not an object; left as it is" });
+            continue;
+        }
+        let next: Record<string, unknown> = { ...(old as Record<string, unknown>) };
+        if (existsSync(newFile)) {
+            try {
+                const current = JSON.parse(readFileSync(newFile, "utf8")) as unknown;
+                if (typeof current === "object" && current !== null && !Array.isArray(current))
+                    next = { ...(old as Record<string, unknown>), ...(current as Record<string, unknown>) };
+                else continue;
+            } catch {
+                report.skipped.push({ file: `mods/${newName}/config.json`, reason: "not valid JSON; not merged" });
+                continue;
+            }
+        }
+        if (!options.dryRun) {
+            mkdirSync(path.dirname(newFile), { recursive: true });
+            writeFileSync(newFile, `${JSON.stringify(next, null, 2)}\n`);
+        }
+        report.migrated.push(`mods/${oldName}/config.json -> mods/${newName}/config.json`);
+        report.oldKept.push(`mods/${oldName}`);
+    }
+}
+
 export function install(target: string, options: Options = {}): Report {
     const source = options.source ?? SOURCE;
     if (!existsSync(target) || !statSync(target).isDirectory()) {
@@ -140,6 +193,8 @@ export function install(target: string, options: Options = {}): Report {
         skipped: [],
         removed: [],
         keys: { added: [], kept: [] },
+        migrated: [],
+        oldKept: [],
     };
     const manifest = readManifest(target);
     const next: Manifest = { version: 1, files: { ...manifest.files } };
@@ -150,6 +205,9 @@ export function install(target: string, options: Options = {}): Report {
         writeFileSync(dest, data);
     };
 
+    // Before the new mod files land: an old user's config must win over the new defaults, while a new config the person
+    // already edited wins over the old one.
+    migrateConfigs(target, options, report);
     const files = installOrder(source);
     for (const rel of files) {
         const data = readFileSync(path.join(source, rel));
@@ -227,6 +285,9 @@ function main(argv: string[]): number {
     say(dryRun ? "would replace" : "replaced", report.replaced);
     say(dryRun ? "would remove" : "removed", report.removed);
     console.log(`unchanged: ${report.same.length}`);
+    say(dryRun ? "would migrate" : "migrated", report.migrated);
+    if (report.oldKept.length)
+        console.log(`old mod folders kept (their config.json is yours): ${report.oldKept.join(", ")}`);
     say("keys.json, added", report.keys.added);
     say("keys.json, kept as yours", report.keys.kept);
     for (const s of report.skipped) console.log(`LEFT ALONE ${s.file}: ${s.reason}`);

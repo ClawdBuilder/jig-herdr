@@ -1,4 +1,4 @@
-// Pure helpers of file-view, kept apart from main.js so they can be tested outside Herdr: its config and the header's
+// Pure helpers of jig-file-view, kept apart from main.js so they can be tested outside Herdr: its config and the header's
 // name/folder split (Windows and Unix paths), and whether a file starts wrapped.
 
 import { refreshSeconds } from "./refresh.js";

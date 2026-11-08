@@ -60,7 +60,7 @@ without leaving the window. ![Changes](preview.png)
   its dialog; a result shows under the checkout.
 - **The commit box** counts the staged files on the button and is disabled without a message. Enter commits, Ctrl+Enter
   commits from anywhere in the box, and `Commit & Push` commits and then opens the push confirm.
-- **A click** on a file opens it in a Review tab (another mod, `repo-review`, if installed); on a row with no changed file
+- **A click** on a file opens it in a Review tab (another mod, `jig-review`, if installed); on a row with no changed file
   it opens that branch's review. The branch chip opens the branch picker.
 - **Empty states say what to do**: `Not a git repository here — cd into one, or list the space's folder.` with a
   `Use Space folder` button, `No git repository under this folder — …`, and `No checkout or file matches.` for a filter.
@@ -89,7 +89,7 @@ without leaving the window. ![Changes](preview.png)
   shared lock, re-checks the refusals, and passes `expect` (the branch and destination it showed) so the action refuses when
   git has moved on.
 - `picker.js`: `BranchPicker`, the branch popup (openOverlay with props `picker`), and the shared key
-  `repo-changes.done` (`DONE`) that tells the panel a switch or a push happened.
+  `jig-repos.done` (`DONE`) that tells the panel a switch or a push happened.
 - `layout.js`: `shown(root, mod)`, whether the panel's block is on screen, so it does not poll while hidden.
 - `config.json`: `{ "newBranchPrefix": "feature/", "baseBranch": null, "remote": "origin", "networkTimeoutSeconds": 60,
   "rowDetail": "compact" }` (`"full"` shows a commit line under every row).
@@ -100,8 +100,8 @@ without leaving the window. ![Changes](preview.png)
   `focused().pane`/`terminal`/`cwd`.
 - **Icons:** `push.svg`, `pull.svg`, `fetch.svg`, `refresh.svg` in this folder, drawn in the theme's text
   colour; branch, chevron, check, plus, minus and terminal glyphs come from Herdr's `workspace-chrome` mod.
-- **Shared state:** `shared("badge.repo-changes")` = `{ count, tone }`, the number of checkouts with changes, for an
-  activity bar that wants it; `shared("repo-changes.done")` = `{ path, message, at }` after a switch or a push.
+- **Shared state:** `shared("badge.jig-repos")` = `{ count, tone }`, the number of checkouts with changes, for an
+  activity bar that wants it; `shared("jig-repos.done")` = `{ path, message, at }` after a switch or a push.
 
 ## Watch out
 
