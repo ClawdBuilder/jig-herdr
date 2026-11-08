@@ -13,7 +13,8 @@
         "check:emails": "node scripts/check-commit-emails.mjs",
         "build:share": "node scripts/build-share.ts",
         "check:share": "node scripts/build-share.ts --check",
-        "check:gallery": "node scripts/check-gallery.mjs"
+        "check:gallery": "node scripts/check-gallery.mjs",
+        "check:gallery:publish": "node scripts/check-gallery.mjs --publish"
     },
     "devDependencies": {
         "@biomejs/biome": "2.6.4",

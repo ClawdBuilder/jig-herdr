@@ -26,3 +26,18 @@ test("check-gallery refuses a stray top-level file and a malformed recipe", () =
         rmSync(out, { recursive: true, force: true });
     }
 });
+
+test("check-gallery lets placeholders pass in development and refuses them with --publish", () => {
+    const out = mkdtempSync(path.join(tmpdir(), "jig-gallery-placeholder-"));
+    try {
+        buildShare(out);
+        execFileSync(process.execPath, [path.join(root, "scripts", "check-gallery.mjs"), out], { stdio: "pipe" });
+        assert.throws(() =>
+            execFileSync(process.execPath, [path.join(root, "scripts", "check-gallery.mjs"), out, "--publish"], {
+                stdio: "pipe",
+            }),
+        );
+    } finally {
+        rmSync(out, { recursive: true, force: true });
+    }
+});

@@ -1,10 +1,15 @@
 // Validates a built share/ tree or the gallery repository. It needs no Herdr: listing shape, recipes, previews, layout
 // dependencies, no stray/dev files, and the private word list when one is present.
+import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 
-const ROOT = path.resolve(process.argv[2] || "share");
+const args = process.argv.slice(2);
+const PUBLISH = args.includes("--publish");
+const ROOT = path.resolve(args.find((arg) => !arg.startsWith("--")) ?? "share");
+/** The 320x200 grey placeholder from the gallery skeleton. It may stay in development, never in a publish. */
+const PLACEHOLDER = "90528e8d20ef8285fabe621d6fd74db7f49b1e08bf85cd3a55cb3610fb1a0a2e";
 const LISTINGS = new Set([
     "jig-workbench",
     "jig-repos",
@@ -71,6 +76,8 @@ for (const id of LISTINGS) {
             bytes.length > 5_000_000
         )
             fail(`${id}: preview.png is not a sane PNG`);
+        else if (PUBLISH && createHash("sha256").update(bytes).digest("hex") === PLACEHOLDER)
+            fail(`${id}: preview.png is still the placeholder; replace it before publishing`);
     }
     if (!statSync(path.join(dir, "mods")).isDirectory()) fail(`${id}: mods/ missing`);
     for (const file of tree(dir)) {

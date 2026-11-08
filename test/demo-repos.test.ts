@@ -29,7 +29,7 @@ test("demo-repos makes the four repos, branches and worktree with fixed identiti
         const status = execFileSync("git", ["-C", path.join(dir, "orders-api"), "status", "--short"], {
             encoding: "utf8",
         });
-        assert.match(status, /^A  staged\.txt/m);
+        assert.match(status, /^A {2}staged\.txt/m);
         assert.match(status, /^\?\? scratch\.txt/m);
         assert.match(
             execFileSync("git", ["-C", path.join(dir, "billing-web"), "status", "-sb"], { encoding: "utf8" }),
