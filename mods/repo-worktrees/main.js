@@ -28,6 +28,7 @@ import {
     since,
     terminalsInsideWorktree,
 } from "./lib.js";
+import { RefreshState } from "./refresh.js";
 
 const onScreen = () => isOnScreen(layout(), "repo-worktrees");
 const REUSE_MS = 30000; // a load is reused this long; Refresh asks again
@@ -131,6 +132,7 @@ export default class RepoWorktrees extends View {
         this.rowErrors = {};
         this.loadedAt = 0;
         this.triedAt = 0;
+        this.refreshState = new RefreshState();
         this.enter(whereToLook());
         cx.timer.every(1000, (cx) => this.tick(cx));
     }
@@ -164,12 +166,13 @@ export default class RepoWorktrees extends View {
         if (Date.now() - Math.max(this.loadedAt, this.triedAt) > REUSE_MS) this.load(cx);
     }
 
-    load(cx) {
-        if (this.loading || !this.where?.root) return;
+    load(cx, user = false) {
+        if (!this.where?.root) return;
         const { root, on } = this.where;
         const contextKey = this.contextKey;
         const started = Date.now();
         const generation = ++this.generation;
+        if (!this.refreshState.start({ user, first: this.trees === null, notify: () => cx.notify() })) return;
         this.loading = true;
         this.triedAt = started;
         cx.spawn(async (cx) => {
@@ -187,6 +190,7 @@ export default class RepoWorktrees extends View {
                 if (contextKey === this.contextKey) this.error = friendly(e?.message ?? e);
             } finally {
                 this.loading = false;
+                if (this.refreshState.finish()) this.triedAt = 0;
                 cx.notify();
             }
         });
@@ -506,7 +510,7 @@ export default class RepoWorktrees extends View {
                         .child(`${(this.tookMs / 1000).toFixed(1)}s`),
                 ),
             )
-            .child(followButton(t, (cx) => this.load(cx)))
+            .child(followButton(t, (cx) => this.load(cx, true)))
             .when(this.rows().filter((row) => row.ready && row.path !== row.main).length > 0, (el) =>
                 el.child(
                     div()
@@ -535,8 +539,8 @@ export default class RepoWorktrees extends View {
                     .text_color(t.dim)
                     .cursor_pointer()
                     .hover((s) => s.text_color(t.foreground))
-                    .on_click((_e, cx) => this.load(cx))
-                    .child(this.loading ? "Loading…" : "Refresh"),
+                    .on_click((_e, cx) => this.load(cx, true))
+                    .child(this.refreshState.busy ? "Loading…" : "Refresh"),
             );
         const pruneBanner = this.pruning
             ? v_flex()

@@ -28,6 +28,7 @@ import {
     since,
     toggleBranchPicker,
 } from "./lib.js";
+import { RefreshState } from "./refresh.js";
 
 const onScreen = () => isOnScreen(layout(), "repo-history");
 const PAGE = 100; // commits per page
@@ -175,6 +176,7 @@ export default class RepoHistory extends View {
         this.branchBox.on("change", (_e, cx) => cx.notify());
         this.filterBox = InputState.new({ placeholder: "Filter by message, author, hash or branch" });
         this.filterBox.on("change", (_e, cx) => cx.notify());
+        this.refreshState = new RefreshState();
         this.enter(whereToLook());
         cx.timer.every(1000, (cx) => this.tick(cx));
     }
@@ -214,7 +216,7 @@ export default class RepoHistory extends View {
                 this.branchFilter = chosen.branch;
                 this.clearLog();
             }
-            this.loadLog(cx);
+            this.loadLog(cx, true);
         }
         const where = whereToLook();
         if (JSON.stringify([where.root, where.on]) !== this.contextKey) {
@@ -331,7 +333,7 @@ export default class RepoHistory extends View {
                             this.branchFilter = b.name;
                             this.branchOpen = false;
                             this.clearLog();
-                            this.loadLog(cx);
+                            this.loadLog(cx, true);
                         })
                         .child(
                             div()
@@ -352,7 +354,7 @@ export default class RepoHistory extends View {
             const at = this.branchFilter ? names.indexOf(this.branchFilter) : -1;
             this.branchFilter = at + 1 >= names.length ? null : names[at + 1];
             this.clearLog();
-            this.loadLog(cx);
+            this.loadLog(cx, true);
             return;
         }
         cx.spawn(async (cx) => {
@@ -373,8 +375,8 @@ export default class RepoHistory extends View {
         cx.notify();
     }
 
-    loadLog(cx) {
-        if (this.loading || !this.repo) return;
+    loadLog(cx, user = false) {
+        if (!this.repo) return;
         const cwd = this.repo;
         const on = this.where.on;
         const key = this.logKey();
@@ -389,6 +391,7 @@ export default class RepoHistory extends View {
             ...SCOPE_ARGS[this.scope],
         ];
         const statusArgs = ["--no-optional-locks", "-c", "core.fsmonitor=false", "status", "--porcelain"];
+        if (!this.refreshState.start({ user, first: this.commits === null, notify: () => cx.notify() })) return;
         this.loading = true;
         const generation = ++this.generation;
         cx.spawn(async (cx) => {
@@ -415,6 +418,7 @@ export default class RepoHistory extends View {
                 this.logFor = key;
             } finally {
                 this.loading = false;
+                if (this.refreshState.finish()) this.logAt = 0;
                 cx.notify();
             }
         });
@@ -821,7 +825,7 @@ export default class RepoHistory extends View {
                             .child(this.branchFilter ?? headBranch ?? (this.commits ? "Detached HEAD" : "")),
                     )
                     .child(div().flex_1())
-                    .child(followButton(t, (cx) => this.loadLog(cx)))
+                    .child(followButton(t, (cx) => this.loadLog(cx, true)))
                     .child(scopeButton("branch", "Branch"))
                     .child(scopeButton("all", "All"))
                     .child(
@@ -836,9 +840,9 @@ export default class RepoHistory extends View {
                             .on_click((_e, cx) => {
                                 this.logAt = 0;
                                 this.reposAt = 0;
-                                this.loadLog(cx);
+                                this.loadLog(cx, true);
                             })
-                            .child(this.loading ? "Loading…" : "Refresh"),
+                            .child(this.refreshState.busy ? "Loading…" : "Refresh"),
                     ),
             )
             .child(
@@ -937,11 +941,10 @@ export default class RepoHistory extends View {
                                 .cursor_pointer()
                                 .hover((s) => s.text_color(t.foreground))
                                 .on_click((_e, cx) => {
-                                    if (this.loading) return;
                                     this.limit += PAGE;
-                                    this.loadLog(cx);
+                                    this.loadLog(cx, true);
                                 })
-                                .child(this.loading ? "Loading…" : "Load more"),
+                                .child(this.refreshState.busy ? "Loading…" : "Load more"),
                         ),
                     ),
             );

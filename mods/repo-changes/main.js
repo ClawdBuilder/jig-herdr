@@ -80,6 +80,7 @@ import {
 } from "./lib.js";
 import { BranchPicker, DONE } from "./picker.js";
 import { PushConfirm } from "./push.js";
+import { RefreshState } from "./refresh.js";
 
 // Herdr can only watch folders on this computer, so a space on another machine is polled. All repos
 // take well under a second, so poll often, and at once when a terminal or agent changes state
@@ -131,7 +132,7 @@ function badge(count) {
 }
 
 /** A small square icon or glyph button that stops the click from reaching the row under it. */
-function iconButton(t, id, content, tip, onClick, disabled = false) {
+function iconButton(t, id, content, tip, onClick, disabled = false, busy = false) {
     return div()
         .id(id)
         .flex_none()
@@ -141,8 +142,8 @@ function iconButton(t, id, content, tip, onClick, disabled = false) {
         .items_center()
         .justify_center()
         .rounded(5)
-        .text_color(disabled ? t.dim : t.muted)
-        .when(disabled, (el) => el.opacity(0.45))
+        .text_color(disabled || busy ? t.dim : t.muted)
+        .when(disabled || busy, (el) => el.opacity(0.45))
         .when(!disabled, (el) =>
             el
                 .cursor_pointer()
@@ -217,6 +218,7 @@ export default class RepoChanges extends View {
         this.claimed = new Map(); // path -> { on, token }: what this copy holds, to release on close
         this.targetsAt = 0;
         this.targetsLoading = false;
+        this.refreshState = new RefreshState();
         this.width = 0;
         this.keys = cx.focus_handle();
         this.done = Number(shared(DONE)?.at ?? 0);
@@ -259,7 +261,6 @@ export default class RepoChanges extends View {
             this.targets = new Map();
             this.targetsAt = 0;
             this.last = 0;
-            this.again = false;
             this.switching = true;
         }
         this.loc = loc;
@@ -346,17 +347,14 @@ export default class RepoChanges extends View {
         if (made) cx.notify();
     }
 
-    refresh(cx) {
-        if (this.loading) {
-            this.again = true;
-            return;
-        }
+    refresh(cx, user = false) {
         const { root, on } = this.loc,
             context = this.context;
         if (!root) {
             this.error = "No folder";
             return;
         }
+        if (!this.refreshState.start({ user, first: !this.repos, notify: () => cx.notify() })) return;
         this.loading = true;
         cx.spawn(async (cx) => {
             try {
@@ -372,8 +370,7 @@ export default class RepoChanges extends View {
                 if (context === this.context) this.error = String(e?.message ?? e).split("\n")[0];
             } finally {
                 this.loading = false;
-                this.last = this.again ? 0 : Date.now();
-                this.again = false;
+                this.last = this.refreshState.finish() ? 0 : Date.now();
                 cx.notify();
             }
         });
@@ -1591,12 +1588,13 @@ export default class RepoChanges extends View {
                             t,
                             "repos-refresh",
                             OWN("refresh"),
-                            this.loading ? "Reading the checkouts…" : "Read the checkouts again",
+                            this.refreshState.busy ? "Reading the checkouts…" : "Read the checkouts again",
                             (cx) => {
                                 this.last = 0;
-                                this.refresh(cx);
+                                this.refresh(cx, true);
                             },
-                            this.loading,
+                            false,
+                            this.refreshState.busy,
                         ),
                     ),
             )

@@ -30,6 +30,7 @@ import {
     since,
     watchdog,
 } from "./lib.js";
+import { RefreshState } from "./refresh.js";
 
 const onScreen = () => isOnScreen(layout(), "repo-prs");
 const REUSE_MS = 5 * 60000; // a result is reused this long; Refresh asks again
@@ -157,6 +158,7 @@ export default class RepoPullRequests extends View {
         this.folded = new Set();
         this.showDefaults = false;
         this.fetching = new Set();
+        this.refreshState = new RefreshState();
         this.enter(whereToLook());
         cx.timer.every(1000, (cx) => this.tick(cx));
     }
@@ -208,12 +210,13 @@ export default class RepoPullRequests extends View {
     }
 
     /** One load of the shown tab: never two at once, and a result for a folder that is no longer shown is dropped. */
-    load(cx) {
-        if (this.loading || !this.where?.root) return;
+    load(cx, user = false) {
+        if (!this.where?.root) return;
         const { root, on } = this.where;
         const contextKey = this.contextKey;
         const tab = this.tab;
         const generation = ++this.generation;
+        if (!this.refreshState.start({ user, first: this.data[tab] === undefined, notify: () => cx.notify() })) return;
         this.loading = true;
         this.triedAt[tab] = Date.now();
         this.watchdogCancel = watchdog(
@@ -221,6 +224,7 @@ export default class RepoPullRequests extends View {
             () => {
                 if (!this.loading) return;
                 this.loading = false;
+                if (this.refreshState.finish()) this.triedAt[this.tab] = 0;
                 this.error = "Timed out after 20 s — check your network or sign-in.";
                 cx.notify();
             },
@@ -248,6 +252,7 @@ export default class RepoPullRequests extends View {
             } finally {
                 this.watchdogCancel?.();
                 this.loading = false;
+                if (this.refreshState.finish()) this.triedAt[tab] = 0;
                 cx.notify();
             }
         });
@@ -816,7 +821,7 @@ export default class RepoPullRequests extends View {
         this.tab = id;
         cx.notify();
         const lastTry = Math.max(this.loadedAt[id] ?? 0, this.triedAt[id] ?? 0);
-        if (onScreen() && Date.now() - lastTry > REUSE_MS) this.load(cx);
+        if (onScreen() && Date.now() - lastTry > REUSE_MS) this.load(cx, true);
     }
 
     render(_cx) {
@@ -854,8 +859,12 @@ export default class RepoPullRequests extends View {
             .child(tabChip("main", this.single ? "Open" : "Workspace"))
             .child(tabChip("mine", "Mine"))
             .child(div().flex_1().min_w(0).truncate().pl(6).text_size(11).text_color(t.dim).child(this.summaryText()))
-            .child(followButton(t, (cx) => this.load(cx)))
-            .child(link(t, "prs-refresh", this.loading ? "Loading…" : "Refresh", (_e, cx) => this.load(cx)));
+            .child(followButton(t, (cx) => this.load(cx, true)))
+            .child(
+                link(t, "prs-refresh", this.refreshState.busy ? "Loading…" : "Refresh", (_e, cx) =>
+                    this.load(cx, true),
+                ),
+            );
         return v_flex()
             .id("repo-prs")
             .size_full()
