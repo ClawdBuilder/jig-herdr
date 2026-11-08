@@ -110,9 +110,11 @@ without leaving the window. ![Changes](preview.png)
   On a machine without `sh` the panel cannot read checkouts at all.
 - **git 2.31 or newer** for `rev-parse --path-format=absolute` in the scan; without it the `@@git` line is empty and
   worktrees do not nest.
-- **Herdr's `exec` stops at 30 seconds**, so the 60-second `timeout` in `config.json` is often the second line of defence:
-  the dialog and the panel turn a stopped command into "took too long and was stopped". Do not promise a longer wait than
-  the app allows. Without `timeout` (macOS), the wrapper's own `sleep`/`kill` watchdog exits 124 the same way.
+- **Network commands longer than 30 seconds need Herdr 0.1.14 or newer.** The network wrapper gives Herdr an `exec`
+  timeout 5 seconds past the shell's own (clamped so a 600-second setting runs the shell for 595 seconds and Herdr for
+  600); the shell watchdog therefore fires first, exits 124 and the dialog shows "Timed out after N s". Older Herdr
+  ignores `exec`'s `timeout` option and still cuts at 30 seconds, so it cannot honour a longer setting. Without `timeout`
+  (macOS), the wrapper's own `sleep`/`kill` watchdog exits 124 the same way.
 - **A push's destination is git's, not the branch's**: `branch.<b>.pushRemote` and `remote.pushDefault` can send it to
   another remote, and the panel shows that remote's branch and names it in full. `push.default=matching` has no single
   destination, so the panel offers Publish instead of sending several branches.

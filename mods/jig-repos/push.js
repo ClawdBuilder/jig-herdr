@@ -12,13 +12,13 @@ import {
     busyAgents,
     holdsLock,
     lockOf,
+    networkExec,
     panesOn,
     publishBranch,
     pushBranch,
     RUNNING_KEY,
     withLock,
     withoutLock,
-    wrapperScript,
 } from "./lib.js";
 import { DONE } from "./picker.js";
 
@@ -57,13 +57,7 @@ export class PushConfirm {
     /** Herdr's exec on the checkout's machine: a network command needs the environment that never asks and a timeout. */
     exec() {
         const on = this.on;
-        return (cmd, args, options = {}) => {
-            if (!options.env && !options.timeout) return exec(cmd, args, { cwd: options.cwd, on });
-            return exec("sh", ["-c", wrapperScript(options.env, options.timeout), "sh", cmd, ...args], {
-                cwd: options.cwd,
-                on,
-            });
-        };
+        return networkExec(exec, on);
     }
 
     /** Agents working or blocked in this checkout now: the dialog refuses while one is. */

@@ -56,6 +56,7 @@ import {
     isDiverged,
     isFolded,
     lockOf,
+    networkExec,
     panesOn,
     parseConfig,
     parseRepos,
@@ -77,7 +78,6 @@ import {
     withLock,
     withoutLock,
     worktreeSignal,
-    wrapperScript,
 } from "./lib.js";
 import { BranchPicker, DONE } from "./picker.js";
 import { PushConfirm } from "./push.js";
@@ -424,13 +424,7 @@ export default class RepoChanges extends View {
      */
     git() {
         const on = this.loc?.on ?? null;
-        return (cmd, args, options = {}) => {
-            if (!options.env && !options.timeout) return exec(cmd, args, { cwd: options.cwd, on });
-            return exec("sh", ["-c", wrapperScript(options.env, options.timeout), "sh", cmd, ...args], {
-                cwd: options.cwd,
-                on,
-            });
-        };
+        return networkExec(exec, on);
     }
 
     /** An agent working or blocked in a checkout, for the refusals of the actions that change its branch. */

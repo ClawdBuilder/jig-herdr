@@ -45,8 +45,9 @@ mod's own `*.svg`.
 
 **Watch out:**
 
-The 30 s Herdr `exec` cap can still end a slow network command; the mod reports a stopped command as stopped, not failed.
-`networkTimeoutSeconds` defaults to 60, not 20. Assumes `git` on PATH, an `origin` (or configured remote), and a POSIX `sh`;
+Network commands longer than 30 s need Herdr 0.1.14 or newer: the mod passes an `exec` timeout just past its shell
+watchdog, so the watchdog reports "Timed out after N s"; older Herdr still cuts at 30 s. `networkTimeoutSeconds` defaults
+to 60, not 20. Assumes `git` on PATH, an `origin` (or configured remote), and a POSIX `sh`;
 Windows-local without WSL has no `sh`. The
 checkout walk covers three folder levels and skips `node_modules`; a repository deeper than that is not found. Very large
 working trees are capped by the read limits. Discard is permanent and never offers an undo. `gh` is not used here. The
