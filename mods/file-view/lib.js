@@ -39,10 +39,20 @@ export function splitPath(path) {
 export function wrapDefault(path, stored) {
     if (stored === "on") return true;
     if (stored === "off") return false;
-    const ext = (String(path ?? "").split(".").pop() ?? "").toLowerCase();
+    const ext = (
+        String(path ?? "")
+            .split(".")
+            .pop() ?? ""
+    ).toLowerCase();
     return ["md", "markdown", "mdx", "txt", "log"].includes(ext);
 }
 
 /** Whether a file is markdown (rendered first, with a Source toggle). */
 export const isMarkdown = (path) =>
-    ["md", "markdown", "mdx"].includes((String(path ?? "").split(".").pop() ?? "").toLowerCase());
+    ["md", "markdown", "mdx"].includes(
+        (
+            String(path ?? "")
+                .split(".")
+                .pop() ?? ""
+        ).toLowerCase(),
+    );
