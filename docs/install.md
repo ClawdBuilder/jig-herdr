@@ -12,10 +12,10 @@ first start.
 node herdr/scripts/install.ts [folder] [--force] [--dry-run]
 ```
 
-| Folder | When |
-|---|---|
-| none given | `$HERDR_APP_HOME` if set, else `~/.config/herdr-app` |
-| `/mnt/c/Users/<name>/.config/herdr-app` | The Windows app, with the script run in WSL |
+| Folder                                  | When                                                 |
+| --------------------------------------- | ---------------------------------------------------- |
+| none given                              | `$HERDR_APP_HOME` if set, else `~/.config/herdr-app` |
+| `/mnt/c/Users/<name>/.config/herdr-app` | The Windows app, with the script run in WSL          |
 
 Herdr applies files while it runs. Switch to the layout with `Ctrl+Shift+L` or in the settings screen; nothing needs a
 restart.
@@ -37,14 +37,14 @@ never seen where its `mod.json` says, and without one it would put a stray copy 
 The script records a hash of every file it wrote, in `.jig-herdr-install.json` in the Herdr folder. That is how it tells its
 own files from yours.
 
-| The file in the folder | Without `--force` | With `--force` |
-|---|---|---|
-| Missing | Written | Written |
-| Same as this version | Nothing to do | Nothing to do |
-| Written by the script, not changed since | Updated | Updated |
-| Changed by you, or not from the script | Left alone, and reported | Replaced |
-| A `config.json` | Written once, then kept | Kept |
-| No longer shipped, written by the script, not changed | Removed | Removed |
+| The file in the folder                                | Without `--force`        | With `--force` |
+| ----------------------------------------------------- | ------------------------ | -------------- |
+| Missing                                               | Written                  | Written        |
+| Same as this version                                  | Nothing to do            | Nothing to do  |
+| Written by the script, not changed since              | Updated                  | Updated        |
+| Changed by you, or not from the script                | Left alone, and reported | Replaced       |
+| A `config.json`                                       | Written once, then kept  | Kept           |
+| No longer shipped, written by the script, not changed | Removed                  | Removed        |
 
 A report line `LEFT ALONE` makes the script exit with 1: the install is not complete. A key in `keys.json` that you have
 bound to something else is kept and listed, and `--force` takes it over. A `keys.json` that is not valid JSON is not touched.

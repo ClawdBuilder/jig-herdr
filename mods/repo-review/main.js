@@ -14,39 +14,39 @@
 // props: { on, repo: "<absolute repo path>", name: "<repo name>", file?: "<path to select first>",
 //          mode?: "working" | "branch" (default working) }
 
-import { View, div, svg } from "gpui-kit";
 import {
-    v_flex,
-    h_flex,
-    Scrollbar,
-    v_virtual_list,
-    h_resizable,
-    resizable_panel,
     Editor,
     EditorState,
+    h_flex,
+    h_resizable,
+    resizable_panel,
+    Scrollbar,
+    v_flex,
+    v_virtual_list,
 } from "gpui-base";
-import { spaces, panes, exec, readTextFile, theme, settings, shared, props as modProps } from "herdr";
+import { div, svg, View } from "gpui-kit";
+import { exec, props as modProps, panes, readTextFile, settings, shared, spaces, theme } from "herdr";
 import {
-    parseStatus,
-    splitPath,
+    branchFiles,
+    canWrite,
+    capText,
     diffRows,
-    stageFile,
-    unstageFile,
     discardFile,
     discardKind,
-    openMode,
     effectiveMode,
-    canWrite,
     findBase,
-    parseNameStatus,
-    branchFiles,
-    selectLine,
     inSelection,
-    selectionCopy,
-    PANES,
-    reviewPane,
     langFor,
-    capText,
+    openMode,
+    PANES,
+    parseNameStatus,
+    parseStatus,
+    reviewPane,
+    selectionCopy,
+    selectLine,
+    splitPath,
+    stageFile,
+    unstageFile,
 } from "./lib.js";
 
 const EVERY = 5000; // re-list the files this often while the tab is shown

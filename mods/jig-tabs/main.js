@@ -11,9 +11,9 @@
 // props: { panel: "<id of the side panel row>", stack: "<id of its stack>", jig: "<id of the Jig Work child>" },
 // defaults "panel", "panel-body" and "jig-work".
 
-import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { spaces, panes, run, openOverlay, theme, window, layout, settings, props, shared, setShared } from "herdr";
+import { div, image, svg, View } from "gpui-kit";
+import { layout, openOverlay, panes, props, run, setShared, settings, shared, spaces, theme, window } from "herdr";
 
 function find(node, id) {
     if (node?.id === id) return node;

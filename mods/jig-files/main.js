@@ -6,9 +6,10 @@
 // licensed under the Apache License, Version 2.0 (the LICENSE file in the Herdr app's folder,
 // http://www.apache.org/licenses/LICENSE-2.0). Changed: a click opens the file in a `file-view` tab instead of a preview
 // inside the panel, the tab bookkeeping that goes with it, and the icons, which are Herdr's own `workspace-chrome` ones.
-import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex } from "gpui-base";
-import { spaces, panes, focused, exec, watchFolder, theme, window, run, shared, setShared } from "herdr";
+
+import { h_flex, v_flex } from "gpui-base";
+import { div, svg, View } from "gpui-kit";
+import { exec, focused, panes, run, setShared, shared, spaces, theme, watchFolder, window } from "herdr";
 
 function location() {
     const space = spaces().find((s) => s.active),

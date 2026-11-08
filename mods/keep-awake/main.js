@@ -9,17 +9,17 @@
 // drive shared("keep-awake.mode"); shared("keep-awake.active") says whether the request is held now, and
 // shared("keep-awake.helper") records the helper's PID so a second copy never starts another one.
 
-import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
+import { div, svg, View } from "gpui-kit";
 import {
     agents,
     appHome,
     closeOverlay,
     exec,
     layout,
+    props as modProps,
     nextCommand,
     notify,
-    props as modProps,
     readTextFile,
     setShared,
     shared,
@@ -28,34 +28,34 @@ import {
     writeTextFile,
 } from "herdr";
 import {
-    MODE_LABEL,
     aliveCommand,
     anyBusy,
     appPidCommand,
-    commandLineCommand,
-    decide,
-    helperScriptIn,
-    helperFileIn,
-    helperToRelease,
     claimState,
     claimText,
-    withDeadline,
-    isStuck,
-    releaseOutcome,
+    commandLineCommand,
+    decide,
     displayRestart,
     displaySource,
-    killDecision,
-    recordState,
+    helperFileIn,
+    helperScriptIn,
+    helperToRelease,
     idleMsOf,
+    isStuck,
+    killDecision,
+    MODE_LABEL,
     modeOf,
     nextMode,
     parseConfig,
     parsePid,
-    startCommand,
+    recordState,
+    releaseOutcome,
     setDisplay,
+    startCommand,
     stopCommand,
     stopFileIn,
     stopLine,
+    withDeadline,
 } from "./lib.js";
 
 const MODE = "keep-awake.mode";

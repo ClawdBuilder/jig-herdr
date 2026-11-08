@@ -34,10 +34,15 @@ test("a theme has the 16 terminal colours and the panel colours, all #rrggbb", a
 });
 
 const palette = (name: string) =>
-    (JSON.parse(readFileSync(PALETTES, "utf8")) as Record<string, {
-        vars: Record<string, string>;
-        appearance: string;
-    }>)[`${name}.json`] as { vars: Record<string, string>; appearance: string };
+    (
+        JSON.parse(readFileSync(PALETTES, "utf8")) as Record<
+            string,
+            {
+                vars: Record<string, string>;
+                appearance: string;
+            }
+        >
+    )[`${name}.json`] as { vars: Record<string, string>; appearance: string };
 
 test("a dark palette keeps a black window and a light one takes the palette's own backgrounds", async () => {
     const { toHerdr } = await load<Convert>("mods/jig-theme-sync/convert.js");

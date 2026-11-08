@@ -3,8 +3,8 @@
 // and not pickable), then origin's branches that have no local one, and "New branch…". The git work is in lib.js; this
 // file only draws and passes Herdr's exec with the space's machine. A refusal is shown here and the popup stays open.
 
-import { div, svg } from "gpui-kit";
 import { h_flex, Input, InputState, v_flex } from "gpui-base";
+import { div, svg } from "gpui-kit";
 import { appHome, closeOverlay, exec, panes, readTextFile, setShared, spaces, theme } from "herdr";
 import {
     busyAgents,

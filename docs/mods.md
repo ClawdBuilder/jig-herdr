@@ -206,22 +206,22 @@ person to merge. A push never relies on `push.default`: the destination is resol
 `pushRemote`, `remote.pushDefault` and `push.default=matching` cannot send a branch the dialog did not show. File names are
 passed with `--literal-pathspecs`, so a file called `*.ts` means that file only.
 
-| Action | Where | Git command |
-|---|---|---|
-| Switch branch | The branch chip opens a picker | `git switch <branch>` |
-| Switch to a branch only origin has | Picker, under `ON ORIGIN ONLY` | `git switch --track origin/<branch>` |
-| New branch | Picker, `New branch…` | `git fetch origin <base>`, then `git switch --no-track -c <name> origin/<base>` |
-| Stage a file | Its checkbox | `git add -- <file>` |
-| Unstage a file | Its ticked checkbox | `git restore --staged -- <file>`; before the first commit `git rm --cached -- <file>` |
-| Stage all, unstage all | `+` and `−` on the checkout's row | `git add -A`; `git restore --staged -- .` (or `git rm -r --cached -- .`) |
-| Discard a tracked file | `↺` on the file, then `Discard` | `git restore --worktree --staged -- <file>` |
-| Delete an untracked file | `↺` on the file, then `Delete file` | `git clean -f -- <file>` |
-| Commit | Message box under a checkout with staged files | `git commit -m <message>` |
-| Fetch | The fetch icon on the row, or the header's | `git fetch --prune <remote>` |
-| Pull | `↓` on the row | `git pull --ff-only` |
-| Push | `↑` on the row, after the confirm | `git push <pushRemote> HEAD:refs/heads/<branch>` |
-| Publish a branch | `↑` where git has no same-named push target, after the confirm | `git push -u <remote> HEAD` |
-| Publish | `↑` on the row when the push target is another branch or there is none, after the confirm | `git push -u <push remote> HEAD`, which sets the upstream |
+| Action                             | Where                                                                                     | Git command                                                                           |
+| ---------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Switch branch                      | The branch chip opens a picker                                                            | `git switch <branch>`                                                                 |
+| Switch to a branch only origin has | Picker, under `ON ORIGIN ONLY`                                                            | `git switch --track origin/<branch>`                                                  |
+| New branch                         | Picker, `New branch…`                                                                     | `git fetch origin <base>`, then `git switch --no-track -c <name> origin/<base>`       |
+| Stage a file                       | Its checkbox                                                                              | `git add -- <file>`                                                                   |
+| Unstage a file                     | Its ticked checkbox                                                                       | `git restore --staged -- <file>`; before the first commit `git rm --cached -- <file>` |
+| Stage all, unstage all             | `+` and `−` on the checkout's row                                                         | `git add -A`; `git restore --staged -- .` (or `git rm -r --cached -- .`)              |
+| Discard a tracked file             | `↺` on the file, then `Discard`                                                           | `git restore --worktree --staged -- <file>`                                           |
+| Delete an untracked file           | `↺` on the file, then `Delete file`                                                       | `git clean -f -- <file>`                                                              |
+| Commit                             | Message box under a checkout with staged files                                            | `git commit -m <message>`                                                             |
+| Fetch                              | The fetch icon on the row, or the header's                                                | `git fetch --prune <remote>`                                                          |
+| Pull                               | `↓` on the row                                                                            | `git pull --ff-only`                                                                  |
+| Push                               | `↑` on the row, after the confirm                                                         | `git push <pushRemote> HEAD:refs/heads/<branch>`                                      |
+| Publish a branch                   | `↑` where git has no same-named push target, after the confirm                            | `git push -u <remote> HEAD`                                                           |
+| Publish                            | `↑` on the row when the push target is another branch or there is none, after the confirm | `git push -u <push remote> HEAD`, which sets the upstream                             |
 
 A checkbox is ticked when the file is staged (`X` of porcelain's `XY`), shows `–` when only part of it is, and is empty
 otherwise. `--no-track` keeps a new branch from pushing to its base by mistake; it gets its own upstream on its first push.
@@ -260,12 +260,12 @@ dialog, which stays open; a success closes it and the panel reports what happene
 
 **Settings** in `config.json` next to the mod, yours to edit (the install script never replaces it):
 
-| Field | Default | Meaning |
-|---|---|---|
-| `newBranchPrefix` | `"feature/"` | What the new branch's name box starts with |
-| `baseBranch` | `null`: origin's HEAD branch, else `main` or `master` on origin, else `main` | The branch a new branch starts from |
-| `remote` | `"origin"` | The remote to fetch, pull, push to and publish on |
-| `networkTimeoutSeconds` | `60` | How long a fetch, pull or push may run (5 to 600) before it is stopped |
+| Field                   | Default                                                                      | Meaning                                                                |
+| ----------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `newBranchPrefix`       | `"feature/"`                                                                 | What the new branch's name box starts with                             |
+| `baseBranch`            | `null`: origin's HEAD branch, else `main` or `master` on origin, else `main` | The branch a new branch starts from                                    |
+| `remote`                | `"origin"`                                                                   | The remote to fetch, pull, push to and publish on                      |
+| `networkTimeoutSeconds` | `60`                                                                         | How long a fetch, pull or push may run (5 to 600) before it is stopped |
 
 ## repo-review: the Review tab
 
@@ -407,15 +407,15 @@ added. The root has Herdr's `workspace-chrome`, `spaces` and `agents`, the `jig-
 status bar: `jig-theme-sync` and `keep-awake` sit in 0 px blocks at the bottom of the sidebar, above its footer, unseen;
 the first follows Pi's palette and the second holds the awake request. The theme is `jig-lime`, and the follower changes it.
 
-| Panel (stack child) | Mod | Icon |
-|---|---|---|
-| `jig-work` (open first) | `jig-work` | `jig.svg`, ours |
-| `jig-context` (a line under its button closes the Jig group) | `jig-context` | `context.svg`, a gauge, ours |
-| `changes` | `repo-changes` | `git-compare.svg`, Herdr's |
-| `history` | `repo-history` | `clock.svg`, Herdr's |
-| `pr` | `repo-prs` | `pr.svg`, ours |
-| `worktrees` | `repo-worktrees` | `worktree.svg`, ours |
-| `files` | `jig-files` | `files.svg`, Herdr's |
+| Panel (stack child)                                          | Mod              | Icon                         |
+| ------------------------------------------------------------ | ---------------- | ---------------------------- |
+| `jig-work` (open first)                                      | `jig-work`       | `jig.svg`, ours              |
+| `jig-context` (a line under its button closes the Jig group) | `jig-context`    | `context.svg`, a gauge, ours |
+| `changes`                                                    | `repo-changes`   | `git-compare.svg`, Herdr's   |
+| `history`                                                    | `repo-history`   | `clock.svg`, Herdr's         |
+| `pr`                                                         | `repo-prs`       | `pr.svg`, ours               |
+| `worktrees`                                                  | `repo-worktrees` | `worktree.svg`, ours         |
+| `files`                                                      | `jig-files`      | `files.svg`, Herdr's         |
 
 The id `jig-work` is the one the tab bar's `Jig` button opens. To use a panel of your own, add a child to the stack with its
 `title` and `content.props.activity.icon`.

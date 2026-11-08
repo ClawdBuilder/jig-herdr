@@ -1,15 +1,64 @@
 name: CI
+
 on:
-  push: { branches: [main] }
-  pull_request:
-permissions: { contents: read }
+    push:
+        branches: [main]
+    pull_request:
+
+permissions:
+    contents: read
+
 jobs:
-  checks:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 24 }
-      - run: npm ci
-      - run: npm run check
-      - run: npm test
+    checks:
+        name: Checks (Node ${{ matrix.node }})
+        runs-on: ubuntu-24.04
+        timeout-minutes: 20
+        strategy:
+            fail-fast: false
+            matrix:
+                node: ["22.19.0", "24"]
+        steps:
+            - name: Check out the repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+
+            - name: Set up Node
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+              with:
+                  node-version: ${{ matrix.node }}
+                  cache: npm
+
+            # Until @clawdbuilder/jig@0.5.2 is published, the dependency is a local tarball. Build that tarball from
+            # the contracts branch so the same workflow works before and after the one-line dependency change.
+            - name: Provide the local contracts tarball
+              run: |
+                  if grep -q 'file:../jig-contracts.tgz' package.json; then
+                    git clone --depth 1 --branch feature/frontend-contracts https://github.com/ClawdBuilder/jig.git ../jig-contracts-src
+                    (cd ../jig-contracts-src && npm pack --pack-destination ..)
+                    mv ../clawdbuilder-jig-*.tgz ../jig-contracts.tgz
+                  fi
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Types, Biome and scan
+              run: npm run check
+
+            - name: Tests
+              run: npm test
+
+    ci-ok:
+        name: ci-ok
+        if: ${{ always() }}
+        needs: [checks]
+        runs-on: ubuntu-24.04
+        timeout-minutes: 5
+        permissions: {}
+        steps:
+            - name: Every job succeeded
+              env:
+                  NEEDS: ${{ toJSON(needs) }}
+              run: |
+                  echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+                  echo "$NEEDS" | jq -e 'to_entries | all(.value.result == "success")' > /dev/null

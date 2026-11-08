@@ -5,17 +5,17 @@
 // own error shows here and the dialog stays open. The panel and this dialog share one lock per checkout, so their actions
 // cannot overlap.
 
-import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
+import { div, svg } from "gpui-kit";
 import { closeOverlay, exec, panes, setShared, shared, spaces, theme } from "herdr";
 import {
-    RUNNING_KEY,
     busyAgents,
+    holdsLock,
     lockOf,
     panesOn,
-    holdsLock,
     publishBranch,
     pushBranch,
+    RUNNING_KEY,
     withLock,
     withoutLock,
     wrapperScript,

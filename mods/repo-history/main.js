@@ -3,8 +3,8 @@
 // its message and files; a file, or "Open diff", shows the diff in a terminal beside. Read-only: `git log`, `git show` and
 // `git status` on the space's machine (`on`).
 
-import { View, div, svg } from "gpui-kit";
 import { h_flex, Input, InputState, v_flex } from "gpui-base";
+import { div, svg, View } from "gpui-kit";
 import { exec, focused, layout, panes, run, settings, spaces, theme } from "herdr";
 import {
     colourSeed,
