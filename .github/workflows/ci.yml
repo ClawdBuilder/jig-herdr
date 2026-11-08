@@ -34,6 +34,9 @@ jobs:
               run: npm ci
 
             - name: Commit email guard
+              # The private word list is a repository secret. Fork pull requests get no secrets, so they stay warn-only.
+              env:
+                  JIG_SCAN_WORDS_TEXT: ${{ secrets.SCAN_WORDS }}
               run: node scripts/check-commit-emails.mjs
 
             - name: Types, Biome and scan
