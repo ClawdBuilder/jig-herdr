@@ -46,7 +46,8 @@ headers:
 - **Opens:** links with this computer's browser (`explorer.exe`, `open` or `xdg-open`); files with `tab.new` and `file-view`;
   diffs with `tab.new` and `repo-review`. A missing `file-view` gives a notification; a missing `repo-review` hides the button.
 - **Sets** `shared("file-view.tabs")`, the map of `<machine>|<path>` to the tab that shows it, so a second click selects it.
-- **Props:** none. Settings in `config.json`: `{ machine, stateDir, prOwners, refreshSeconds }`.
+- **Props:** none. Settings in `config.json`: `{ machine, stateDir, prOwners, refreshSeconds, readTimeoutSeconds }`
+  (`readTimeoutSeconds` is 20 by default: a read that runs longer shows a timed-out error and can be retried).
 
 ## jig-context: the Context panel
 
@@ -141,7 +142,7 @@ the name and folder (full path on hover) with the controls at the right; below 4
 all the controls fit. It reads with `readTextFile` (`on` for another machine) on mount, when the tab comes back or regains focus, on its
 backstop and on Refresh — no 5 s loop; a click during a read queues one more; hidden tabs read nothing, not even their
 config. A binary or missing file says so, and a tab without props says to open one from Files or Work. `wrap` starts on for Markdown and text and is remembered in `localStorage`; `config.json` has
-`refreshSeconds`.
+`refreshSeconds` and `readTimeoutSeconds`.
 
 A Markdown file (`.md`, `.markdown`, `.mdx`) opens rendered: headings, lists, tables, code blocks and links. `Source` in
 the header shows its text with syntax colours, and `Preview` goes back.
@@ -389,7 +390,8 @@ Herdr's shipped `files` mod (Apache-2.0; the file says so at its top), changed s
 `file-view` tab, as `jig-work` does, and a second click selects that tab. Folders open in place and files with uncommitted
 changes carry a letter. A filter runs one bounded `find` per change (500 ms after typing) and per refresh, never once per
 tick; watcher events go through the refresh scheduler, so they debounce and a read in progress queues one more. It reads
-the folder on the space's machine, with a 20 s deadline per command, and writes nothing. Its icons are Herdr's own, from
+the folder on the space's machine, with `readTimeoutSeconds` (20 by default) per command and coreutils `timeout` where it
+exists, and writes nothing. Its icons are Herdr's own, from
 `mods/workspace-chrome/`.
 
 ## jig-activity: the icon bar

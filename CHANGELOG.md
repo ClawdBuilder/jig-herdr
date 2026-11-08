@@ -18,7 +18,8 @@
   no longer leaves them on their loading line; Work and Context read again when their panel is shown after being hidden.
   Every command they run has a 20 s deadline, so a hung `sh`/`git`/`gh` cannot hold the loading state. The status check
   compares mtime and size (a same-second write is seen), keeps the old map until the bodies are read, and records the map
-  from the pass whose bodies it read. Files searches once per filter change (500 ms debounce) and per refresh, not every
+  from the pass whose bodies it read. `readTimeoutSeconds` (20 by default) bounds each read with the shared
+  `readDeadline` and coreutils `timeout` where the machine has it; a timeout is a retryable error, not a stuck panel. Files searches once per filter change (500 ms debounce) and per refresh, not every
   tick, and its watcher events go through the debounced scheduler. A first-only busy flag stops a backstop after an error
   from dimming a panel; file-view queues a click during a read, keeps hidden tabs quiet, and fits its Refresh at 300 px.
 
