@@ -7,13 +7,13 @@
     "license": "MIT",
     "scripts": {
         "check": "tsc -p tsconfig.json && biome ci . && node scripts/scan-company-strings.mjs",
-        "test": "node --test \"test/*.test.ts\"",
+        "test": "node --import ./test/support/git-env.mjs --test \"test/*.test.ts\"",
         "build:themes": "node scripts/build-themes.ts",
         "scan": "node scripts/scan-company-strings.mjs"
     },
     "devDependencies": {
         "@biomejs/biome": "2.6.4",
-        "@clawdbuilder/jig": "file:../jig-contracts.tgz",
+        "@clawdbuilder/jig": "0.5.2",
         "@types/node": "26.6.6",
         "typescript": "7.0.2"
     }
