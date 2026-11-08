@@ -21,6 +21,7 @@ const LISTINGS = new Set([
 ]);
 const LAYOUT = "jig-workbench";
 const SHIPPED = new Set(["workspace-chrome", "spaces", "agents", "tabs", "pane"]);
+const DEPENDENCIES = { "jig-repos": ["jig-review"] };
 const SECTIONS = ["What you see:", "How it behaves:", "Built from:", "Watch out:", "Done when:"];
 const failures = [];
 const fail = (message) => failures.push(message);
@@ -58,6 +59,7 @@ for (const id of LISTINGS) {
     else {
         const text = readFileSync(recipe, "utf8");
         if (!/^# \S/m.test(text)) fail(`${id}: RECIPE.md needs a # name`);
+        if (!/^!\[[^\]]+\]\(preview\.png\)$/m.test(text)) fail(`${id}: RECIPE.md needs ![Name](preview.png)`);
         let at = -1;
         for (const section of SECTIONS) {
             const next = text.indexOf(`**${section}**`);
@@ -90,6 +92,20 @@ for (const id of LISTINGS) {
         if (!mod.isDirectory() || !exists(path.join(dir, "mods", mod.name, "mod.json")))
             fail(`${id}: mods/${mod.name} has no mod.json`);
     }
+    const hasDerived = [id, ...(DEPENDENCIES[id] ?? [])].some((one) => ["jig-files", "jig-file-view"].includes(one));
+    if (hasDerived) {
+        if (!exists(path.join(dir, "LICENSE-APACHE"))) fail(`${id}: LICENSE-APACHE missing`);
+        if (!exists(path.join(dir, "NOTICE"))) fail(`${id}: NOTICE missing`);
+    }
+    for (const file of tree(dir)) {
+        if (!file.endsWith(".js")) continue;
+        const text = readFileSync(path.join(dir, file), "utf8");
+        for (const match of text.matchAll(/^import\s+(?:[^"']+?\s+from\s+)?["'](\.[^"']+)["']/gm)) {
+            const target = path.resolve(path.dirname(path.join(dir, file)), match[1]);
+            if (!exists(target) && !exists(`${target}.js`) && !exists(`${target}.ts`))
+                fail(`${file}: relative import ${match[1]} does not resolve`);
+        }
+    }
     if (id === LAYOUT) {
         const layouts = readdirSync(path.join(dir, "layouts")).filter((name) => name.endsWith(".json"));
         if (layouts.length !== 1) fail(`${id}: exactly one layouts/*.json is required`);
@@ -106,7 +122,8 @@ for (const id of LISTINGS) {
     } else {
         const own = path.join(dir, "mods", id);
         if (!exists(path.join(own, "mod.json"))) fail(`${id}: its own mod is missing`);
-        for (const mod of mods) if (mod.name !== id) fail(`${id}: stray mod ${mod.name}`);
+        const allowed = new Set([id, ...(id === "jig-repos" ? ["jig-review"] : [])]);
+        for (const mod of mods) if (!allowed.has(mod.name)) fail(`${id}: stray mod ${mod.name}`);
     }
 }
 const wordFile = process.env.JIG_SCAN_WORDS || path.join(homedir(), ".config", "jig", "scan-words.txt");

@@ -7,6 +7,7 @@ import path from "node:path";
 const ROOT = path.resolve(import.meta.dirname, "..");
 const LAYOUT = "jig-workbench";
 const DEPENDENCIES: Record<string, string[]> = {
+    "jig-repos": ["jig-review"],
     "jig-workbench": [
         "jig-repos",
         "jig-history",
@@ -44,7 +45,12 @@ function copy(source: string, target: string): void {
     if (statSync(source).isDirectory()) {
         cpSync(source, target, {
             recursive: true,
-            filter: (file) => !EXCLUDED.has(path.basename(file)),
+            filter: (file) => {
+                if (EXCLUDED.has(path.basename(file))) return false;
+                // The follow helpers are source-level copies shared with the other panels; the Repos panel keeps its own
+                // per-space choice in localStorage and does not import them.
+                return !file.endsWith(`/mods/jig-repos/follow.js`) && !file.endsWith(`/mods/jig-repos/follow-state.js`);
+            },
         });
     } else cpSync(source, target);
 }
@@ -79,11 +85,13 @@ function copyListing(id: string, out: string): void {
             path.join(target, "NOTICE"),
             [
                 "Herdr authors, Copyright Herdr authors.",
+                "Herdr app 0.1.13; upstream mods `files` 0.1.11 and `file-view` (the mod.json has no separate version).",
                 "",
-                "This folder includes `files` 0.1.11 and `file-view` from the Herdr app, licensed under the Apache",
-                "License, Version 2.0 (LICENSE-APACHE). Changes: the mods are named `jig-files` and",
-                "`jig-file-view`, the tab/selection bookkeeping uses the jig- prefixes, and Files opens a file in a",
-                "jig-file-view tab instead of previewing it inside the panel. The upstream source headers are kept.",
+                "This folder includes those mods under the Apache License, Version 2.0 (LICENSE-APACHE). Changes:",
+                "the mods are named `jig-files` and `jig-file-view`, the tab/selection bookkeeping uses the jig-",
+                "prefixes, and Files opens a file in a jig-file-view tab instead of previewing it inside the panel.",
+                "Everything else in this folder is MIT (LICENSE). Herdr ships no THIRD-PARTY-NOTICES file here; if",
+                "upstream supplies one, include it unchanged. The upstream source headers are kept.",
                 "",
             ].join("\n"),
         );

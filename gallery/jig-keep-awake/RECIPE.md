@@ -10,7 +10,8 @@ required.
 
 **The standalone mod draws nothing at all.** Its only control is the key `Ctrl+Shift+Alt+K`, which cycles **Off**, **On**
 and **While agents work**. In the Jig layout the sun in the tab bar is the visible control; the standalone mod has no tab
-bar and no panel. The state is in Herdr's shared state (`jig-keep-awake.mode` and `jig-keep-awake.active`). `Keep screen
+bar and no panel. The state is in Herdr's shared state (`jig-keep-awake.mode` and `jig-keep-awake.active`); the helper also owns the files
+`${appHome()}/jig-keep-awake.stop` and `${appHome()}/jig-keep-awake.helper.json`. `Keep screen
 on` is a config value (`display: true`), not a separate window.
 
 **How it behaves:**
@@ -39,7 +40,8 @@ the helper's state; the helper runs on Herdr's own machine, never a space's mach
 
 Herdr's 30 s `exec` cap is above the 8 s helper command limit; a failed start is reported and leaves the previous mode.
 The helper depends on the platform tools above; a system without `caffeinate` or `systemd-inhibit` cannot hold the
-request. A laptop lid close or power button still sleeps it. Windows-local without WSL is supported for this mod (it uses
+request. The standalone mod has `"place": "none"` and no panel; a layout needs a 0 px block with
+`content.mod = "jig-keep-awake"` (and the Jig layout's sun is in `jig-tabs`). A laptop lid close or power button still sleeps it. Windows-local without WSL is supported for this mod (it uses
 PowerShell, not `sh`). The standalone mod has no visible confirmation of its own; use the key and check the shared state, or
 the Jig layout's tab-bar sun. A stale helper is killed only after it verifies as this mod's own.
 

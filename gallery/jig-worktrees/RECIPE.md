@@ -19,7 +19,7 @@ Click a row to open the space at that worktree, or a new tab there. **Remove** r
 worktree list, uncommitted/ignored files, base count, upstream, creation and terminals at the path before removing; git runs
 `worktree remove` without `--force`, then `branch -d` (never `-D`). `Prune merged (N)` confirms, removes the ready entries in
 order, refuses if the folder/machine changes mid-chain, and reports any busy removal. Refresh on mount/shown/focus/
-a terminal in the panel's folder finishing a command, and on the backstop (default 60 s, 15–86400). A user action shows busy after 400 ms; automatic reads
+a terminal in the panel's folder finishing a command, and on the backstop (default 60 s). A user action shows busy after 400 ms; automatic reads
 are silent. A refusal is one line; nothing is forced.
 
 **Built from:**
@@ -35,9 +35,12 @@ Programs: `git worktree list`, `git status`, `git rev-list`, `git reflog`, `git 
 **Watch out:**
 
 Herdr's 30 s cap; `git` and POSIX `sh` are required, so Windows-local without WSL is unsupported. Readiness is
-conservative: an unmerged branch, uncommitted/ignored data, a lock, a terminal or an agent keeps a row in progress. Ignored
-files are refused only for known data files (`node_modules/`, `dist/`, `build/`, `target/`, `.env*`). The main checkout is
-never offered. A worktree outside the configured root is shown but not opened by a row.
+conservative: an unmerged branch, uncommitted data, a lock, a terminal or an agent keeps a row in progress. **Every ignored
+path is refused, except a top-level `node_modules/`, `dist/`, `build/` or `target/` directory; `.env*` is always refused.**
+The main checkout is never offered. There is no configured root: a row opens the space at that path (or a new tab) wherever
+the worktree is. The standalone listing has `"place": "none"`, so a layout block with `content.mod = "jig-worktrees"` is
+required. The panel has the **Terminal / Space** switch (per space): Terminal follows the focused terminal's folder, Space
+uses the space's folder.
 
 **Done when:**
 

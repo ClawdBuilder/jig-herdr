@@ -24,12 +24,13 @@ commit. `Ctrl+Enter` in the message box commits. Hovering a file shows its actio
 (or selects the existing one). The branch chip opens the picker; **Fetch** and **Pull** run at once; **Push** and **Publish**
 open a confirm with the remote and branch. There is no Sync: a diverged branch is labelled and a fast-forward pull refuses.
 Only one action per checkout runs at a time. Refresh on mount, when shown, on focus, when a terminal in the panel's folder finishes a command,
-and on the backstop (`refreshSeconds`, default 60, 15–86400). A click-started run shows busy after 400 ms; automatic runs do
+and on the backstop (`refreshSeconds`, default 60). A click-started run shows busy after 400 ms; automatic runs do
 not. A close of the panel cancels its pending work.
 
 **Built from:**
 
-`main.js` + `lib.js` + `picker.js` + `push.js` + `refresh.js` + `layout.js`; no props. Herdr functions: `focused`, `panes`,
+`main.js` + `lib.js` + `picker.js` + `push.js` + `refresh.js` + `layout.js`; props `{ picker: true }` shows the branch
+picker and `{ push: true }` shows the push confirmation instead of the panel. Herdr functions: `focused`, `panes`,
 `spaces`, `exec`, `run`, `appHome`, `readTextFile`, `shared`/`setShared`, `openOverlay`, `theme`, `layout`, `window`.
 Shared keys: `badge.jig-repos`, `jig-repos.folded`, `jig-repos.running`, `jig-repos.done`. Config:
 `${appHome()}/mods/jig-repos/config.json` with `newBranchPrefix`, `baseBranch`, `remote`, `networkTimeoutSeconds`,
@@ -38,18 +39,25 @@ Shared keys: `badge.jig-repos`, `jig-repos.folded`, `jig-repos.running`, `jig-re
 Programs: `sh` (one script reads all checkouts without writing), `git`, and `timeout`/`gtimeout` when present for 20 s
 network/read caps. Network: `git fetch`, `git pull`, `git push` only on those clicks; no other network. Files read: the
 focused/space folder's git metadata and working tree, and its `config.json`; writes: stage/unstage/discard, commit, fetch,
-pull, push, and a new worktree only through the normal git actions.
+pull and push. Nothing here creates a worktree. It opens `jig-review` with `tab.new` and sets `jig-review.open`; the
+standalone listing therefore bundles `jig-review` (see below). Icons come from Herdr's `mods/workspace-chrome/*.svg` and this
+mod's own `*.svg`.
 
 **Watch out:**
 
 The 30 s Herdr `exec` cap can still end a slow network command; the mod reports a stopped command as stopped, not failed.
-Assumes `git` on PATH, an `origin` (or configured remote), and a POSIX `sh`; Windows-local without WSL has no `sh`. The
+`networkTimeoutSeconds` defaults to 60, not 20. Assumes `git` on PATH, an `origin` (or configured remote), and a POSIX `sh`;
+Windows-local without WSL has no `sh`. The
 checkout walk covers three folder levels and skips `node_modules`; a repository deeper than that is not found. Very large
-working trees are capped by the read limits. Discard is permanent and never offers an undo. `gh` is not used here.
+working trees are capped by the read limits. Discard is permanent and never offers an undo. `gh` is not used here. The
+standalone listing has `"place": "none"`, so a layout block with `content.mod = "jig-repos"` is required. File and branch
+clicks need `jig-review`; this listing bundles it. The panel has the **Terminal / Space** switch (per space): Terminal
+follows the focused terminal's folder, Space uses the space's folder.
 
 **Done when:**
 
-`herdr-app check mods/jig-repos` passes; a demo repo (`orders-api`) with one modified file shows it; stage/unstage, a commit
+Make the demo repo with `git init orders-api && git -C orders-api commit --allow-empty -m 'first'`; then
+`herdr-app check mods/jig-repos` passes; the repo with one modified file shows it; stage/unstage, a commit
 with `Ctrl+Enter`, Fetch/Pull/Push confirmation, the branch picker, a linked worktree row, a discard confirm and a no-git
 folder all render; a `timeout`-less PATH still works (the fallback `sh` runs); closing the panel during a read leaves no
 error.

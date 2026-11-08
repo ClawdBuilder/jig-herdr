@@ -8,9 +8,10 @@ layout: no Jig session is needed. From Jig (https://github.com/ClawdBuilder/jig)
 
 **What you see:**
 
-The window is a row: a 300 px sidebar (minimum 44, maximum 520, not resizable), the work column, and inside the work
-column a 30 px tab bar, an 8 px padded row with the terminal and a 420 px panel (minimum 300, maximum 900), and a 40 px
-activity bar on the panel's right. The sidebar has a 46 px brand block, spaces and agents as equal halves (minimum 90 px
+The window has `titlebar: none`, traffic lights at `[12, 16]`, and `terminal_padding: [14, 12]`. It is a row: a 300 px
+sidebar (minimum 44, maximum 520, not resizable), the work column, and inside the work column a 30 px tab bar, an 8 px
+padded row with the terminal and a 420 px panel (minimum 300, maximum 900). The 40 px activity bar is **inside** that 420 px
+panel, on its right. The sidebar has a 46 px brand block, spaces and agents as equal halves (minimum 90 px
 each), a zero-height keep-awake block, and a 69 px footer. The 1 px dividers use the theme's `border` token; the layout uses
 Herdr's default theme and its `canvas`, `chrome`, `background`, `border`, `accent` tokens (no colour is hard-coded in the
 layout). The main pane has an 8 px gap, 10 px corner radius, a 30 px header, a 1 px border, and the focus border in
@@ -42,10 +43,14 @@ Layout `jig-workbench.json`: root row, `sidebar` column, `brand` (workspace-chro
 Panel children: `jig-repos`, `jig-history`, `jig-prs`, `jig-worktrees`, `jig-review`, `jig-files`; `jig-file-view` opens as a
 tab from Files. Shipped mods: `workspace-chrome`, `spaces`, `agents`, `pane`, `tabs`.
 
-Programs run by the panels: `sh`, `git`, `gh`; `timeout` or `gtimeout` is used when present for 20 s caps. Network: `gh`
-(GitHub), `git fetch`/`pull`/`push` only when the person uses those actions. Files read: the focused space's folder and its
-`.git` metadata, and each mod's `${appHome()}/mods/<id>/config.json`. No telemetry. Icons: the existing `workspace-chrome`
-and `jig-activity` SVGs.
+Programs run by the panels: `sh`, `git`, `gh`, and keep-awake's `powershell`, `taskkill`, `caffeinate`,
+`systemd-inhibit`, `nohup`, `ps`, `pgrep`, `pkill`, `kill`; link opening uses `explorer.exe`, `open` or `xdg-open`. `timeout`
+or `gtimeout` is used when present for 20 s caps. Herdr commands: `terminal.open` (History's diff) and `tab.new` (Review,
+file tabs). Network: `gh` on automatic refresh as well as clicks (GitHub), and `git fetch`/`pull`/`push` when the person uses
+those actions. Files read: the focused space's folder and its `.git` metadata, each mod's
+`${appHome()}/mods/<id>/config.json`, keep-awake's `${appHome()}/jig-keep-awake.stop` and `jig-keep-awake.helper.json`,
+and jig-file-view reads any absolute path the user opens. No telemetry. Icons: Herdr's `mods/workspace-chrome/*.svg` and
+the `jig-activity`/`jig-repos` SVGs.
 
 **Watch out:**
 

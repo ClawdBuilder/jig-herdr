@@ -149,7 +149,7 @@
                                 {
                                     "id": "panel-body",
                                     "type": "stack",
-                                    "active": "jig-repos",
+                                    "active": "changes",
                                     "children": [
                                         {
                                             "id": "changes",
