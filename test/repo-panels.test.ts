@@ -354,6 +354,46 @@ test("jig-worktrees reads the script's lines, keeping what git could not tell as
     assert.equal(relName("/elsewhere/b", "/w"), "b");
 });
 
+test("jig-worktrees reads worktree paths with tabs and newlines and a subject with tabs", async (t) => {
+    const { SCRIPT, parseTrees } = await load<Lib>("mods/jig-worktrees/lib.js");
+    const root = scratch(t);
+    const origin = path.join(root, "origin.git");
+    git(root, "init", "-q", "--bare", "-b", "main", origin);
+    const repoDir = repo(root, "seed");
+    git(repoDir, "remote", "add", "origin", origin);
+    git(repoDir, "push", "-q", "origin", "main");
+    const main = path.join(root, "orders-api");
+    git(root, "clone", "-q", origin, "orders-api");
+
+    const cases = [
+        { branch: "feature/tab", name: "with\t tab" },
+        { branch: "feature/newline", name: "with\nnewline" },
+    ];
+    const made: Array<{ path: string; branch: string }> = [];
+    for (const one of cases) {
+        const worktree = path.join(root, one.name);
+        try {
+            git(main, "worktree", "add", "-q", "-b", one.branch, worktree);
+        } catch (error) {
+            t.skip(`filesystem refused a ${JSON.stringify(one.name)} worktree: ${error}`);
+            return;
+        }
+        made.push({ path: worktree, branch: one.branch });
+        writeFileSync(path.join(worktree, "change.txt"), `${one.branch}\n`);
+        git(worktree, "add", "change.txt");
+        git(worktree, "commit", "-qm", "fix: a subject\twith tabs");
+    }
+    const parsed = parseTrees(runScript(SCRIPT, root));
+    for (const expected of made) {
+        const found = parsed.trees.find((row: { path: string }) => row.path === expected.path);
+        assert.ok(found, expected.path);
+        assert.equal(found.branch, expected.branch);
+        assert.match(found.date ?? "", /^\d{4}-\d{2}-\d{2}T/);
+        assert.match(found.created ?? "", /^[0-9a-f]{40}$/);
+        assert.equal(found.subject, "fix: a subject\twith tabs");
+    }
+});
+
 test("jig-worktrees tells ready from in-progress worktrees on real repositories", async (t) => {
     const { SCRIPT, parseTrees, readiness } = await load<Lib>("mods/jig-worktrees/lib.js");
     const root = scratch(t);

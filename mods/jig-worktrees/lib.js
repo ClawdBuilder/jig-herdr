@@ -14,7 +14,6 @@
 // (No dollar-brace in here except the escaped one: this is a JS template string.)
 export const SCRIPT = `root=$1
 top=$(git -C "$root" rev-parse --show-toplevel 2>/dev/null)
-us=$(printf '\\037')
 find_repos() {
   for a in "$root"/*/; do
     case $a in */node_modules/) continue;; esac
@@ -29,39 +28,46 @@ find_repos() {
     done
   done
 }
-stat() {
-  main=$1; p=$2; h=$3; b=$4; l=$5; base=$6
-  [ -d "$p" ] || return
-  ref=\${b:-$h}
-  if out=$(git -C "$p" --no-optional-locks -c core.fsmonitor=false status --porcelain 2>/dev/null); then
-    d=$(printf '%s' "$out" | awk 'NF { n++ } END { print n + 0 }')
-  else d='?'; fi
-  up=; tr=
-  if [ -n "$b" ]; then
-    info=$(git -C "$p" for-each-ref --format='%(upstream:short)|%(upstream:track,nobracket)' "refs/heads/$b" 2>/dev/null)
-    up=\${info%%|*}; tr=\${info#*|}
-  fi
-  gone=0; [ "$tr" = gone ] && gone=1
-  ba=; bb=0
-  if [ -n "$base" ]; then
-    set -- $(git -C "$p" rev-list --left-right --count "$base...$ref" 2>/dev/null); bb=\${1:-0}; ba=\${2:-}
-  fi
-  behind=$bb; ahead=\${ba:-0}
-  if [ -n "$up" ] && [ "$gone" = 0 ]; then
-    set -- $(git -C "$p" rev-list --left-right --count "$up...$ref" 2>/dev/null); behind=\${1:-0}; ahead=\${2:-0}
-  fi
-  un=$(git -C "$p" rev-list --count "$ref" --not --remotes 2>/dev/null)
-  lc=$(git -C "$p" log -1 --format='%cI' "$ref" 2>/dev/null)
-  sub=$(git -C "$p" log -1 --pretty=%s "$ref" 2>/dev/null)
-  cr=$(git -C "$p" reflog show --format=%H "$ref" 2>/dev/null | tail -1)
-  printf 'W\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' "$main" "$p" "$b" "$(printf %s "$h" | cut -c1-8)" "$l" "$d" "$ahead" "$behind" "$ba" "$up" "$gone" "$un" "$base" "$lc" "$cr" "$sub"
-}
 tmp=$(mktemp -d) || exit 1
 trap 'rm -rf "$tmp"' EXIT
-if [ -n "$top" ]; then echo "$top" > "$tmp/repos"; echo "@single"; else find_repos > "$tmp/repos"; fi
+cat > "$tmp/stat.sh" <<'STAT'
+#!/bin/sh
+main=$1; p=$2; h=$3; b=$4; l=$5; base=$6
+[ -d "$p" ] || exit 0
+if [ -n "$b" ]; then ref=$b; else ref=$h; fi
+if out=$(git -C "$p" --no-optional-locks -c core.fsmonitor=false status --porcelain 2>/dev/null); then
+  d=$(printf '%s' "$out" | awk 'NF { n++ } END { print n + 0 }')
+else d='?'; fi
+up=; tr=
+if [ -n "$b" ]; then
+  info=$(git -C "$p" for-each-ref --format='%(upstream:short)|%(upstream:track,nobracket)' "refs/heads/$b" 2>/dev/null)
+  up=$(printf '%s' "$info" | cut -d'|' -f1); tr=$(printf '%s' "$info" | cut -d'|' -f2)
+fi
+gone=0; [ "$tr" = gone ] && gone=1
+ba=; bb=0
+if [ -n "$base" ]; then
+  set -- $(git -C "$p" rev-list --left-right --count "$base...$ref" 2>/dev/null)
+  bb=$1; [ -n "$bb" ] || bb=0; ba=$2
+fi
+behind=$bb; ahead=$ba; [ -n "$ahead" ] || ahead=0
+if [ -n "$up" ] && [ "$gone" = 0 ]; then
+  set -- $(git -C "$p" rev-list --left-right --count "$up...$ref" 2>/dev/null)
+  behind=$1; [ -n "$behind" ] || behind=0; ahead=$2; [ -n "$ahead" ] || ahead=0
+fi
+un=$(git -C "$p" rev-list --count "$ref" --not --remotes 2>/dev/null)
+lc=$(git -C "$p" log -1 --format='%cI' "$ref" 2>/dev/null)
+sub=$(git -C "$p" log -1 --pretty=%s "$ref" 2>/dev/null)
+cr=$(git -C "$p" reflog show --format=%H "$ref" 2>/dev/null | tail -1)
+short=$(printf %s "$h" | cut -c1-8)
+# Every field is NUL-terminated; the free-text subject is last.
+printf '%s\\0%s\\0%s\\0%s\\0%s\\0%s\\0%s\\0%s\\0%s\\0%s\\0%s\\0%s\\0%s\\0%s\\0%s\\0%s\\0' \
+  "$main" "$p" "$b" "$short" "$l" "$d" "$ahead" "$behind" "$ba" "$up" "$gone" "$un" "$base" "$lc" "$cr" "$sub"
+STAT
+chmod +x "$tmp/stat.sh"
+if [ -n "$top" ]; then echo "$top" > "$tmp/repos"; printf '@single\\0'; else find_repos > "$tmp/repos"; fi
 : > "$tmp/jobs"
 while IFS= read -r r; do
-  r=\${r%/}
+  r=$(printf '%s' "$r" | sed 's:/*$::')
   if [ -d "$r/.git" ]; then c="$r/.git"; else c=$(git -C "$r" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || continue; fi
   [ -n "$(ls -A "$c/worktrees" 2>/dev/null)" ] || continue
   k=$(printf %s "$c" | cksum | cut -d' ' -f1)
@@ -74,74 +80,87 @@ while IFS= read -r r; do
       if git --git-dir="$c" show-ref -q --verify "refs/heads/$x"; then base=$x; break; fi
     done
   fi
-  git --git-dir="$c" worktree list --porcelain 2>/dev/null | awk -v base="$base" 'BEGIN { RS = ""; FS = "\\n"; OFS = "\\037" }
-    { p = ""; h = ""; b = ""; l = 0; pr = 0
-      for (i = 1; i <= NF; i++) {
-        if ($i ~ /^worktree /) p = substr($i, 10)
-        else if ($i ~ /^HEAD /) h = substr($i, 6)
-        else if ($i ~ /^branch /) { b = substr($i, 8); sub(/^refs\\/heads\\//, "", b) }
-        else if ($i ~ /^locked/) l = 1
-        else if ($i ~ /^prunable/) pr = 1
-      }
-      if (NR == 1) { main = p; print main, p, h, b, l, base }
-      else if (!pr) print main, p, h, b, l, base }' >> "$tmp/jobs"
+  git --git-dir="$c" worktree list --porcelain -z 2>/dev/null | awk -v base="$base" '
+    BEGIN { RS = "\\0"; main = ""; p = ""; h = ""; b = ""; l = 0; pr = 0; first = 1 }
+    {
+      if ($0 ~ /^worktree /) {
+        if (p != "" && !pr) { if (first) { main = p; first = 0 }; printf "%s\\0%s\\0%s\\0%s\\0%s\\0%s\\0", main, p, h, b, l, base }
+        p = substr($0, 10); h = ""; b = ""; l = 0; pr = 0
+      } else if ($0 ~ /^HEAD /) h = substr($0, 6)
+      else if ($0 ~ /^branch /) { b = substr($0, 8); sub(/^refs\\/heads\\//, "", b) }
+      else if ($0 ~ /^locked/) l = 1
+      else if ($0 ~ /^prunable/) pr = 1
+    }
+    END { if (p != "" && !pr) { if (first) main = p; printf "%s\\0%s\\0%s\\0%s\\0%s\\0%s\\0", main, p, h, b, l, base } }' >> "$tmp/jobs"
 done < "$tmp/repos"
-n=0
-while IFS="$us" read -r main p h b l base; do
-  stat "$main" "$p" "$h" "$b" "$l" "$base" > "$tmp/$n.out" &
-  n=$((n + 1))
-  [ $((n % 8)) -eq 0 ] && wait
-done < "$tmp/jobs"
-wait
-i=0
-while [ $i -lt $n ]; do cat "$tmp/$i.out"; i=$((i + 1)); done`;
-
+if [ -s "$tmp/jobs" ]; then xargs -0 -n 6 sh "$tmp/stat.sh" < "$tmp/jobs"; fi`;
 /** A number from the script's output; empty, "?" (git failed) and missing all give null. */
 const num = (text) => (text === "" || text === "?" || text === undefined ? null : Number(text));
 
 /** The script's output as `{ single, trees }`. A number that git could not give stays null. */
 export function parseTrees(stdout) {
+    const tree = (f) => {
+        const [
+            main,
+            path,
+            branch,
+            head,
+            locked,
+            dirty,
+            ahead,
+            behind,
+            baseAhead,
+            upstream,
+            gone,
+            unpushed,
+            base,
+            date,
+            created,
+            subject,
+        ] = f;
+        return {
+            main,
+            path,
+            branch,
+            head,
+            locked: locked === "1",
+            dirty: num(dirty),
+            ahead: num(ahead) ?? 0,
+            behind: num(behind) ?? 0,
+            baseAhead: num(baseAhead),
+            upstream,
+            gone: gone === "1",
+            unpushed: num(unpushed),
+            base,
+            date: date || null,
+            created: created || null,
+            subject: subject ?? "",
+        };
+    };
+    // The scan writes NUL-separated fields: paths and the free-text subject can contain tabs or newlines. The older
+    // tab-separated form is still read for tests and for a cached result from an older panel.
+    if (stdout.includes("\0")) {
+        const fields = stdout.split("\0");
+        let single = false;
+        let at = 0;
+        if ((fields[0] ?? "").trim() === "@single") {
+            single = true;
+            at = 1;
+        }
+        const trees = [];
+        while (at + 15 < fields.length) {
+            const f = fields.slice(at, at + 16);
+            if (f[1]) trees.push(tree(f));
+            at += 16;
+        }
+        return { single, trees };
+    }
     const lines = stdout.split("\n").filter(Boolean);
     const trees = lines
         .filter((line) => line.startsWith("W\t"))
         .map((line) => {
-            const [
-                ,
-                main,
-                path,
-                branch,
-                head,
-                locked,
-                dirty,
-                ahead,
-                behind,
-                baseAhead,
-                upstream,
-                gone,
-                unpushed,
-                base,
-                date,
-                created,
-                ...subject
-            ] = line.split("\t");
-            return {
-                main,
-                path,
-                branch,
-                head,
-                locked: locked === "1",
-                dirty: num(dirty),
-                ahead: num(ahead) ?? 0,
-                behind: num(behind) ?? 0,
-                baseAhead: num(baseAhead),
-                upstream,
-                gone: gone === "1",
-                unpushed: num(unpushed),
-                base,
-                date: date || null,
-                created: created || null,
-                subject: subject.join("\t"),
-            };
+            const f = line.split("\t").slice(1);
+            return tree([...f.slice(0, 15), f.slice(15).join("\t")]);
         });
     return { single: lines[0] === "@single", trees };
 }
