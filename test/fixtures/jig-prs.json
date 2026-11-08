@@ -1,0 +1,224 @@
+[
+    {
+        "author": { "id": "MDQ6VXNlcjY0Nzc5OTcy", "is_bot": false, "login": "ClawdBuilder", "name": "Mriganka Mondal" },
+        "headRefName": "fix/small-1108",
+        "isDraft": false,
+        "mergeable": "MERGEABLE",
+        "number": 87,
+        "reviewDecision": "",
+        "state": "OPEN",
+        "statusCheckRollup": [
+            {
+                "__typename": "CheckRun",
+                "completedAt": "2026-11-08T01:36:31Z",
+                "conclusion": "SUCCESS",
+                "detailsUrl": "https://github.com/ClawdBuilder/jig/actions/runs/42434608547/job/128590666202",
+                "name": "Checks (Node 26)",
+                "startedAt": "2026-11-08T01:31:27Z",
+                "status": "COMPLETED",
+                "workflowName": "CI"
+            },
+            {
+                "__typename": "CheckRun",
+                "completedAt": "2026-11-08T01:39:29Z",
+                "conclusion": "SUCCESS",
+                "detailsUrl": "https://github.com/ClawdBuilder/jig/actions/runs/42434608547/job/128590666200",
+                "name": "Checks (Node 24)",
+                "startedAt": "2026-11-08T01:31:27Z",
+                "status": "COMPLETED",
+                "workflowName": "CI"
+            },
+            {
+                "__typename": "CheckRun",
+                "completedAt": "2026-11-08T01:31:33Z",
+                "conclusion": "SUCCESS",
+                "detailsUrl": "https://github.com/ClawdBuilder/jig/actions/runs/42434608547/job/128590666205",
+                "name": "Workflow files",
+                "startedAt": "2026-11-08T01:31:27Z",
+                "status": "COMPLETED",
+                "workflowName": "CI"
+            },
+            {
+                "__typename": "CheckRun",
+                "completedAt": "2026-11-08T01:36:29Z",
+                "conclusion": "SUCCESS",
+                "detailsUrl": "https://github.com/ClawdBuilder/jig/actions/runs/42434608547/job/128590666087",
+                "name": "Integration (latest services, Node 26, Helm 4)",
+                "startedAt": "2026-11-08T01:31:27Z",
+                "status": "COMPLETED",
+                "workflowName": "CI"
+            },
+            {
+                "__typename": "CheckRun",
+                "completedAt": "2026-11-08T01:35:31Z",
+                "conclusion": "SUCCESS",
+                "detailsUrl": "https://github.com/ClawdBuilder/jig/actions/runs/42434608547/job/128590666185",
+                "name": "Integration (previous services, Node 24, Helm 3)",
+                "startedAt": "2026-11-08T01:31:27Z",
+                "status": "COMPLETED",
+                "workflowName": "CI"
+            },
+            {
+                "__typename": "CheckRun",
+                "completedAt": "2026-11-08T01:39:34Z",
+                "conclusion": "SUCCESS",
+                "detailsUrl": "https://github.com/ClawdBuilder/jig/actions/runs/42434608547/job/128592404833",
+                "name": "ci-ok",
+                "startedAt": "2026-11-08T01:39:31Z",
+                "status": "COMPLETED",
+                "workflowName": "CI"
+            }
+        ],
+        "title": "ops, lens, workflow: three small audit fixes",
+        "updatedAt": "2026-11-08T01:31:27Z",
+        "url": "https://github.com/ClawdBuilder/jig/pull/87"
+    },
+    {
+        "author": { "id": "MDQ6VXNlcjY0Nzc5OTcy", "is_bot": false, "login": "ClawdBuilder", "name": "Mriganka Mondal" },
+        "headRefName": "feature/context-command",
+        "isDraft": false,
+        "mergeable": "MERGEABLE",
+        "number": 86,
+        "reviewDecision": "",
+        "state": "OPEN",
+        "statusCheckRollup": [
+            {
+                "__typename": "CheckRun",
+                "completedAt": "2026-11-08T01:26:35Z",
+                "conclusion": "SUCCESS",
+                "detailsUrl": "https://github.com/ClawdBuilder/jig/actions/runs/42433711982/job/128587941120",
+                "name": "Checks (Node 26)",
+                "startedAt": "2026-11-08T01:18:59Z",
+                "status": "COMPLETED",
+                "workflowName": "CI"
+            },
+            {
+                "__typename": "CheckRun",
+                "completedAt": "2026-11-08T01:25:23Z",
+                "conclusion": "SUCCESS",
+                "detailsUrl": "https://github.com/ClawdBuilder/jig/actions/runs/42433711982/job/128587941174",
+                "name": "Checks (Node 24)",
+                "startedAt": "2026-11-08T01:18:59Z",
+                "status": "COMPLETED",
+                "workflowName": "CI"
+            },
+            {
+                "__typename": "CheckRun",
+                "completedAt": "2026-11-08T01:19:05Z",
+                "conclusion": "SUCCESS",
+                "detailsUrl": "https://github.com/ClawdBuilder/jig/actions/runs/42433711982/job/128587941057",
+                "name": "Workflow files",
+                "startedAt": "2026-11-08T01:18:59Z",
+                "status": "COMPLETED",
+                "workflowName": "CI"
+            },
+            {
+                "__typename": "CheckRun",
+                "completedAt": "2026-11-08T01:23:49Z",
+                "conclusion": "SUCCESS",
+                "detailsUrl": "https://github.com/ClawdBuilder/jig/actions/runs/42433711982/job/128587941147",
+                "name": "Integration (latest services, Node 26, Helm 4)",
+                "startedAt": "2026-11-08T01:18:59Z",
+                "status": "COMPLETED",
+                "workflowName": "CI"
+            },
+            {
+                "__typename": "CheckRun",
+                "completedAt": "2026-11-08T01:23:22Z",
+                "conclusion": "SUCCESS",
+                "detailsUrl": "https://github.com/ClawdBuilder/jig/actions/runs/42433711982/job/128587941198",
+                "name": "Integration (previous services, Node 24, Helm 3)",
+                "startedAt": "2026-11-08T01:18:59Z",
+                "status": "COMPLETED",
+                "workflowName": "CI"
+            },
+            {
+                "__typename": "CheckRun",
+                "completedAt": "2026-11-08T01:26:39Z",
+                "conclusion": "SUCCESS",
+                "detailsUrl": "https://github.com/ClawdBuilder/jig/actions/runs/42433711982/job/128589641383",
+                "name": "ci-ok",
+                "startedAt": "2026-11-08T01:26:37Z",
+                "status": "COMPLETED",
+                "workflowName": "CI"
+            }
+        ],
+        "title": "jig-session: /context shows what fills the context",
+        "updatedAt": "2026-11-08T01:18:59Z",
+        "url": "https://github.com/ClawdBuilder/jig/pull/86"
+    },
+    {
+        "author": { "id": "MDQ6VXNlcjY0Nzc5OTcy", "is_bot": false, "login": "ClawdBuilder", "name": "Mriganka Mondal" },
+        "headRefName": "fix/cli-test-hang",
+        "isDraft": false,
+        "mergeable": "MERGEABLE",
+        "number": 85,
+        "reviewDecision": "",
+        "state": "OPEN",
+        "statusCheckRollup": [
+            {
+                "__typename": "CheckRun",
+                "completedAt": "2026-11-08T01:21:37Z",
+                "conclusion": "SUCCESS",
+                "detailsUrl": "https://github.com/ClawdBuilder/jig/actions/runs/42433505962/job/128587311732",
+                "name": "Checks (Node 26)",
+                "startedAt": "2026-11-08T01:16:06Z",
+                "status": "COMPLETED",
+                "workflowName": "CI"
+            },
+            {
+                "__typename": "CheckRun",
+                "completedAt": "2026-11-08T01:22:13Z",
+                "conclusion": "SUCCESS",
+                "detailsUrl": "https://github.com/ClawdBuilder/jig/actions/runs/42433505962/job/128587311837",
+                "name": "Checks (Node 24)",
+                "startedAt": "2026-11-08T01:16:06Z",
+                "status": "COMPLETED",
+                "workflowName": "CI"
+            },
+            {
+                "__typename": "CheckRun",
+                "completedAt": "2026-11-08T01:16:13Z",
+                "conclusion": "SUCCESS",
+                "detailsUrl": "https://github.com/ClawdBuilder/jig/actions/runs/42433505962/job/128587311575",
+                "name": "Workflow files",
+                "startedAt": "2026-11-08T01:16:06Z",
+                "status": "COMPLETED",
+                "workflowName": "CI"
+            },
+            {
+                "__typename": "CheckRun",
+                "completedAt": "2026-11-08T01:20:15Z",
+                "conclusion": "SUCCESS",
+                "detailsUrl": "https://github.com/ClawdBuilder/jig/actions/runs/42433505962/job/128587311791",
+                "name": "Integration (latest services, Node 26, Helm 4)",
+                "startedAt": "2026-11-08T01:16:06Z",
+                "status": "COMPLETED",
+                "workflowName": "CI"
+            },
+            {
+                "__typename": "CheckRun",
+                "completedAt": "2026-11-08T01:20:35Z",
+                "conclusion": "SUCCESS",
+                "detailsUrl": "https://github.com/ClawdBuilder/jig/actions/runs/42433505962/job/128587311860",
+                "name": "Integration (previous services, Node 24, Helm 3)",
+                "startedAt": "2026-11-08T01:16:06Z",
+                "status": "COMPLETED",
+                "workflowName": "CI"
+            },
+            {
+                "__typename": "CheckRun",
+                "completedAt": "2026-11-08T01:22:17Z",
+                "conclusion": "SUCCESS",
+                "detailsUrl": "https://github.com/ClawdBuilder/jig/actions/runs/42433505962/job/128588678757",
+                "name": "ci-ok",
+                "startedAt": "2026-11-08T01:22:15Z",
+                "status": "COMPLETED",
+                "workflowName": "CI"
+            }
+        ],
+        "title": "Tests: end the cli.test hang, and keep update tests off the global prefix",
+        "updatedAt": "2026-11-08T01:16:07Z",
+        "url": "https://github.com/ClawdBuilder/jig/pull/85"
+    }
+]

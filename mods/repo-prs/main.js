@@ -6,19 +6,29 @@
 import { h_flex, v_flex } from "gpui-base";
 import { div, svg, View } from "gpui-kit";
 import { exec, focused, layout, panes, setShared, shared, spaces, theme, window } from "herdr";
+import { location, readFollow, writeFollow } from "./follow.js";
+import { followReload } from "./follow-state.js";
 import {
+    checkCount,
+    checkSummary,
     checksOf,
     countOf,
+    currentGeneration,
     ghError,
+    ghShell,
+    githubUrl,
     inParallel,
     isOnScreen,
+    loadRuns,
     parseRepos,
     REVIEW,
     relName,
     remember,
     SCRIPT,
     shapePr,
+    shapeRuns,
     since,
+    watchdog,
 } from "./lib.js";
 
 const onScreen = () => isOnScreen(layout(), "repo-prs");
@@ -26,7 +36,8 @@ const REUSE_MS = 5 * 60000; // a result is reused this long; Refresh asks again
 const GH_AT_ONCE = 4;
 const MINE_UP_FRONT = 15; // "Mine": pull requests whose checks load without a click
 const OPEN_PAGE = 30;
-const JSON_FIELDS = "number,title,url,state,isDraft,reviewDecision,statusCheckRollup,headRefName,updatedAt,author";
+const JSON_FIELDS =
+    "number,title,url,state,isDraft,reviewDecision,statusCheckRollup,headRefName,updatedAt,author,mergeable";
 const icon = (name) => `mods/workspace-chrome/${name}.svg`;
 const lastSegment = (path) => path.replace(/\/+$/, "").split("/").pop();
 const MARK = { fail: "×", pending: "•", pass: "✓", skip: "–" };
@@ -47,21 +58,52 @@ function saveCache(cache) {
     }
 }
 
+/** Git's raw failures as a line a person can act on. */
+function friendly(text) {
+    const line = String(text ?? "")
+        .trim()
+        .split("\n")[0];
+    if (/not a git repository/i.test(line)) return "Not a git repository here — cd into one.";
+    if (/does not have any commits yet/i.test(line)) return "This repository has no commits yet.";
+    return line;
+}
+
 /** The folder to look at and the machine it is on: the shown space's folder, else where its first terminal is. */
 function whereToLook() {
     const space = spaces().find((s) => s.active);
-    const here = focused();
-    let machine = space?.machine ?? null;
-    if (here?.pane === null) machine = here.terminal?.includes("/") ? here.terminal.split("/")[0] : null;
-    const tabIds = new Set((space?.tabs ?? []).map((tab) => tab.id));
-    const firstCwd = panes().find((p) => tabIds.has(p.tab) && p.cwd)?.cwd;
-    const focusedPane = here?.pane ? panes().find((p) => p.pane === here.pane) : null;
-    return { root: space?.folder || firstCwd || focusedPane?.cwd || here?.cwd, on: machine };
+    return location(readFollow(space?.id));
+}
+
+/** The Terminal/Space switch: what this panel follows, per space. */
+function followButton(t, reload) {
+    const space = spaces().find((s) => s.active);
+    const follow = readFollow(space?.id);
+    return div()
+        .id("follow")
+        .ml(4)
+        .text_size(11)
+        .text_color(t.muted)
+        .cursor_pointer()
+        .hover((st) => st.text_color(t.foreground))
+        .tooltip(
+            follow
+                ? "Following the focused terminal — click to use the space folder"
+                : "Using the space folder — click to follow the focused terminal",
+        )
+        .on_click((_e, cx) => {
+            followReload(
+                follow,
+                space?.id,
+                (id, value) => writeFollow(id, value),
+                () => reload(cx),
+            );
+        })
+        .child(follow ? "Terminal" : "Space");
 }
 
 /** Links open on this computer, not on the machine that holds the repositories, so there is no `on`. */
 function openLink(url) {
-    if (!url) return;
+    if (!githubUrl(url)) return;
     const platform = window()?.platform;
     const opener = platform === "windows" ? "explorer.exe" : platform === "macos" ? "open" : "xdg-open";
     exec(opener, [url]).catch(() => {});
@@ -69,7 +111,8 @@ function openLink(url) {
 
 /** `gh` with json output: `{ data }` or `{ err, auth, net, none }`. "No pull request for this branch" is `none`. */
 async function gh(args, on) {
-    const result = await exec("gh", args, { on });
+    const shell = ghShell(args);
+    const result = await exec(shell.cmd, shell.args, { on });
     if (result.code !== 0) {
         const failure = ghError(result.stderr);
         return {
@@ -108,6 +151,7 @@ const link = (t, id, label, onClick) =>
 export default class RepoPullRequests extends View {
     init(_props, cx) {
         this.cache = loadCache();
+        this.generation = 0;
         this.tab = "main";
         this.expanded = new Set();
         this.folded = new Set();
@@ -169,8 +213,18 @@ export default class RepoPullRequests extends View {
         const { root, on } = this.where;
         const contextKey = this.contextKey;
         const tab = this.tab;
+        const generation = ++this.generation;
         this.loading = true;
         this.triedAt[tab] = Date.now();
+        this.watchdogCancel = watchdog(
+            (fn) => cx.timer.after(30_000, fn),
+            () => {
+                if (!this.loading) return;
+                this.loading = false;
+                this.error = "Timed out after 20 s — check your network or sign-in.";
+                cx.notify();
+            },
+        );
         cx.spawn(async (cx) => {
             try {
                 const found = await exec("sh", ["-c", SCRIPT, "sh", root], { on });
@@ -185,12 +239,14 @@ export default class RepoPullRequests extends View {
                 else data = await this.loadWorkspace(cx, discovery, root, contextKey);
                 if (contextKey !== this.contextKey) return;
                 this.error = null;
+                if (!currentGeneration(generation, this.generation)) return;
                 this.data[tab] = data;
                 this.loadedAt[tab] = Date.now();
                 saveCache(remember(this.cache, this.cacheKey(tab), data));
             } catch (e) {
-                if (contextKey === this.contextKey) this.error = String(e?.message ?? e).split("\n")[0];
+                if (contextKey === this.contextKey) this.error = friendly(e?.message ?? e);
             } finally {
+                this.watchdogCancel?.();
                 this.loading = false;
                 cx.notify();
             }
@@ -200,8 +256,11 @@ export default class RepoPullRequests extends View {
 
     /** The pull request of one branch: `{ pr }`, `{ none }` or `{ err, auth, net }`. */
     async lookup(slug, branch, on) {
-        const reply = await gh(["pr", "view", branch, "--repo", slug, "--json", JSON_FIELDS], on);
-        if (reply.data) return { pr: shapePr(reply.data, slug) };
+        const reply = await gh(
+            ["pr", "list", "--repo", slug, "--head", branch, "--state", "open", "--limit", "1", "--json", JSON_FIELDS],
+            on,
+        );
+        if (reply.data) return reply.data[0] ? { pr: shapePr(reply.data[0], slug) } : { none: true };
         return reply.none ? { none: true } : { err: reply.err, auth: reply.auth, net: reply.net };
     }
 
@@ -271,7 +330,7 @@ export default class RepoPullRequests extends View {
         cx.notify();
         try {
             const reply = await gh(
-                ["pr", "view", pr.url, "--json", "statusCheckRollup,reviewDecision,headRefName,state"],
+                ["pr", "view", pr.url, "--json", "statusCheckRollup,reviewDecision,headRefName,state,mergeable"],
                 this.where.on,
             );
             if (!reply.data) return { message: reply.err, auth: reply.auth, net: reply.net };
@@ -315,11 +374,20 @@ export default class RepoPullRequests extends View {
         const prs = list.data.map((raw) => shapePr(raw, repo.slug));
         const inTab = here.pr && (tab !== "mine" || prs.some((p) => p.n === here.pr.n));
         const current = inTab ? here.pr : null;
+        let runs = null,
+            runsError = null;
+        if (!current && repo.branch && repo.branch !== "(detached)") {
+            const loaded = await loadRuns(gh, repo.slug, repo.branch, on);
+            runs = loaded.runs;
+            runsError = loaded.error;
+        }
         return {
             slug: repo.slug,
             branch: repo.branch,
             name: lastSegment(repo.path),
             here: current,
+            runs,
+            runsError,
             list: prs.filter((p) => p.n !== current?.n),
         };
     }
@@ -372,7 +440,7 @@ export default class RepoPullRequests extends View {
                     .text_color(pr.draft ? t.dim : t.accent)
                     .child(`#${pr.n}`),
             )
-            .child(div().flex_1().min_w(0).truncate().child(pr.title))
+            .child(div().flex_1().min_w(0).truncate().tooltip(pr.title).child(pr.title))
             .child(
                 div()
                     .flex_none()
@@ -411,14 +479,42 @@ export default class RepoPullRequests extends View {
                         .child(state),
                 ),
             )
+            .when(Boolean(pr.author), (el) => el.child(div().flex_none().text_color(t.dim).child(`@${pr.author}`)))
+            .when(pr.mergeable === "CONFLICTING", (el) =>
+                el.child(div().flex_none().text_color(t.blocked).child("conflicts")),
+            )
             .children(
                 counts.map((bucket) =>
                     div()
                         .flex_none()
                         .text_color(tint[bucket])
+                        .when(bucket === "pass", (el) =>
+                            el.tooltip(
+                                (checks ?? [])
+                                    .filter((c) => c.bucket === "pass")
+                                    .map((c) => c.name)
+                                    .join("\n"),
+                            ),
+                        )
                         .child(`${MARK[bucket]}${countOf(pr, bucket)}`),
                 ),
             )
+            .when(Boolean(checks && checks.length > 0), (el) => {
+                const text = checkSummary(checks);
+                return el.child(div().flex_none().text_color(t.muted).child(text));
+            })
+            .when(Boolean(checks?.find((c) => c.bucket === "fail")), (el) => {
+                const first = checks.find((c) => c.bucket === "fail");
+                return el.child(
+                    div()
+                        .min_w(0)
+                        .truncate()
+                        .text_color(t.blocked)
+                        .when(Boolean(first.url), (st) => st.cursor_pointer().on_click(() => openLink(first.url)))
+                        .tooltip("Failing check")
+                        .child(first.name),
+                );
+            })
             .when(checks && checks.length === 0, (el) =>
                 el.child(div().flex_none().text_color(t.dim).child("No checks")),
             )
@@ -462,7 +558,17 @@ export default class RepoPullRequests extends View {
             .child(summary)
             .children(rows)
             .when(unlisted > 0, (el) =>
-                el.child(div().pl(26).h(18).text_size(10.5).text_color(t.dim).child(`+${unlisted} more`)),
+                el.child(
+                    div()
+                        .pl(26)
+                        .h(18)
+                        .text_size(10.5)
+                        .text_color(t.dim)
+                        .cursor_pointer()
+                        .hover((st) => st.text_color(t.foreground))
+                        .on_click((_e, cx) => this.toggleChecks(pr, cx))
+                        .child(`${checkCount(unlisted)} not shown`),
+                ),
             );
     }
 
@@ -638,8 +744,50 @@ export default class RepoPullRequests extends View {
                 this.heading(t, "This branch", "here"),
                 this.prBlock(t, data.here, "here", { showBranch: false }),
             );
-        else if (data.branch && this.tab === "main")
+        else if (data.branch && this.tab === "main") {
             rows.push(this.heading(t, "This branch", "here"), this.note(t, `No PR for ${data.branch}.`));
+            rows.push(this.heading(t, "Latest CI runs", "runs"));
+            if (data.runsError) rows.push(this.note(t, `CI runs unavailable: ${data.runsError}`));
+            else if (data.runs) {
+                const runs = data.runs;
+                if (runs.length === 0) rows.push(this.note(t, "No CI runs on this branch."));
+                for (const [i, run] of runs.entries())
+                    rows.push(
+                        h_flex()
+                            .id(`run-${i}`)
+                            .h(22)
+                            .px(8)
+                            .gap(8)
+                            .items_center()
+                            .text_size(11.5)
+                            .when(Boolean(run.url), (el) =>
+                                el
+                                    .cursor_pointer()
+                                    .hover((st) => st.bg(t.hover))
+                                    .on_click(() => openLink(run.url)),
+                            )
+                            .child(
+                                div()
+                                    .w(10)
+                                    .text_color(
+                                        run.conclusion === "success" ? t.done : run.conclusion ? t.blocked : t.dim,
+                                    )
+                                    .child(run.conclusion === "success" ? "✓" : run.conclusion ? "✕" : "•"),
+                            )
+                            .child(div().flex_1().min_w(0).truncate().child(run.name))
+                            .child(
+                                div()
+                                    .text_color(t.dim)
+                                    .child(run.status || run.conclusion || ""),
+                            )
+                            .child(
+                                div()
+                                    .text_color(t.dim)
+                                    .child(run.at ? since(run.at) : ""),
+                            ),
+                    );
+            }
+        }
         rows.push(this.heading(t, this.tab === "mine" ? "Mine" : "Open", "open-list"));
         if (!data.list.length)
             rows.push(
@@ -706,6 +854,7 @@ export default class RepoPullRequests extends View {
             .child(tabChip("main", this.single ? "Open" : "Workspace"))
             .child(tabChip("mine", "Mine"))
             .child(div().flex_1().min_w(0).truncate().pl(6).text_size(11).text_color(t.dim).child(this.summaryText()))
+            .child(followButton(t, (cx) => this.load(cx)))
             .child(link(t, "prs-refresh", this.loading ? "Loading…" : "Refresh", (_e, cx) => this.load(cx)));
         return v_flex()
             .id("repo-prs")

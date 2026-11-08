@@ -132,6 +132,7 @@ export function shapePr(raw, slug) {
         branch: raw.headRefName ?? "",
         updated: raw.updatedAt ?? null,
         author: raw.author?.login ?? null,
+        mergeable: raw.mergeable ?? null,
         slug: slug ?? raw.repository?.nameWithOwner ?? null,
         checks: Array.isArray(raw.statusCheckRollup) ? checksOf(raw.statusCheckRollup) : null,
     };
@@ -198,3 +199,87 @@ export function isOnScreen(root, mod) {
         return (node.active ?? node.children?.[0]?.id) === chain[i + 1]?.id;
     });
 }
+
+/** The current branch's latest CI runs from `gh run list --json`. */
+export function shapeRuns(raw) {
+    return (raw ?? []).map((run) => ({
+        name: run.workflowName || run.name || "CI",
+        status: run.status ?? "",
+        conclusion: run.conclusion ?? "",
+        url: run.url ?? null,
+        at: run.createdAt ?? run.updatedAt ?? null,
+    }));
+}
+
+/** The latest runs reply for a branch with no PR: shaped, or null when gh failed. */
+export function branchRuns(reply) {
+    return reply?.data ? shapeRuns(reply.data) : null;
+}
+
+/** "1 check", "3 checks". */
+export const checkCount = (n) => `${n} check${n === 1 ? "" : "s"}`;
+
+/** What a check list holds, in the order that matters: "3 failing, 1 pending, 2 passed". */
+export function checkSummary(checks) {
+    const order = [
+        ["fail", "failing"],
+        ["pending", "pending"],
+        ["pass", "passed"],
+        ["skip", "skipped"],
+    ];
+    return order
+        .map(([bucket, word]) => [checks.filter((c) => c.bucket === bucket).length, word])
+        .filter(([n]) => n > 0)
+        .map(([n, word]) => `${n} ${word}`)
+        .join(", ");
+}
+
+/** Loads a branch's latest runs through a caller-supplied `gh`, with the exact argv the live panel uses. */
+export async function loadRuns(ghImpl, slug, branch, on) {
+    const reply = await ghImpl(
+        [
+            "run",
+            "list",
+            "--repo",
+            slug,
+            "--branch",
+            branch,
+            "--limit",
+            "5",
+            "--json",
+            "workflowName,status,conclusion,url,createdAt",
+        ],
+        on,
+    );
+    return { runs: reply.data ? shapeRuns(reply.data) : null, error: reply.data ? null : (reply.err ?? "gh failed") };
+}
+
+/** Wrap `gh` so it never prompts, and stops after 20 s where the machine has `timeout`. */
+export function ghShell(args) {
+    return {
+        cmd: "sh",
+        args: [
+            "-c",
+            'export GIT_TERMINAL_PROMPT=0 GH_PROMPT_DISABLED=1; if command -v timeout >/dev/null 2>&1; then exec timeout 20 gh "$@"; fi; exec gh "$@"',
+            "sh",
+            ...args,
+        ],
+    };
+}
+
+/** Only GitHub links may reach the browser. */
+export const githubUrl = (url) => (/^https:\/\/github\.com\//.test(url ?? "") ? url : null);
+
+/** Run timeout after the given scheduler unless the returned cancel is called first. */
+export function watchdog(after, timeout) {
+    let done = false;
+    after(() => {
+        if (!done) timeout();
+    });
+    return () => {
+        done = true;
+    };
+}
+
+/** A stale load may not write: only the current generation wins. */
+export const currentGeneration = (started, current) => started === current;

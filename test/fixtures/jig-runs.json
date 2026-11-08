@@ -1,0 +1,37 @@
+[
+    {
+        "conclusion": "success",
+        "createdAt": "2026-11-07T23:22:51Z",
+        "status": "completed",
+        "url": "https://github.com/ClawdBuilder/jig/actions/runs/42424987194",
+        "workflowName": "CI"
+    },
+    {
+        "conclusion": "success",
+        "createdAt": "2026-11-07T23:13:39Z",
+        "status": "completed",
+        "url": "https://github.com/ClawdBuilder/jig/actions/runs/42424272127",
+        "workflowName": "CI"
+    },
+    {
+        "conclusion": "success",
+        "createdAt": "2026-11-07T22:35:03Z",
+        "status": "completed",
+        "url": "https://github.com/ClawdBuilder/jig/actions/runs/42421293840",
+        "workflowName": "CI"
+    },
+    {
+        "conclusion": "success",
+        "createdAt": "2026-11-07T21:37:36Z",
+        "status": "completed",
+        "url": "https://github.com/ClawdBuilder/jig/actions/runs/42416752339",
+        "workflowName": "CI"
+    },
+    {
+        "conclusion": "success",
+        "createdAt": "2026-11-07T20:45:03Z",
+        "status": "completed",
+        "url": "https://github.com/ClawdBuilder/jig/actions/runs/42412537638",
+        "workflowName": "CI"
+    }
+]
