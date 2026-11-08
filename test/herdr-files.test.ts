@@ -249,7 +249,6 @@ test("the shipped config.json files name no machine, folder or palette of anyone
         networkTimeoutSeconds: 60,
         rowDetail: "compact",
         refreshSeconds: 60,
-        readTimeoutSeconds: 20,
     });
 });
 

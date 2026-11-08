@@ -4,6 +4,5 @@
     "remote": "origin",
     "networkTimeoutSeconds": 60,
     "rowDetail": "compact",
-    "refreshSeconds": 60,
-    "readTimeoutSeconds": 20
+    "refreshSeconds": 60
 }

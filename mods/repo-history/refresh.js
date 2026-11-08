@@ -5,27 +5,6 @@ export const BUSY_AFTER_MS = 400;
 export const DEBOUNCE_MS = 500;
 export const MIN_REFRESH_SECONDS = 15;
 export const DEFAULT_REFRESH_SECONDS = 60;
-export const DEFAULT_READ_TIMEOUT_SECONDS = 20;
-
-/** `readTimeoutSeconds` from a config object, at least one second. */
-export function readTimeoutSeconds(value, fallback = DEFAULT_READ_TIMEOUT_SECONDS) {
-    const wanted = typeof value === "object" && value !== null ? value.readTimeoutSeconds : value;
-    const seconds = Number(wanted);
-    return Number.isFinite(seconds) ? Math.max(1, seconds) : Math.max(1, fallback);
-}
-
-/** Races one read against its deadline; a late result can no longer be awaited after this rejects. */
-export function readDeadline(work, seconds = DEFAULT_READ_TIMEOUT_SECONDS) {
-    let timer;
-    const deadline = new Promise((_, reject) => {
-        timer = setTimeout(
-            () => reject(new Error(`Reading timed out after ${seconds} s; Refresh to try again`)),
-            seconds * 1000,
-        );
-    });
-    return Promise.race([work, deadline]).finally(() => clearTimeout(timer));
-}
-
 /** `refreshSeconds` from a config object or number, clamped to at least 15 s. */
 export function refreshSeconds(value, fallback = DEFAULT_REFRESH_SECONDS) {
     const wanted = typeof value === "object" && value !== null ? value.refreshSeconds : value;
@@ -38,34 +17,37 @@ export class RefreshState {
         this.loading = false;
         this.busy = false;
         this.again = false;
-        this.timer = undefined;
+        this.user = false;
+        this.first = false;
+        this.startedAt = 0;
     }
 
     /** Starts a run, or queues one when a user clicked during a run. `first` is a panel with no rows yet, which may show
      *  its loading state at once. Returns whether this call started the run. */
-    start({ user = false, first = false, notify = () => {} } = {}) {
+    start({ user = false, first = false } = {}) {
         if (this.loading) {
             if (user) this.again = true;
             return false;
         }
         this.loading = true;
+        this.user = user;
+        this.first = first;
+        this.startedAt = Date.now();
         this.busy = first;
-        if (user && !first) {
-            this.timer = setTimeout(() => {
-                this.timer = undefined;
-                if (!this.loading) return;
-                this.busy = true;
-                notify();
-            }, BUSY_AFTER_MS);
-        }
         return true;
+    }
+
+    /** Called from a panel's existing tick. A user-started run shows busy after BUSY_AFTER_MS; automatic runs never do. */
+    tick(now = Date.now(), notify = () => {}) {
+        if (!this.loading || !this.user || this.busy || this.first) return;
+        if (now - this.startedAt < BUSY_AFTER_MS) return;
+        this.busy = true;
+        notify();
     }
 
     /** Ends a run and answers whether a user click queued one more. The caller starts that run; this helper never starts
      *  work on its own. */
     finish() {
-        if (this.timer !== undefined) clearTimeout(this.timer);
-        this.timer = undefined;
         this.loading = false;
         this.busy = false;
         const again = this.again;

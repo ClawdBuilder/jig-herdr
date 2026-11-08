@@ -42,15 +42,7 @@ import {
     since,
     terminalsInsideWorktree,
 } from "./lib.js";
-import {
-    focusRegained,
-    RefreshScheduler,
-    RefreshState,
-    readDeadline,
-    readTimeoutSeconds,
-    refreshSeconds,
-    terminalFinished,
-} from "./refresh.js";
+import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds, terminalFinished } from "./refresh.js";
 
 const onScreen = () => isOnScreen(layout(), "repo-worktrees");
 const WORKING = new Set(["working", "blocked"]);
@@ -156,7 +148,6 @@ export default class RepoWorktrees extends View {
         this.refreshState = new RefreshState();
         this.configAt = 0;
         this.refreshScheduler = new RefreshScheduler({ seconds: refreshSeconds(this.config) });
-        this.readTimeoutSeconds = readTimeoutSeconds(this.config);
         this.readGeneration = 0;
         this.seen = false;
         this.lastTerminals = terminals();
@@ -194,6 +185,7 @@ export default class RepoWorktrees extends View {
     /** Runs every second and is cheap; the git work only starts while the panel is on screen. Not called from `render`,
      * since loading notifies and `render` may not. */
     tick(cx) {
+        this.refreshState.tick(Date.now(), () => cx.notify());
         const where = whereToLook();
         if (JSON.stringify([where.root, where.on]) !== this.contextKey) {
             this.enter(where);
@@ -228,7 +220,6 @@ export default class RepoWorktrees extends View {
                 this.config = {};
             }
             this.refreshScheduler.setSeconds(refreshSeconds(this.config));
-            this.readTimeoutSeconds = readTimeoutSeconds(this.config);
             cx.notify();
         });
     }
@@ -244,12 +235,10 @@ export default class RepoWorktrees extends View {
         this.loading = true;
         this.triedAt = started;
         const run = ++this.readGeneration;
-        const seconds = this.readTimeoutSeconds;
         cx.spawn(async (cx) => {
-            let timedOut = false;
             try {
                 const work = (async () => {
-                    const result = await exec("timeout", [String(seconds), "sh", "-c", SCRIPT, "sh", root], { on });
+                    const result = await exec("timeout", ["20", "sh", "-c", SCRIPT, "sh", root], { on });
                     if (run !== this.readGeneration || contextKey !== this.contextKey) return;
                     if (result.code !== 0)
                         throw new Error((result.stderr || `exit ${result.code}`).trim().split("\n")[0]);
@@ -260,14 +249,12 @@ export default class RepoWorktrees extends View {
                     this.loadedAt = Date.now();
                     this.tookMs = this.loadedAt - started;
                 })();
-                await readDeadline(work, seconds);
+                await work;
             } catch (e) {
-                if (run !== this.readGeneration) return;
-                timedOut = String(e?.message ?? e).includes("Reading timed out");
-                if (timedOut) this.readGeneration++;
-                else if (contextKey === this.contextKey) this.error = friendly(e?.message ?? e);
+                if (run === this.readGeneration && contextKey === this.contextKey)
+                    this.error = friendly(e?.message ?? e);
             } finally {
-                if (run === this.readGeneration || timedOut) {
+                if (run === this.readGeneration) {
                     this.loading = false;
                     if (this.refreshState.finish()) {
                         this.triedAt = 0;
