@@ -1,55 +1,68 @@
 # jig-herdr
 
-Herdr layouts, mods and themes for [Jig](https://github.com/ClawdBuilder/jig): Work, Context, Changes, Review and Keep awake.
-It is optional; the browser review page is Jig's built-in front-end.
+Herdr panels for git work: what changed, the commit history, pull requests and CI, linked worktrees, a read-only review,
+files, and a switch that keeps the computer awake. The generic panels and the **Jig Workbench** layout work without Jig.
+The Jig layout adds the Pi session panels.
+
+**No Jig required** for Changes, History, PR & CI, Worktrees, Review, Files and Keep awake, or for the Jig Workbench layout.
+
+![The Jig Workbench: sidebar, activity bar, panels and terminal](preview.png)
+
+## With Jig
+
+The full Jig layout adds **Work** (tickets and outputs), **Context** (usage, tools and skills), the Jig tab bar and theme
+sync. Those panels read Jig's session files and its published contracts; the generic panels do not.
 
 ## Install
 
-```sh
+From this checkout, into your Herdr config folder:
+
+```bash
 node scripts/install.ts [herdr-folder]
 ```
 
-It copies `layouts/`, `mods/` and `themes/`, merges `keys.json`, and never touches your `config.json`. `--dry-run` shows
-what would happen; `--force` replaces files this script did not write. `--remove-old` deletes an old renamed mod folder
-once its config has been fully carried over; it is off by default and never deletes one with keys still missing.
+It copies `layouts/`, `mods/` and `themes/`, merges its key bindings, and leaves your `config.json` values alone.
+When an old `repo-changes`/`repo-history`/`repo-prs`/`repo-worktrees`/`repo-review`/`keep-awake`/`file-view` folder is
+present, it copies that `config.json` to the new name (old values win, an existing new value wins, defaults fill gaps) and
+keeps the old folder because the config is yours.
 
-## What it needs
+`--dry-run` shows what would happen. `--force` replaces files this script did not write, but never a `config.json`.
+`--remove-old` deletes an old renamed mod folder once its config has been fully carried over; it is off by default and
+never deletes one with keys still missing.
 
-- Jig `0.5.0` or later for the session status file (`schema: 1`), session requests (`REQUEST_SCHEMA = 1`), `jig:stage-done`
-  and the palette file.
-- Herdr, for the app. Node 22.19 or later for the installer and the tests.
+From **herdr.dev**: coming soon. The listings will be installable there; until then, use the checkout command above.
 
-The mods read Jig's published contracts (`contracts/requests.js` and `contracts/palettes.json`) from
-`@clawdbuilder/jig` 0.5.2 or later, the package's own copy; nothing here imports Jig's `src/`.
+## What each panel needs
 
-`jig-herdr` shows and comments. It never approves: approval stays with the passkey page or `y` in Pi.
+| Panel           | Needs                      | Reads and runs                                                                                                |
+| --------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Changes (Repos) | `git`, POSIX `sh`          | The focused folder's git metadata and `config.json`; stages, commits, fetches, pulls and pushes on your click |
+| History         | `git`, POSIX `sh`          | Git log, show and status; opens a diff in a terminal; no writes                                               |
+| PR & CI         | `gh` signed in, POSIX `sh` | GitHub PRs and checks through `gh`; opens links in your browser; no writes                                    |
+| Worktrees       | `git`, POSIX `sh`          | Worktree metadata; removes a ready worktree and its merged branch after a confirm; no network                 |
+| Review          | `git`, POSIX `sh`          | A repository's changed files and diffs; stages, unstages or discards a file; no commit                        |
+| Files           | POSIX `sh`                 | The focused folder; opens a file in a read-only tab at any path                                               |
+| Keep awake      | Platform sleep tool        | Runs `powershell`/`taskkill` on Windows, `caffeinate` on macOS, `systemd-inhibit` on Linux; no network        |
 
-## Panels
+`timeout` (Linux) or `gtimeout` (macOS) is used when present for 20-second command caps; without it, the command runs
+unbounded up to Herdr's own 30-second cap. Everything runs on the machine the space is on. Linux, WSL and macOS work; a
+Windows-local space without WSL has no POSIX `sh` and the git panels will not work.
 
-- **Work** — the session's tickets and outputs.
-- **Context** — usage, tools and skills; switches write a request file.
-- **Changes** — a branch's commits, files and patches; pull/push/fetch are shown, not run.
-- **Review** — read-only files and patches.
-- **Keep awake** — holds off idle sleep while agents work, with an explicit On switch.
+The panels show what is there: no approval, no merge, no comment, no write except the explicit stage, commit, discard,
+worktree-remove and fetch/pull/push actions above.
 
 ## Development
 
-```sh
+```bash
 npm ci
 npm run check
 npm test
 ```
 
-`npm run check` includes `scripts/check-commit-emails.mjs`. It checks author and committer emails in `origin/main..HEAD`
-(or the PR range) against the private word list in `JIG_SCAN_WORDS` or `~/.config/jig/scan-words.txt`; with no list, as in
-public CI, it skips.
-
-To check before pushing, opt in to the hook:
-
-```sh
-git config core.hooksPath .githooks
-```
+`npm run check` includes the commit-email guard. It checks author and committer emails against the private word list in
+`JIG_SCAN_WORDS` or `~/.config/jig/scan-words.txt`; with no list, as in public CI, it skips.
 
 ## Licence
 
-MIT. The `tabs` and `files` mods are derived from Herdr's own (Apache-2.0); their headers stay.
+MIT. `jig-files` and `jig-file-view` are derived from Herdr's `files` and `file-view` (Apache-2.0); their headers and the
+per-listing `NOTICE` stay.
