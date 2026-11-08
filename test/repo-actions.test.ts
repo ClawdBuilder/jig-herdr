@@ -598,7 +598,7 @@ test("a network command runs with no prompt, the person's own ssh command and a 
 });
 
 test("network exec gives Herdr a deadline after the shell's own, including the 600 s edge", async () => {
-    const { execBudget, networkExec } = await load<Lib>("mods/jig-repos/lib.js");
+    const { execBudget, networkExec, timeoutMessage } = await load<Lib>("mods/jig-repos/lib.js");
     const calls: Array<{ args: string[]; options: any }> = [];
     const fake = async (_cmd: string, args: string[], options: any) => {
         calls.push({ args, options });
@@ -615,6 +615,10 @@ test("network exec gives Herdr a deadline after the shell's own, including the 6
         assert.equal(calls.at(-1)?.options?.on, "box");
     }
     assert.deepEqual(execBudget(600000), { shellSeconds: 595, shellTimeoutMs: 595000, herdrTimeoutMs: 600000 });
+    assert.equal(
+        timeoutMessage(600000),
+        "Timed out after 595 s — check your network or sign-in, then try in a terminal.",
+    );
 });
 
 test("the scan tells a checkout's upstream, remote and last commit, and a gone upstream", async (t) => {

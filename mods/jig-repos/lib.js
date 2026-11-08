@@ -849,7 +849,7 @@ export function execBudget(timeout = NETWORK_TIMEOUT) {
 
 /** What a stopped command says: never git's bare exit code. */
 export const timeoutMessage = (timeout = NETWORK_TIMEOUT) =>
-    `Timed out after ${timeoutSeconds(timeout)} s — check your network or sign-in, then try in a terminal.`;
+    `Timed out after ${execBudget(timeout).shellSeconds} s — check your network or sign-in, then try in a terminal.`;
 
 /** `value` as one POSIX shell word. */
 export function shQuote(value) {
