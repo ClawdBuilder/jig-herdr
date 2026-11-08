@@ -807,7 +807,7 @@ export async function commit(exec, { checkout, message }) {
 /** How long a network command may run, unless config.json says otherwise. */
 export const NETWORK_TIMEOUT = 60000;
 /** What a network command needs so it never waits for an answer. */
-export const NETWORK_ENV = { GIT_TERMINAL_PROMPT: "0" };
+export const NETWORK_ENV = { GIT_TERMINAL_PROMPT: "0", GH_PROMPT_DISABLED: "1" };
 
 /** The environment of a network command: no terminal prompt, and whatever the caller knows of the person's own (a
  * GIT_SSH_COMMAND here wins). The shell wrapper adds the BatchMode ssh command only when the machine has neither one. */

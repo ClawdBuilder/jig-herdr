@@ -7,28 +7,78 @@
 import { h_flex, v_flex } from "gpui-base";
 import { div, View } from "gpui-kit";
 import { exec, focused, layout, panes, run, setShared, shared, spaces, theme } from "herdr";
-import { isOnScreen, nameOf, parseTrees, REASON, readiness, relName, SCRIPT, since } from "./lib.js";
+import { location, readFollow, writeFollow } from "./follow.js";
+import { followReload } from "./follow-state.js";
+import {
+    cancelPrune,
+    dangerousIgnored,
+    isOnScreen,
+    liveReady,
+    nameOf,
+    parseTrees,
+    parseWorktreeListZ,
+    pruneAll,
+    prunePlan,
+    REASON,
+    readiness,
+    relName,
+    removalRefusal,
+    SCRIPT,
+    sameOrInside,
+    since,
+    terminalsInsideWorktree,
+} from "./lib.js";
 
 const onScreen = () => isOnScreen(layout(), "repo-worktrees");
 const REUSE_MS = 30000; // a load is reused this long; Refresh asks again
 const WORKING = new Set(["working", "blocked"]);
 
+/** Git's raw failures as a line a person can act on. */
+function friendly(text) {
+    const line = String(text ?? "")
+        .trim()
+        .split("\n")[0];
+    if (/not a git repository/i.test(line)) return "Not a git repository here — cd into one.";
+    return line;
+}
+
 /** The folder to look at and the machine it is on: the shown space's folder, else where its first terminal is. */
 function whereToLook() {
     const space = spaces().find((s) => s.active);
-    const here = focused();
-    let machine = space?.machine ?? null;
-    if (here?.pane === null) machine = here.terminal?.includes("/") ? here.terminal.split("/")[0] : null;
-    const tabIds = new Set((space?.tabs ?? []).map((tab) => tab.id));
-    const firstCwd = panes().find((p) => tabIds.has(p.tab) && p.cwd)?.cwd;
-    const focusedPane = here?.pane ? panes().find((p) => p.pane === here.pane) : null;
-    return { root: space?.folder || firstCwd || focusedPane?.cwd || here?.cwd, on: machine };
+    return location(readFollow(space?.id));
+}
+
+/** The Terminal/Space switch: what this panel follows, per space. */
+function followButton(t, reload) {
+    const space = spaces().find((s) => s.active);
+    const follow = readFollow(space?.id);
+    return div()
+        .id("follow")
+        .ml(4)
+        .text_size(11)
+        .text_color(t.muted)
+        .cursor_pointer()
+        .hover((st) => st.text_color(t.foreground))
+        .tooltip(
+            follow
+                ? "Following the focused terminal — click to use the space folder"
+                : "Using the space folder — click to follow the focused terminal",
+        )
+        .on_click((_e, cx) => {
+            followReload(
+                follow,
+                space?.id,
+                (id, value) => writeFollow(id, value),
+                () => reload(cx),
+            );
+        })
+        .child(follow ? "Terminal" : "Space");
 }
 
 /** Who is at a checkout: the space that was opened on it, any other space with a terminal in it, and whether an agent
  * there is working or blocked (a pane's own state, or its space's when the space was made there). */
 function whoIsAt(path, machine) {
-    const within = (cwd) => Boolean(cwd) && (cwd === path || cwd.startsWith(`${path}/`));
+    const within = (cwd) => sameOrInside(path, cwd);
     const spacesHere = spaces().filter((s) => (s.machine ?? null) === (machine ?? null));
     const hasTerminalThere = (space) =>
         space.tabs.some((tab) => panes().some((p) => p.tab === tab.id && within(p.cwd)));
@@ -69,11 +119,13 @@ function button(t, id, label, onClick, danger = false) {
 
 export default class RepoWorktrees extends View {
     init(_props, cx) {
+        this.generation = (this.generation ?? 0) + 1;
         this.trees = null;
         this.single = false;
         this.error = null;
         this.tookMs = null;
         this.confirming = null; // the path whose Remove is waiting for a second click
+        this.menu = null; // the row whose ⋯ actions are open
         this.removing = null; // the path being removed now
         this.notices = [];
         this.rowErrors = {};
@@ -87,9 +139,12 @@ export default class RepoWorktrees extends View {
     enter(where) {
         this.where = where;
         this.contextKey = JSON.stringify([where.root, where.on]);
+        this.generation = (this.generation ?? 0) + 1;
         this.trees = null;
         this.error = null;
         this.confirming = null;
+        this.pruning = null;
+        this.menu = null;
         this.rowErrors = {};
         this.loadedAt = 0;
         this.triedAt = 0;
@@ -114,6 +169,7 @@ export default class RepoWorktrees extends View {
         const { root, on } = this.where;
         const contextKey = this.contextKey;
         const started = Date.now();
+        const generation = ++this.generation;
         this.loading = true;
         this.triedAt = started;
         cx.spawn(async (cx) => {
@@ -128,7 +184,7 @@ export default class RepoWorktrees extends View {
                 this.loadedAt = Date.now();
                 this.tookMs = this.loadedAt - started;
             } catch (e) {
-                if (contextKey === this.contextKey) this.error = String(e?.message ?? e).split("\n")[0];
+                if (contextKey === this.contextKey) this.error = friendly(e?.message ?? e);
             } finally {
                 this.loading = false;
                 cx.notify();
@@ -165,23 +221,60 @@ export default class RepoWorktrees extends View {
     }
 
     /** Removes one worktree. The list may be 30 seconds old, so everything that makes it safe is checked again first. */
-    remove(cx, tree) {
-        if (this.removing) return;
+    remove(cx, tree, onDone, ctx) {
+        if (this.removing) {
+            if (onDone) onDone("A removal was already running; the rest were not removed.");
+            return;
+        }
         this.removing = tree.path;
         this.confirming = null;
         delete this.rowErrors[tree.path];
-        const { on } = this.where;
-        const contextKey = this.contextKey;
+        const on = ctx?.on ?? this.where.on;
+        const contextKey = ctx?.contextKey ?? this.contextKey;
         cx.spawn(async (cx) => {
             try {
                 const git = (args, cwd) => exec("git", args, { cwd, on });
-                const status = await git(["--no-optional-locks", "status", "--porcelain"], tree.path);
-                if (status.code !== 0 || status.stdout.trim())
-                    throw new Error("It has uncommitted changes now. Nothing was removed.");
+                const cwds = panes().map((p) => p.cwd);
+                if (
+                    await terminalsInsideWorktree(
+                        (cmd, args, opts) => exec(cmd, args, { ...opts, on }),
+                        tree.path,
+                        cwds,
+                    )
+                )
+                    throw new Error("A terminal is inside this worktree. Nothing was removed.");
+                const list = await git(["worktree", "list", "--porcelain", "-z"], tree.main);
+                const refusal = removalRefusal(tree, parseWorktreeListZ(list.stdout ?? ""));
+                if (list.code !== 0 || refusal)
+                    throw new Error(`${refusal ?? "the worktree list failed"}. Nothing was removed.`);
+                const status = await git(["--no-optional-locks", "status", "--porcelain", "--ignored"], tree.path);
+                const changed = (status.stdout ?? "").split("\n").filter((line) => line && !line.startsWith("!! "));
+                const ignored = dangerousIgnored(status.stdout);
+                if (status.code !== 0 || changed.length > 0 || ignored.length > 0)
+                    throw new Error(
+                        ignored.length > 0
+                            ? `It has ignored data files (${ignored.slice(0, 3).join(", ")}). Nothing was removed.`
+                            : "It has uncommitted changes now. Nothing was removed.",
+                    );
                 const ref = tree.branch || "HEAD";
-                const unpushed = await git(["rev-list", "--count", ref, "--not", "--remotes"], tree.path);
-                if (unpushed.code !== 0 || Number(unpushed.stdout.trim()) !== 0)
-                    throw new Error("It has commits on no remote now. Nothing was removed.");
+                const [ahead, unpushed, upstream, created] = await Promise.all([
+                    git(["rev-list", "--count", `${tree.base ?? "HEAD"}..${ref}`], tree.path),
+                    git(["rev-list", "--count", ref, "--not", "--remotes"], tree.path),
+                    git(["for-each-ref", "--format=%(upstream:short)", `refs/heads/${ref}`], tree.path),
+                    git(["reflog", "show", "--format=%H", ref], tree.path),
+                ]);
+                const live = parseWorktreeListZ(list.stdout ?? "").find((entry) => entry.path === tree.path);
+                const facts = {
+                    ...tree,
+                    locked: Boolean(live?.locked),
+                    branch: live?.branch ?? tree.branch,
+                    head: live?.head?.slice(0, 8) ?? tree.head,
+                    baseAhead: ahead.code === 0 ? Number(ahead.stdout.trim()) : null,
+                    unpushed: unpushed.code === 0 ? Number(unpushed.stdout.trim()) : null,
+                    upstream: (upstream.stdout ?? "").trim(),
+                    created: (created.stdout ?? "").trim().split("\n").pop() || null,
+                };
+                if (!liveReady(tree, facts)) throw new Error("It is not ready to remove now. Nothing was removed.");
                 if (whoIsAt(tree.path, on).busy) throw new Error("An agent is working there now. Nothing was removed.");
                 // No --force: git refuses a locked worktree or one with changes.
                 const removal = await git(["worktree", "remove", tree.path], tree.main);
@@ -205,6 +298,7 @@ export default class RepoWorktrees extends View {
                 this.removing = null;
                 this.loadedAt = 0;
                 cx.notify();
+                if (typeof onDone === "function") onDone(null);
             }
         });
         cx.notify();
@@ -218,7 +312,7 @@ export default class RepoWorktrees extends View {
         if (tree.behind) facts.push(div().child(`↓${tree.behind}`));
         if (tree.dirty === null) facts.push(div().text_color(t.dim).child("status unknown"));
         else if (tree.dirty > 0) facts.push(div().text_color(t.done).child(`±${tree.dirty}`));
-        if (tree.unpushed) facts.push(div().text_color(t.blocked).child(`${tree.unpushed} unpushed`));
+        if (tree.unpushed && tree.upstream) facts.push(div().text_color(t.blocked).child(`${tree.unpushed} unpushed`));
         if (tree.gone) facts.push(div().text_color(t.dim).child("remote gone"));
         if (!tree.upstream && !tree.gone) facts.push(div().text_color(t.dim).child("no upstream"));
         if (tree.date) facts.push(div().text_color(t.dim).child(since(tree.date)));
@@ -239,6 +333,7 @@ export default class RepoWorktrees extends View {
                     .flex_1()
                     .min_w(0)
                     .truncate()
+                    .tooltip(tree.path)
                     .child(tree.branch || `(detached ${tree.head})`),
             )
             .when(dot !== null, (el) => el.child(div().flex_none().text_color(dot).child("●")))
@@ -253,7 +348,15 @@ export default class RepoWorktrees extends View {
                     .text_size(10.5)
                     .text_color(tree.ready ? t.done : t.dim)
                     .when(Boolean(tree.ready), (el) => el.bg(t.raised))
-                    .child(tree.ready ? "Ready to remove" : "In progress"),
+                    .child(
+                        tree.path === tree.main
+                            ? "main checkout"
+                            : tree.ready
+                              ? "Ready to remove"
+                              : tree.baseAhead === 0 && !tree.unpushed && !tree.upstream
+                                ? "no commits yet"
+                                : "In progress",
+                    ),
             )
             .when(canAsk, (el) =>
                 el.child(
@@ -262,7 +365,27 @@ export default class RepoWorktrees extends View {
                     }),
                 ),
             )
-            .when(inProgress, (el) => el.child(div().flex_none().text_size(11.5).text_color(t.dim).child("Removing…")));
+            .when(inProgress, (el) => el.child(div().flex_none().text_size(11.5).text_color(t.dim).child("Removing…")))
+            .child(
+                div()
+                    .id(`menu-${tree.path}`)
+                    .flex_none()
+                    .w(18)
+                    .h(18)
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(5)
+                    .cursor_pointer()
+                    .hover((st) => st.bg(t.raised).text_color(t.foreground))
+                    .tooltip("Actions")
+                    .on_click((_e, cx) => {
+                        cx.stop_propagation();
+                        this.menu = this.menu === tree.path ? null : tree.path;
+                        cx.notify();
+                    })
+                    .child("⋯"),
+            );
         const confirmText = `Remove worktree ${tree.path}? Branch ${tree.branch || "(none)"} is deleted only if fully merged.${tree.open ? " A space is open there; it stays open." : ""}`;
         return v_flex()
             .id(`wt-${tree.path}`)
@@ -276,13 +399,30 @@ export default class RepoWorktrees extends View {
             .on_click(() => this.openRow(tree))
             .tooltip(`${tree.path}\n${tree.subject || ""}`)
             .child(title)
+            .when(this.menu === tree.path, (el) =>
+                el.child(
+                    h_flex()
+                        .id(`actions-${tree.path}`)
+                        .gap(6)
+                        .pl(20)
+                        .child(button(t, `open-${tree.path}`, "Open", () => this.openRow(tree)))
+                        .when(tree.ready && tree.path !== tree.main, (row) =>
+                            row.child(
+                                button(t, `rm-${tree.path}`, "Remove", () => {
+                                    this.confirming = tree.path;
+                                    this.menu = null;
+                                }),
+                            ),
+                        ),
+                ),
+            )
             .child(
                 h_flex()
                     .gap(8)
                     .items_center()
                     .text_size(10.5)
                     .text_color(t.muted)
-                    .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(where))
+                    .child(div().flex_1().min_w(0).truncate().text_color(t.dim).tooltip(tree.path).child(where))
                     .children(this.facts(t, tree).map((fact) => fact.flex_none())),
             )
             .when(Boolean(tree.ready), (el) =>
@@ -366,6 +506,27 @@ export default class RepoWorktrees extends View {
                         .child(`${(this.tookMs / 1000).toFixed(1)}s`),
                 ),
             )
+            .child(followButton(t, (cx) => this.load(cx)))
+            .when(this.rows().filter((row) => row.ready && row.path !== row.main).length > 0, (el) =>
+                el.child(
+                    div()
+                        .id("wt-prune")
+                        .flex_none()
+                        .text_size(11)
+                        .text_color(t.dim)
+                        .cursor_pointer()
+                        .hover((st) => st.text_color(t.foreground))
+                        .on_click((_e, cx) => {
+                            this.pruning = this.rows()
+                                .filter((row) => row.ready && row.path !== row.main)
+                                .map((tree) => ({ tree, on: this.where.on, contextKey: this.contextKey }));
+                            cx.notify();
+                        })
+                        .child(
+                            `Prune merged (${this.rows().filter((row) => row.ready && row.path !== row.main).length})`,
+                        ),
+                ),
+            )
             .child(
                 div()
                     .id("wt-refresh")
@@ -377,6 +538,50 @@ export default class RepoWorktrees extends View {
                     .on_click((_e, cx) => this.load(cx))
                     .child(this.loading ? "Loading…" : "Refresh"),
             );
+        const pruneBanner = this.pruning
+            ? v_flex()
+                  .id("prune-confirm")
+                  .flex_none()
+                  .px(10)
+                  .py(8)
+                  .gap(4)
+                  .border_b(1)
+                  .border_color(t.border)
+                  .child(div().text_size(11.5).child(`Remove ${this.pruning.length} merged worktree(s)?`))
+                  .children(this.pruning.map((entry) => div().text_size(11).text_color(t.dim).child(entry.tree.path)))
+                  .child(
+                      h_flex()
+                          .gap(8)
+                          .child(
+                              button(
+                                  t,
+                                  "prune-yes",
+                                  "Prune",
+                                  (cx) => {
+                                      const list = this.pruning ?? [];
+                                      this.pruning = null;
+                                      const run = pruneAll(
+                                          list,
+                                          this.contextKey,
+                                          this.where.on,
+                                          (tree, entry) => new Promise((done) => this.remove(cx, tree, done, entry)),
+                                      );
+                                      run.then((result) => {
+                                          if (result.refused) this.error = result.refused;
+                                          cx.notify();
+                                      });
+                                  },
+                                  true,
+                              ),
+                          )
+                          .child(
+                              button(t, "prune-cancel", "Cancel", (cx) => {
+                                  this.pruning = cancelPrune();
+                                  cx.notify();
+                              }),
+                          ),
+                  )
+            : null;
         const notices = this.notices.map((notice) =>
             h_flex()
                 .id(`res-${notice.id}`)
@@ -407,6 +612,7 @@ export default class RepoWorktrees extends View {
             .text_color(t.foreground)
             .text_size(13)
             .child(header)
+            .when(Boolean(pruneBanner), (el) => el.child(pruneBanner))
             .child(
                 v_flex()
                     .id("wt-list")

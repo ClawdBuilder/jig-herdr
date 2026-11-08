@@ -1,5 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">
-  <title>Jig</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200"><title>Jig</title>
   <rect width="320" height="200" rx="10" fill="#000000"/>
   <rect width="78" height="200" rx="10" fill="#050505"/>
   <rect x="8" y="8" width="62" height="6" rx="3" fill="#C4F36B"/>

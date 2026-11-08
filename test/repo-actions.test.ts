@@ -579,7 +579,7 @@ test("a network command runs with no prompt, the person's own ssh command and a 
     );
     assert.equal(plain.options?.timeout, 30000, "config.json's timeout reaches the command");
 
-    assert.deepEqual(networkEnv({ GIT_TERMINAL_PROMPT: "1" }), { GIT_TERMINAL_PROMPT: "1" });
+    assert.deepEqual(networkEnv({ GIT_TERMINAL_PROMPT: "1" }), { GIT_TERMINAL_PROMPT: "1", GH_PROMPT_DISABLED: "1" });
     assert.equal(shQuote("it's"), `'it'\\''s'`);
     const script = wrapperScript({ GIT_TERMINAL_PROMPT: "0", "no key": "x" }, 30000);
     assert.match(script, /^export GIT_TERMINAL_PROMPT='0'$/m, "a value is quoted");

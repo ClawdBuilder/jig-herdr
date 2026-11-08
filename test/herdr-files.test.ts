@@ -1,5 +1,6 @@
 // What herdr/ holds is a layout and its mods in Herdr's sharing format, and it must stay generic and self-contained.
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
@@ -168,8 +169,11 @@ test("jig-files credits Herdr's files mod and its licence, and opens files as fi
     assert.match(text, /Copyright the Herdr authors/);
 });
 
-test("no mod ships the editor files the Herdr app writes into every mod folder", () => {
-    const found = walk(path.join(HERDR, "mods")).filter((f) => /gpui-kit\.d\.ts$|jsconfig\.json$/.test(f));
+test("no mod tracks the editor files the Herdr app writes into every mod folder", () => {
+    // They stay on disk, ignored, for the editor; only the index must not carry them.
+    const found = execFileSync("git", ["ls-files", "mods"], { cwd: HERDR, encoding: "utf8" })
+        .split("\n")
+        .filter((f) => /gpui-kit\.d\.ts$|jsconfig\.json$/.test(f));
     assert.deepEqual(found, []);
 });
 

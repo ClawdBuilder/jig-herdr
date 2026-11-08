@@ -2,7 +2,7 @@
 // git repositories made in temporary folders.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -255,17 +255,34 @@ test("repo-prs finds repositories, their branch, remote and default branch, on r
 
 // ---- Worktrees ----
 
-test("repo-worktrees is ready only when nothing would be lost: unpushed commits are never ready", async () => {
+test("repo-worktrees is ready only when the work is in the base and nothing is at risk", async () => {
     const { readiness } = await load<Lib>("mods/repo-worktrees/lib.js");
-    const clean = { locked: false, dirty: 0, unpushed: 0, base: "origin/main", baseAhead: 0, gone: false };
+    const clean = {
+        path: "/w/orders-api-feature",
+        main: "/w/orders-api",
+        locked: false,
+        dirty: 0,
+        unpushed: 1,
+        created: "a".repeat(40),
+        head: "bbb",
+        upstream: "",
+        base: "origin/main",
+        baseAhead: 0,
+        gone: false,
+    };
     assert.equal(readiness(clean, false), "in base");
-    assert.equal(readiness({ ...clean, baseAhead: 3, gone: true }, false), "upstream gone");
+    assert.equal(readiness({ ...clean, baseAhead: 3, gone: true, unpushed: 0 }, false), "upstream gone");
     assert.equal(
         readiness({ ...clean, baseAhead: 3 }, false),
         null,
         "work not in base and the remote branch still there",
     );
-    assert.equal(readiness({ ...clean, unpushed: 1 }, false), null, "a commit on no remote");
+    assert.equal(readiness({ ...clean, unpushed: 25 }, false), "in base", "merged locally, no upstream needed");
+    assert.equal(
+        readiness({ ...clean, unpushed: 0, main: clean.path }, false),
+        null,
+        "the main checkout is not removable",
+    );
     assert.equal(
         readiness({ ...clean, baseAhead: 3, gone: true, unpushed: 2 }, false),
         null,
@@ -301,6 +318,7 @@ test("repo-worktrees reads the script's lines, keeping what git could not tell a
             "0",
             "origin/main",
             "2026-01-02T03:04:05+00:00",
+            "abc12345",
             "fix: a\tb",
         ),
         line("/w/orders-api", "/w/orders-api-gone", "", "def67890", "1", "?", "", "", "", "", "1", "?", "", "", ""),
@@ -382,9 +400,10 @@ test("repo-worktrees tells ready from in-progress worktrees on real repositories
         "feature/merged",
         "feature/pushed",
         "feature/wip",
+        "main",
     ]);
     const ready = (branch: string) => readiness(byBranch[branch], false);
-    assert.equal(ready("feature/merged"), "in base");
+    assert.equal(ready("feature/merged"), null, "a fresh branch with no commits of its own is not ready");
     assert.equal(ready("feature/gone"), "upstream gone");
     assert.equal(ready("feature/wip"), null);
     assert.equal(byBranch["feature/wip"].unpushed, 1);
@@ -401,7 +420,7 @@ test("repo-worktrees tells ready from in-progress worktrees on real repositories
     // Inside a worktree, the same repository's worktrees are read, and the result says it was a single repository.
     const inside = parseTrees(runScript(SCRIPT, wip));
     assert.equal(inside.single, true);
-    assert.equal(inside.trees.length, 6);
+    assert.equal(inside.trees.length, 7);
 });
 
 // ---- History ----
@@ -591,9 +610,9 @@ test("repo-history reads a commit's message and its files, binary ones with no c
     );
     assert.equal(detail.body, "Body line one.\nBody line two.");
     assert.deepEqual(detail.files, [
-        { path: "src/a.ts", add: 3, del: 1 },
-        { path: "logo.png", add: null, del: null },
-        { path: "dir/with\ttab.md", add: 0, del: 2 },
+        { path: "src/a.ts", oldPath: null, binary: false, add: 3, del: 1 },
+        { path: "logo.png", oldPath: null, binary: true, add: null, del: null },
+        { path: "dir/with\ttab.md", oldPath: null, binary: false, add: 0, del: 2 },
     ]);
     assert.deepEqual(parseCommitDetail("only a subject\n\u001e"), { body: "", files: [] });
 
@@ -603,7 +622,7 @@ test("repo-history reads a commit's message and its files, binary ones with no c
     commitFile(dir, "src.txt", "feat: add src\n\nWhy it matters.");
     const real = parseCommitDetail(git(dir, "show", "--numstat", "--format=%B%x1e", "HEAD"));
     assert.equal(real.body, "Why it matters.");
-    assert.deepEqual(real.files, [{ path: "src.txt", add: 1, del: 0 }]);
+    assert.deepEqual(real.files, [{ path: "src.txt", oldPath: null, binary: false, add: 1, del: 0 }]);
 });
 
 test("repo-history filters commits by message, author, hash or branch name", async () => {
@@ -636,4 +655,464 @@ test("repo-history finds repos and worktrees by folder name or branch, for a fil
     );
     assert.equal(matchRepos(repos, "/w", "").length, 3);
     assert.equal(matchRepos(repos, "/w", "nothing").length, 0);
+});
+
+test("repo-prs keeps the author and merge conflicts from gh json", async () => {
+    const { shapePr } = await load<{ shapePr: (raw: unknown, slug: string) => Record<string, unknown> }>(
+        "mods/repo-prs/lib.js",
+    );
+    const pr = shapePr(
+        { number: 1, title: "x", url: "u", author: { login: "demo" }, mergeable: "CONFLICTING" },
+        "demo/repo",
+    );
+    assert.equal(pr.author, "demo");
+    assert.equal(pr.mergeable, "CONFLICTING");
+});
+
+test("repo-prs reads the public Jig fixture in one list shape, failing checks first", async () => {
+    const { shapePr } = await load<{ shapePr: (raw: unknown, slug: string) => Record<string, any> }>(
+        "mods/repo-prs/lib.js",
+    );
+    const fixture = JSON.parse(readFileSync("test/fixtures/jig-prs.json", "utf8")) as unknown[];
+    const pr = shapePr(fixture[0] as unknown, "ClawdBuilder/jig");
+    assert.equal(typeof pr.n, "number");
+    assert.ok(pr.author);
+    assert.ok(["", "APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED"].includes(pr.review));
+    assert.ok(["MERGEABLE", "CONFLICTING", "UNKNOWN"].includes(pr.mergeable));
+    const buckets = (pr.checks ?? []).map((c: { bucket: string }) => c.bucket);
+    const first = buckets.findIndex((b: string) => b === "fail");
+    if (first >= 0) assert.equal(first, 0, "a failing check is first");
+});
+
+test("repo-prs shapes the branch's latest CI runs", async () => {
+    const { shapeRuns } = await load<{ shapeRuns: (raw: unknown) => Array<Record<string, any>> }>(
+        "mods/repo-prs/lib.js",
+    );
+    const runs = shapeRuns(JSON.parse(readFileSync("test/fixtures/jig-runs.json", "utf8")));
+    assert.ok(runs.length > 0);
+    for (const run of runs) {
+        assert.ok(run.name);
+        assert.ok("status" in run);
+        assert.ok("conclusion" in run);
+        assert.ok("url" in run);
+    }
+});
+
+test("repo-prs turns gh errors into one actionable line", async () => {
+    const { ghError } = await load<{ ghError: (text: string) => Record<string, unknown> }>("mods/repo-prs/lib.js");
+    assert.match(String(ghError("gh: not logged in").message), /not logged in/);
+    assert.equal(ghError("gh: not logged in").auth, true);
+    assert.match(String(ghError("dial tcp: connection refused").message), /Network error/);
+    assert.match(String(ghError("something odd").message), /something odd/);
+});
+
+test("repo-prs orders a failing check first and shapes a no-PR branch's runs", async () => {
+    const { checksOf, branchRuns } = await load<{
+        checksOf: (rollup: unknown[]) => Array<{ bucket: string }>;
+        branchRuns: (reply: unknown) => Array<Record<string, unknown>> | null;
+    }>("mods/repo-prs/lib.js");
+    const checks = checksOf([
+        { name: "ok", conclusion: "SUCCESS" },
+        { name: "bad", conclusion: "FAILURE", detailsUrl: "https://example.test/1" },
+        { name: "wait", status: "IN_PROGRESS" },
+    ]);
+    assert.deepEqual(
+        checks.map((c) => c.bucket),
+        ["fail", "pending", "pass"],
+    );
+    const runs = branchRuns({ data: JSON.parse(readFileSync("test/fixtures/jig-runs.json", "utf8")) });
+    assert.ok((runs ?? []).length > 0);
+    assert.equal(branchRuns({ err: "no" }), null);
+});
+
+test("repo-history reads parents, renames, binaries, branches and caps lanes for a 300 px row", async (t) => {
+    const { parseCommitDetail, parseLog, parseBranches, laneColumns } = await load<Lib>("mods/repo-history/lib.js");
+    const root = scratch(t);
+    const dir = repo(root, "orders-api");
+    commitFile(dir, "old-name.txt", "one");
+    git(dir, "mv", "old-name.txt", "new-name.txt");
+    git(dir, "commit", "-qm", "refactor: rename");
+    writeFileSync(path.join(dir, "logo.bin"), Buffer.from([0, 1, 2]));
+    git(dir, "add", ".");
+    git(dir, "commit", "-qm", "chore: binary");
+    git(dir, "checkout", "-qb", "side");
+    commitFile(dir, "side.txt", "side");
+    git(dir, "checkout", "-q", "main");
+    commitFile(dir, "main.txt", "main");
+    git(dir, "merge", "-q", "--no-ff", "side", "-m", "merge: side");
+
+    const log = parseLog(git(dir, "log", "--decorate=full", "--format=%H%x1f%P%x1f%an%x1f%aI%x1f%D%x1f%s"));
+    assert.equal(log[0].parents.length, 2, "the merge has two parents");
+    const renameCommit = git(dir, "log", "--format=%H", "--grep=refactor: rename", "-1").trim();
+    const renamed = parseCommitDetail(git(dir, "show", "--numstat", "--find-renames", "--format=%B%x1e", renameCommit));
+    assert.equal(renamed.files[0].oldPath, "old-name.txt");
+    assert.equal(renamed.files[0].path, "new-name.txt");
+    const binaryCommit = git(dir, "log", "--format=%H", "--grep=chore: binary", "-1").trim();
+    const binary = parseCommitDetail(git(dir, "show", "--numstat", "--format=%B%x1e", binaryCommit));
+    assert.equal(binary.files[0].binary, true);
+    const branches = parseBranches("main\trefs/heads/main\norigin/main\trefs/remotes/origin/main\n");
+    assert.deepEqual(
+        branches.map((b: { remote: boolean }) => b.remote),
+        [false, true],
+    );
+    assert.equal(laneColumns(10), 4, "capped so the subject keeps 60%");
+    assert.equal(laneColumns(2), 2);
+});
+
+test("repo-history filters branches, local first, with the current one marked", async () => {
+    const { filterBranches } = await load<Lib>("mods/repo-history/lib.js");
+    const list = [
+        { name: "origin/main", remote: true },
+        { name: "main", remote: false },
+        { name: "feature/a", remote: false },
+    ];
+    assert.deepEqual(
+        filterBranches(list, "a", "main").map((b: { name: string; current: boolean }) => [b.name, b.current]),
+        [
+            ["main", true],
+            ["feature/a", false],
+            ["origin/main", false],
+        ],
+    );
+    assert.equal(filterBranches(list, "", "main")[0].name, "main");
+});
+
+test("repo-worktrees lists prune candidates and row actions without the main checkout", async () => {
+    const { pruneCandidates, rowActions } = await load<Lib>("mods/repo-worktrees/lib.js");
+    const rows = [
+        { path: "/w/main", main: "/w/main", ready: true },
+        { path: "/w/a", main: "/w/main", ready: true },
+        { path: "/w/b", main: "/w/main", ready: false },
+    ];
+    assert.deepEqual(
+        pruneCandidates(rows).map((r: { path: string }) => r.path),
+        ["/w/a"],
+    );
+    assert.deepEqual(rowActions({ open: false, ready: true, path: "/w/a", main: "/w/a" }), ["Open"]);
+    assert.deepEqual(rowActions({ open: true, ready: true, path: "/w/a", main: "/w/main" }), ["Remove"]);
+});
+
+test("repo-prs counts checks in words and singular", async () => {
+    const { checkCount, checkSummary } = await load<Lib>("mods/repo-prs/lib.js");
+    assert.equal(checkCount(1), "1 check");
+    assert.equal(checkCount(3), "3 checks");
+    const checks = [
+        { bucket: "fail" },
+        { bucket: "fail" },
+        { bucket: "pending" },
+        { bucket: "pass" },
+        { bucket: "pass" },
+    ];
+    assert.equal(checkSummary(checks), "2 failing, 1 pending, 2 passed");
+    assert.equal(checkSummary([]), "");
+});
+
+test("repo-prs loads a no-PR branch's runs with --repo and keeps gh's error", async () => {
+    const { loadRuns } = await load<Lib>("mods/repo-prs/lib.js");
+    let seen: string[] = [];
+    const ok = await loadRuns(
+        async (args: string[]) => {
+            seen = args;
+            return { data: JSON.parse(readFileSync("test/fixtures/jig-runs.json", "utf8")) };
+        },
+        "ClawdBuilder/jig",
+        "main",
+        null,
+    );
+    assert.deepEqual(seen.slice(0, 5), ["run", "list", "--repo", "ClawdBuilder/jig", "--branch"]);
+    assert.ok((ok.runs ?? []).length > 0);
+    assert.equal(ok.error, null);
+    const bad = await loadRuns(async () => ({ err: "gh is not logged in on this machine" }), "o/r", "main", null);
+    assert.equal(bad.runs, null);
+    assert.match(String(bad.error), /not logged in/);
+});
+
+test("repo-history's branch header handler toggles the list", async () => {
+    const { toggleBranchPicker } = await load<Lib>("mods/repo-history/lib.js");
+    assert.equal(toggleBranchPicker(false), true);
+    assert.equal(toggleBranchPicker(true), false);
+});
+
+test("repo-worktrees refuses ignored data files but allows build output", async () => {
+    const { dangerousIgnored } = await load<Lib>("mods/repo-worktrees/lib.js");
+    assert.deepEqual(dangerousIgnored("!! .env\n!! local/config.json\n!! node_modules/x\n!! dist/y\n"), [
+        ".env",
+        "local/config.json",
+    ]);
+});
+
+test("repo-prs wraps gh with no prompts and a timeout", async () => {
+    const { ghShell } = await load<Lib>("mods/repo-prs/lib.js");
+    const shell = ghShell(["pr", "list"]);
+    assert.equal(shell.cmd, "sh");
+    assert.match(shell.args[1], /GIT_TERMINAL_PROMPT=0/);
+    assert.match(shell.args[1], /GH_PROMPT_DISABLED=1/);
+    assert.match(shell.args[1], /timeout 20 gh/);
+    assert.deepEqual(shell.args.slice(2), ["sh", "pr", "list"]);
+});
+
+test("repo-prs opens only GitHub links", async () => {
+    const { githubUrl } = await load<Lib>("mods/repo-prs/lib.js");
+    assert.equal(githubUrl("https://github.com/a/b/pull/1"), "https://github.com/a/b/pull/1");
+    assert.equal(githubUrl("https://example.com/x"), null);
+    assert.equal(githubUrl("javascript:alert(1)"), null);
+});
+
+test("the follow-state copies agree and pickRoot follows the focused terminal first", async () => {
+    const root = new URL("../mods/", import.meta.url);
+    const source = readFileSync(new URL("repo-changes/follow-state.js", root), "utf8");
+    for (const mod of ["repo-history", "repo-prs", "repo-worktrees"])
+        assert.equal(readFileSync(new URL(`${mod}/follow-state.js`, root), "utf8"), source, mod);
+    const { pickRoot } = await load<Lib>("mods/repo-changes/follow-state.js");
+    assert.equal(pickRoot({ follow: true, focusedCwd: "/f", spaceFolder: "/s", first: "/1" }), "/f");
+    assert.equal(pickRoot({ follow: false, focusedCwd: "/f", spaceFolder: "/s", first: "/1" }), "/s");
+    assert.equal(pickRoot({ follow: true, focusedCwd: null, spaceFolder: null, first: "/1" }), "/1");
+    assert.equal(pickRoot({ follow: true }), null);
+});
+
+test("repo-worktrees parses -z worktree lists with spaces and tabs, and refuses a changed row", async () => {
+    const { parseWorktreeListZ, removalRefusal } = await load<Lib>("mods/repo-worktrees/lib.js");
+    const z =
+        "worktree /w/main\0HEAD abc\0branch refs/heads/main\0\0worktree /w/a b\tc\0HEAD def\0branch refs/heads/f\0\0";
+    const entries = parseWorktreeListZ(z);
+    assert.deepEqual(
+        entries.map((e: { path: string }) => e.path),
+        ["/w/main", "/w/a b\tc"],
+    );
+    const row = { path: "/w/a b\tc", main: "/w/main", branch: "f", head: "def" };
+    assert.equal(removalRefusal(row, entries), null);
+    assert.match(String(removalRefusal({ ...row, branch: "g" }, entries)), /branch changed/);
+    assert.match(String(removalRefusal({ ...row, main: row.path }, entries)), /main checkout/);
+    entries[1].locked = true;
+    assert.match(String(removalRefusal(row, entries)), /locked/);
+});
+
+test("prune plan removes two in order, refuses a stale banner and cancel runs nothing", async () => {
+    const { prunePlan, cancelPrune } = await load<Lib>("mods/repo-worktrees/lib.js");
+    const entries = [
+        { tree: { path: "/w/a" }, on: "wsl", contextKey: "ctx" },
+        { tree: { path: "/w/b" }, on: "wsl", contextKey: "ctx" },
+    ];
+    assert.deepEqual(
+        prunePlan(entries, "ctx", "wsl").list.map((e: { tree: { path: string } }) => e.tree.path),
+        ["/w/a", "/w/b"],
+    );
+    assert.match(String(prunePlan(entries, "other", "wsl").refused), /changed/);
+    let calls = 0;
+    const exec = () => calls++;
+    cancelPrune();
+    assert.equal(calls, 0);
+});
+
+test("follow reload writes the choice then reloads", async () => {
+    const { followReload } = await load<Lib>("mods/repo-worktrees/lib.js");
+    let written = null,
+        reloaded = 0;
+    followReload(
+        true,
+        "s",
+        (id, value) => (written = [id, value]),
+        () => reloaded++,
+    );
+    assert.deepEqual(written, ["s", false]);
+    assert.equal(reloaded, 1);
+});
+
+test("the watchdog times out a never-resolving task and not a finished one", async () => {
+    const { watchdog } = await load<Lib>("mods/repo-worktrees/lib.js");
+    let callback = null,
+        timedOut = 0;
+    const cancel = watchdog(
+        (fn) => (callback = fn),
+        () => timedOut++,
+    );
+    callback();
+    assert.equal(timedOut, 1, "never resolved");
+    const cancel2 = watchdog(
+        (fn) => (callback = fn),
+        () => timedOut++,
+    );
+    cancel2();
+    callback();
+    assert.equal(timedOut, 1, "finished first");
+});
+
+test("realpath comparison sees a terminal inside a symlinked folder", async (t) => {
+    const { sameOrInside } = await load<Lib>("mods/repo-worktrees/lib.js");
+    const root = scratch(t);
+    const real = path.join(root, "real");
+    const link = path.join(root, "link");
+    mkdirSync(path.join(real, "sub"), { recursive: true });
+    symlinkSync(real, link);
+    assert.equal(
+        sameOrInside(real, link, (p: string) => realpathSync(p)),
+        true,
+    );
+    assert.equal(
+        sameOrInside(real, path.join(link, "sub"), (p: string) => realpathSync(p)),
+        true,
+    );
+});
+
+test("the live panel files call the tested seams, not inline copies", () => {
+    const read = (name: string) => readFileSync(new URL(`../mods/${name}/main.js`, import.meta.url), "utf8");
+    for (const name of ["repo-history", "repo-prs", "repo-worktrees"]) assert.match(read(name), /followReload\(/, name);
+    const wt = read("repo-worktrees");
+    for (const seam of [
+        "pruneAll(",
+        "liveReady(",
+        "cancelPrune(",
+        "sameOrInside(",
+        "removalRefusal(",
+        "parseWorktreeListZ(",
+    ])
+        assert.ok(wt.includes(seam), seam);
+    assert.doesNotMatch(wt, /list\.some\(\s*\(entry\)\s*=>\s*entry\.contextKey/);
+    assert.match(read("repo-prs"), /watchdog\(/);
+});
+
+test("a fresh branch from base and one from origin/develop are not ready; a merged one is", async () => {
+    const { readiness, terminalInside } = await load<Lib>("mods/repo-worktrees/lib.js");
+    const base = {
+        path: "/w/f",
+        main: "/w/main",
+        locked: false,
+        dirty: 0,
+        baseAhead: 0,
+        base: "origin/main",
+        gone: false,
+        unpushed: 0,
+        upstream: "origin/main",
+        head: "aaaa",
+        created: "a".repeat(40),
+    };
+    assert.equal(readiness(base, false), null, "created at its tip");
+    const develop = { ...base, upstream: "origin/develop" };
+    assert.equal(readiness(develop, false), null, "upstream is not evidence of work");
+    assert.equal(readiness({ ...base, head: "bbbb", unpushed: 1 }, false), "in base", "has its own commit");
+    assert.equal(
+        terminalInside("/w/real", ["/w/link/sub"], (p) => p.replace("link", "real")),
+        true,
+    );
+});
+
+test("ignored allowlist is root-anchored and never allows .env", async () => {
+    const { dangerousIgnored } = await load<Lib>("mods/repo-worktrees/lib.js");
+    assert.deepEqual(dangerousIgnored("!! build/.env\n!! packages/a/dist/x\n!! node_modules/x\n!! build/y\n"), [
+        "build/.env",
+        "packages/a/dist/x",
+    ]);
+});
+
+test("terminals inside a worktree use realpath through a fake exec", async () => {
+    const { terminalsInsideWorktree } = await load<Lib>("mods/repo-worktrees/lib.js");
+    const exec = async (_cmd: string, args: string[]) => {
+        const path = args[3];
+        return { code: 0, stdout: path.replace("/link", "/real") };
+    };
+    assert.equal(await terminalsInsideWorktree(exec as never, "/real/wt", ["/link/wt/sub"]), true);
+    assert.equal(await terminalsInsideWorktree(exec as never, "/real/wt", ["/link/other"]), false);
+});
+
+test("a late load generation is stale", async () => {
+    const { currentGeneration } = await load<Lib>("mods/repo-worktrees/lib.js");
+    assert.equal(currentGeneration(1, 2), false);
+    assert.equal(currentGeneration(2, 2), true);
+});
+
+test("the real prune chain removes two entries in order and both kinds of ready row pass liveReady", async () => {
+    const { pruneAll, liveReady } = await load<Lib>("mods/repo-worktrees/lib.js");
+    const entries = [
+        { tree: { path: "/w/a", branch: "a" }, on: "wsl", contextKey: "ctx" },
+        { tree: { path: "/w/b", branch: "b" }, on: "wsl", contextKey: "ctx" },
+    ];
+    const order: string[] = [];
+    const result = await pruneAll(entries, "ctx", "wsl", async (tree: { path: string }) => {
+        order.push(tree.path);
+    });
+    assert.deepEqual(order, ["/w/a", "/w/b"]);
+    assert.equal(result.removed, 2);
+    const base = {
+        path: "/w/a",
+        main: "/w/main",
+        branch: "a",
+        head: "newhash",
+        created: "a".repeat(40),
+        locked: false,
+        dirty: 0,
+        unpushed: 1,
+        baseAhead: 0,
+        upstream: "",
+        base: "origin/main",
+        gone: false,
+    };
+    assert.equal(liveReady(base, {}), "in base");
+    assert.equal(liveReady({ ...base, baseAhead: 3, unpushed: 0, gone: true }, {}), "upstream gone");
+});
+
+test("an unresolved pane cwd fails closed", async () => {
+    const { terminalsInsideWorktree } = await load<Lib>("mods/repo-worktrees/lib.js");
+    const exec = async (_cmd: string, args: string[]) => ({ code: args[3] === "/real/wt" ? 0 : 1, stdout: args[3] });
+    assert.equal(await terminalsInsideWorktree(exec as never, "/real/wt", ["/missing"]), true);
+});
+
+test("pruneAll stops when the live context changes after item one", async () => {
+    const { pruneAll } = await load<Lib>("mods/repo-worktrees/lib.js");
+    const entries = [
+        { tree: { path: "/w/a" }, on: "wsl", contextKey: "ctx1" },
+        { tree: { path: "/w/b" }, on: "wsl", contextKey: "ctx1" },
+    ];
+    let key = "ctx1";
+    const removed: string[] = [];
+    const result = await pruneAll(
+        entries,
+        () => key,
+        () => "wsl",
+        async (tree: { path: string }) => {
+            removed.push(tree.path);
+            key = "ctx2";
+            return null;
+        },
+    );
+    assert.deepEqual(removed, ["/w/a"]);
+    assert.match(String(result.refused), /changed/);
+});
+
+test("pruneAll reports a removal already running", async () => {
+    const { pruneAll } = await load<Lib>("mods/repo-worktrees/lib.js");
+    const result = await pruneAll(
+        [{ tree: { path: "/w/a" }, on: "wsl", contextKey: "ctx" }],
+        "ctx",
+        "wsl",
+        async () => "A removal was already running; the rest were not removed.",
+    );
+    assert.equal(result.removed, 0);
+    assert.match(String(result.refused), /already running/);
+});
+
+test("the real worktree scan keeps a path, branch, date, creation and a subject with a space", async (t) => {
+    const { SCRIPT, parseTrees } = await load<Lib>("mods/repo-worktrees/lib.js");
+    const root = scratch(t);
+    const origin = path.join(root, "origin.git");
+    git(root, "init", "-q", "--bare", "-b", "main", origin);
+    const seed = repo(root, "seed");
+    git(seed, "remote", "add", "origin", origin);
+    git(seed, "push", "-q", "origin", "main");
+    git(root, "clone", "-q", origin, "orders-api");
+    const main = path.join(root, "orders-api");
+    const wt = path.join(root, "orders-extra");
+    git(main, "worktree", "add", "-q", "-b", "feature/extra", wt);
+    writeFileSync(path.join(wt, "extra.txt"), "x");
+    git(wt, "add", ".");
+    git(wt, "commit", "-qm", "fix: a subject with a space");
+    const tree = parseTrees(runScript(SCRIPT, root)).trees.find((row: { path: string }) => row.path === wt) as Record<
+        string,
+        any
+    >;
+    assert.ok(tree, "the extra worktree is listed");
+    assert.equal(tree.branch, "feature/extra");
+    assert.equal(tree.subject, "fix: a subject with a space");
+    assert.equal(tree.path, wt);
+    assert.match(String(tree.date), /^\d{4}-\d\d-\d\dT/);
+    assert.ok(tree.created, "the creation commit is read");
 });
