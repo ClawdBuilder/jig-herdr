@@ -135,7 +135,15 @@ export default class FileView extends View {
         cx.spawn(async (cx) => {
             try {
                 // No shell command here to guard with coreutils timeout; the read is bounded by readDeadline instead.
-                const text = await readDeadline(readTextFile(this.path, { on: this.on }), this.readTimeoutSeconds);
+                // A shell that cannot cancel its timer says so; the read ran, so try it once more without the deadline.
+                const read = () => readTextFile(this.path, { on: this.on });
+                let text;
+                try {
+                    text = await readDeadline(read(), this.readTimeoutSeconds);
+                } catch (e) {
+                    if (!String(e?.message ?? e).includes("clearTimeout")) throw e;
+                    text = await read();
+                }
                 if (seq !== this.seq) return;
                 if (text === null) {
                     this.setError("This file is no longer available");

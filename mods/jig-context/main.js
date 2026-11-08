@@ -137,7 +137,21 @@ export default class JigContext extends View {
     execD(cmd, args, opts) {
         const seconds = Math.max(1, Math.ceil(this.readTimeoutSeconds));
         const wrapper = `if command -v timeout >/dev/null 2>&1; then exec timeout ${seconds} "$@"; fi; exec "$@"`;
-        return readDeadline(exec("sh", ["-c", wrapper, "sh", cmd, ...args], opts), this.readTimeoutSeconds);
+        const once = () => exec("sh", ["-c", wrapper, "sh", cmd, ...args], opts);
+        // Some Herdr shells cannot make or cancel a timer: readDeadline can throw before it returns (or reject with that
+        // instead of a result). The command itself is read-only, so run it once more without the deadline; the app still
+        // caps every command at 30 s.
+        let bounded;
+        try {
+            bounded = readDeadline(once(), this.readTimeoutSeconds);
+        } catch (e) {
+            if (String(e?.message ?? e).includes("clearTimeout")) return once();
+            throw e;
+        }
+        return bounded.catch((e) => {
+            if (String(e?.message ?? e).includes("clearTimeout")) return once();
+            throw e;
+        });
     }
 
     machine() {
