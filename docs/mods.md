@@ -12,9 +12,10 @@ tests load.
 
 ## jig-work: the Work panel
 
-The Pi session in focus, from the status files the `jig-session` Pi plugin writes ([the format](../../plugins/jig-session/README.md#the-status-file)). A header with the folder's
-name, the model, the thinking level and `working` or `idle`, then the context and cost; a `N sessions` list to pick another
-when several run. Then four sections:
+The Pi session in focus, from the status files the `jig-session` Pi plugin writes ([the format](../../plugins/jig-session/README.md#the-status-file)). A pinned 42 px header with the folder's
+name at the left and `working` or `idle`, the `N sessions` picker and a refresh button at the right; a pinned second line
+carries the model, thinking level, context, cost and terminal. Then four sections, Outputs and Recent folded by their
+headers:
 
 - **Ticket:** the key (opens the Jira page when one is known) and title, and the workflow's stages as a line, the current one
   filled with the accent colour, the ones before it ticked.
@@ -22,43 +23,53 @@ when several run. Then four sections:
   `config.json`, else among the pull requests that involve you (never all of GitHub). For up to four, `gh pr view`
   adds the review state and the checks. Failing ones first, with the names of their failing checks. A click opens it.
 - **Outputs:** the files the session created (`A`) or changed (`M`) outside any git repository, such as ticket notes, plans
-  and reports, newest first (`No ticket files yet` when none). A click opens a `file-view` tab, or selects the one already
-  open. Files inside repositories are not listed: under the list a dim line, `N files changed in repositories → Changes`,
-  shows the side panel on the Changes section. The status file's `repo` field says which is which; a session of an older
-  `jig-session` has none, so all its outputs are listed, with the diff button on those that have changes in a repository.
-- **Recent:** the last 15 tool calls: time, tool and action, jig-core's decision (`allowed`, `asked · allowed`, `denied`) and
-  the outcome (`ok`, `error`, `blocked`, `running`).
+  and reports, newest first (`No ticket files yet` when none), each with its short folder (the last two segments; full path
+  on hover). A click opens a `file-view` tab, or selects the one already open. Files inside repositories are not listed:
+  under the list a dim line, `N files changed in repositories → Changes`, shows the side panel on the Changes section. The
+  status file's `repo` field says which is which; a session of an older `jig-session` has none, so all its outputs are
+  listed, with the diff button on those that have changes in a repository.
+- **Recent:** the last 15 tool calls: time, tool and its short target, the outcome (`ok`, `error`, `blocked`, `running`) and,
+  only when it is not jig-core's default allow, the decision (`asked · allowed`, `denied`, `declined`) in its colour. The
+  full tool, target, decision and outcome are in the row's tooltip. Five rows show, with `Show all N`.
 
 - **Which session:** the one whose terminal is focused (`focused().terminal`, `<machine>/t7` on another machine), or the agent
   shown; else the one picked; else the one updated last. A Pi whose process ended is never shown.
-- **What it runs:** on the machine (config `machine`, else the shown space's machine), one `sh` script every 2 seconds while the
-  panel is on screen, reading `<state folder>/sessions/*.json` and checking each `pid` with `kill -0`. For listed outputs of an older status file, one
-  `git rev-parse` and `git status` script when the list changes and every 30 seconds. For pull requests, `gh`, cached 5
-  minutes per ticket in the mod's `localStorage`; `Refresh` asks again.
+- **When it reads:** events first — the panel being shown, the focused session changing, the window regaining focus, the
+  followed terminal's Herdr status changing (working ↔ idle/done), its own actions and the refresh button. While the
+  followed session works, every 3 s one tiny `sh` prints only the status files' mtimes, and only the files that moved are
+  read; while it is idle, nothing but events and the `refreshSeconds` backstop (60 s by default, never under 15). The 2 s
+  full read is gone. On the machine (config `machine`, else the shown space's machine); for listed outputs of an older
+  status file one `git rev-parse`/`git status` script when the list changes and every 30 s; pull requests through `gh`,
+  cached 5 minutes per ticket in `localStorage`. Background runs are silent; a clicked refresh shows its busy state only
+  after 400 ms and queues one more click instead of blocking.
 - **Opens:** links with this computer's browser (`explorer.exe`, `open` or `xdg-open`); files with `tab.new` and `file-view`;
   diffs with `tab.new` and `repo-review`. A missing `file-view` gives a notification; a missing `repo-review` hides the button.
 - **Sets** `shared("file-view.tabs")`, the map of `<machine>|<path>` to the tab that shows it, so a second click selects it.
-- **Props:** none. Settings in `config.json`: `{ machine, stateDir, prOwners }`.
+- **Props:** none. Settings in `config.json`: `{ machine, stateDir, prOwners, refreshSeconds }`.
 
 ## jig-context: the Context panel
 
 What fills the context of the Pi session in focus, like a coding agent's context view, from the same status files
-([how it is counted](../../plugins/jig-session/docs/context.md)). The session is chosen as in Work: the focused terminal's,
-else the one updated last.
+([how it is counted](../../plugins/jig-session/docs/context.md)). The session is chosen as in Work (the focused terminal's,
+else the one picked, else the last active) and the same `N sessions` picker switches it. A pinned 42 px header holds the
+folder, picker, `Reload` and refresh; a second line carries the model, thinking, terminal and `last active`.
 
 - **The bar:** `62% used · 124k / 200k`, one bar split by share of the window, and a legend with a coloured square, the
   tokens and the percentage of each part: Messages, Tools, System prompt, Skills, Context files, Compaction buffer, Free
   space. Counted parts carry `≈` (characters / 4).
-- **The lists,** folded until clicked, remembered in the mod's `localStorage`: `TOOLS N of M on` and `SKILLS N`, each row
-  with its size and a switch; `CONTEXT FILES N` with each file's size, read only. A skill Pi never lists says `command only`.
+- **The lists,** folded until clicked and remembered **per session**: `TOOLS N of M on` and `SKILLS N`, each row with its size
+  and a switch (whose tooltip says what it does); `CONTEXT FILES N` with each file's size, read only. A skill Pi never lists
+  says `command only`. The count note is one short line, with the full explanation in its tooltip.
 - **Switches and Reload** write one request file next to the session's status file
   ([the contract](../../plugins/jig-session/README.md#requests)), with one `sh` on the machine:
   `printf %s "$2" > "$1.tmp" && mv "$1.tmp" "$1"`, the path and the JSON as arguments. A request carries every switch not
   answered yet. The answer (`lastRequest`) shows under the legend; a switch is drawn dimmed until it comes.
 - **What it never does:** approve a call, change jig-core's rules, or write anything else. A tool switched on is declared to
   the model; jig-core still decides each call.
-- **What it runs:** the Work panel's script every 2 seconds while the panel is on screen, on the Work panel's `machine`,
-  reading its `stateDir` (`mods/jig-work/config.json`).
+- **When it reads:** the same reader and events as Work (shown, focus/session change, window focus, the followed terminal's
+  status, its own actions, a manual read), the same 3 s mtime-only check while the session works and the same
+  `refreshSeconds` backstop from `mods/jig-work/config.json`; no 2 s full read. `Reload` says `Reload when idle` while the
+  agent works.
 - **Props:** none. **Files:** `main.js`, `lib.js` (a copy of Work's session finding, the bar, the request).
 
 ## jig-tabs: the tab bar
@@ -122,9 +133,13 @@ plan, the registry or the display is changed, and it needs no administrator righ
 
 ## file-view: a file in a tab
 
-A read-only view of one file with syntax colours, a line count, `Copy path` and `Refresh`. Its props come from `tab.new`:
-`{ on, path }`. It reads the file with `readTextFile` (`on` for another machine) when the tab comes into view and every 5
-seconds while shown; a binary or missing file says so.
+A read-only view of one file in a **tab** (it has no panel form: open it from Files or Work), with syntax colours, a line
+count, `Copy path`, `Refresh` and a soft-wrap toggle. Its props come from `tab.new`: `{ on, path }`. A 42 px header holds
+the name and folder (full path on hover) with the controls at the right; below 420 px the folder and line count give way so
+all the controls fit. It reads with `readTextFile` (`on` for another machine) when the tab comes back or regains focus, on
+its backstop and on Refresh — no 5 s loop; a binary or missing file says so, and a tab without props says to open one from
+Files or Work. `wrap` starts on for Markdown and text and is remembered in `localStorage`; `config.json` has
+`refreshSeconds`.
 
 A Markdown file (`.md`, `.markdown`, `.mdx`) opens rendered: headings, lists, tables, code blocks and links. `Source` in
 the header shows its text with syntax colours, and `Preview` goes back.

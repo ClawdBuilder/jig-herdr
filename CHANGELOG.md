@@ -14,6 +14,14 @@
 
 ### Changed
 
+- The Work, Context, Files and file-view panels share the Changes panel's pinned 42 px header, silent background refreshes
+  and the `refreshSeconds` backstop (60 s, never under 15). Work and Context read on events and, while the session works,
+  check only mtimes every 3 s, reading just the files that moved (the 2 s full read is gone); Files adds a filter, shows
+  deleted files greyed, reads on focus and a backstop (no 10 s timer) and watches local folders; file-view fits its header
+  at narrow widths, adds a wrap toggle and reads on events (no 5 s timer). Work's Recent rows show the tool and target with
+  the decision only when it is not the default, and the session panels have a pinned header, a session picker and
+  per-session folds.
+
 - The Changes panel (`repo-changes`) lists the folder of the focused terminal, not the space's, and has a header toggle to
   follow the terminal or the space for each space. Each checkout shows its ahead and behind and its last commit, one line per
   checkout, with worktrees folded under their repo (remembered) and the last commit only under the focused one. It can
