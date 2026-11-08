@@ -2,7 +2,7 @@
 // own tab (the jig-file-view mod, one tab per file); a second click selects that tab. Folders open in place, and files with
 // uncommitted changes carry a letter.
 //
-// Derived from the `files` mod shipped with the Herdr app (mods/files/main.js, version 0.1.11), Copyright the Herdr authors,
+// Derived from the `files` mod shipped with the Herdr app (mods/files/main.js, version 0.1.11; Herdr app 0.1.13), Copyright the Herdr authors,
 // licensed under the Apache License, Version 2.0 (the LICENSE file in the Herdr app's folder,
 // http://www.apache.org/licenses/LICENSE-2.0). Changed: a click opens the file in a `jig-file-view` tab instead of a preview
 // inside the panel, the tab bookkeeping that goes with it, and the icons, which are Herdr's own `workspace-chrome` ones.

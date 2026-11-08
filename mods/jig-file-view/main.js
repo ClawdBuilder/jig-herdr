@@ -1,3 +1,7 @@
+// Derived from the `file-view` mod shipped with the Herdr app 0.1.13 (the mod.json carries no separate version),
+// Copyright the Herdr authors, licensed under the Apache License, Version 2.0 (LICENSE-APACHE).
+// Modified by Jig Contributors: named jig-file-view, its tab map uses the jig- prefix, and its panel opens from
+// jig-files/jig-work as a full tab.
 // A full-tab, read-only viewer for one file, opened with tab.new { mod: "jig-file-view", props: { on, path } }.
 // jig-work opens one from its Outputs list; any mod may.
 //

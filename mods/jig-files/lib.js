@@ -1,3 +1,6 @@
+// Derived from the `files` mod shipped with the Herdr app 0.1.11 (Herdr app 0.1.13),
+// Copyright the Herdr authors, licensed under the Apache License, Version 2.0 (LICENSE-APACHE).
+// Modified by Jig Contributors: helpers split from the panel; the file list opens jig-file-view tabs.
 // Pure helpers of jig-files, kept apart from main.js so they can be tested outside Herdr: its config, the deleted paths
 // that git status knows but the folder listing does not, and the flat filter over a bounded find.
 
