@@ -839,7 +839,7 @@ export function networkExec(exec, on) {
 }
 
 /** What a stopped command says: never git's bare exit code. */
-export const timeoutMessage = (timeout = NETWORK_TIMEOUT, what = "Push") =>
+export const timeoutMessage = (timeout = NETWORK_TIMEOUT, what = "Command") =>
     friendlyError({ code: 124, seconds: execBudget(timeout).shellSeconds }, { what });
 
 /** `value` as one POSIX shell word. */

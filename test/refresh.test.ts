@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
     BUSY_AFTER_MS,
@@ -11,7 +11,6 @@ import {
     RefreshState,
     refreshSeconds,
     terminalFinished,
-    timedCommand,
 } from "../mods/jig-repos/refresh.js";
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -57,12 +56,6 @@ test("a click during a refresh queues exactly one more run", () => {
     assert.equal(state.finish(), false);
 });
 
-test("timedCommand runs without timeout or gtimeout", () => {
-    const [program, args] = timedCommand("/bin/echo", ["portable"]);
-    const output = execFileSync("/bin/sh", args, { encoding: "utf8", env: { PATH: "/definitely/missing" } });
-    assert.equal(output.trim(), "portable");
-});
-
 test("every panel calls the shared refresh helper, with no inline copy", () => {
     const root = new URL("../mods/", import.meta.url);
     for (const mod of ["jig-repos", "jig-history", "jig-prs", "jig-worktrees"]) {
@@ -103,12 +96,21 @@ test("every panel starts its first read from the constructor, not the timer", ()
             return false;
         }
     });
-    for (const mod of mods)
+    for (const mod of mods) {
         assert.equal(
             readFileSync(new URL(`${mod}/refresh.js`, root), "utf8"),
             source,
             `${mod}/refresh.js is the odd one out`,
         );
+        assert.match(
+            readFileSync(new URL(`${mod}/main.js`, root), "utf8"),
+            /from "\.\/refresh\.js"/,
+            `${mod}/main.js does not import its refresh copy`,
+        );
+    }
+    for (const mod of readdirSync(root))
+        if (!readFileSync(new URL(`${mod}/main.js`, root), "utf8").includes('from "./refresh.js"'))
+            assert.equal(existsSync(new URL(`${mod}/refresh.js`, root)), false, `${mod}/refresh.js is unused`);
 });
 
 test("no sweep happens without a trigger before the backstop, and the backstop sweeps once", () => {
@@ -183,6 +185,7 @@ test("run passes env, a shell timeout and a later Herdr timeout, and recognises 
         },
         "git",
         ["fetch"],
+        { env: {} },
     );
     assert.equal(rejected.code, 124);
     assert.equal(rejected.timedOut, true);
@@ -235,4 +238,26 @@ test("parseRefreshConfig has a 15 s minimum and no maximum", async () => {
     assert.equal(parseRefreshConfig('{ "refreshSeconds": 1000000 }', 60).seconds, 1000000);
     assert.equal(parseRefreshConfig("{", 60).seconds, 60);
     assert.match(parseRefreshConfig("{", 60).problems[0], /not valid JSON/);
+});
+
+test("run uses direct exec with cwd, on and a plain Herdr deadline when there is no env", async () => {
+    const { run, friendlyError } = await import("../mods/jig-repos/refresh.js");
+    const calls: Array<{ cmd: string; args: string[]; options: any }> = [];
+    const fake = async (cmd: string, args: string[], options: any) => {
+        calls.push({ cmd, args, options });
+        return { code: 0, stdout: "ok", stderr: "" };
+    };
+    const result = await run(fake, "git", ["status"], { cwd: "/repo", on: "box", seconds: 60 });
+    assert.deepEqual(calls, [{ cmd: "git", args: ["status"], options: { cwd: "/repo", on: "box", timeout: 60000 } }]);
+    assert.equal(result.cmd, "git");
+    const missing = await run(
+        async () => {
+            throw new Error("spawn git ENOENT");
+        },
+        "git",
+        ["status"],
+        { cwd: "/repo", on: "box" },
+    );
+    assert.equal(missing.code, 127);
+    assert.equal(friendlyError(missing), "git isn't installed on this machine.");
 });

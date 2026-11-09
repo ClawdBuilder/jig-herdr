@@ -1004,6 +1004,7 @@ export default class RepoHistory extends View {
             .p(6)
             .overflow_y_scrollbar()
             .when(Boolean(this.error), (el) => el.child(message(this.error)))
+            .when(Boolean(this.refreshProblem), (el) => el.child(message(this.refreshProblem, t.muted)))
             .when(waiting && Boolean(this.reposError) && !this.repo, (el) => el.child(message(this.reposError)))
             .when(waiting && !this.reposError, (el) => el.child(message(waitingText)))
             .when(Boolean(this.commits), (el) =>

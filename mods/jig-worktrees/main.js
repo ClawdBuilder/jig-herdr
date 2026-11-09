@@ -256,7 +256,7 @@ export default class RepoWorktrees extends View {
                     const result = await runCommand(exec, "sh", ["-c", SCRIPT, "sh", root], { on });
                     if (run !== this.readGeneration || contextKey !== this.contextKey) return;
                     if (result.code !== 0)
-                        throw new Error((result.stderr || `exit ${result.code}`).trim().split("\n")[0]);
+                        throw Object.assign(new Error(result.stderr || `exit ${result.code}`), result);
                     const parsed = parseTrees(result.stdout);
                     this.single = parsed.single;
                     this.trees = parsed.trees;
@@ -711,6 +711,7 @@ export default class RepoWorktrees extends View {
                     .overflow_y_scrollbar()
                     .children(notices)
                     .when(Boolean(this.error), (el) => el.child(message(this.error)))
+                    .when(Boolean(this.refreshProblem), (el) => el.child(message(this.refreshProblem, t.muted)))
                     .when(!this.error && !this.trees, (el) =>
                         el.child(message(this.where?.root ? "Reading…" : "No folder.")),
                     )

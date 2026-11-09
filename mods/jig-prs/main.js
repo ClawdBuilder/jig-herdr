@@ -28,7 +28,6 @@ import {
     countOf,
     currentGeneration,
     ghError,
-    ghShell,
     githubUrl,
     inParallel,
     isOnScreen,
@@ -134,8 +133,10 @@ function openLink(url) {
 
 /** `gh` with json output: `{ data }` or `{ err, auth, net, none }`. "No pull request for this branch" is `none`. */
 async function gh(args, on) {
-    const shell = ghShell(args);
-    const result = await runCommand(exec, shell.cmd, shell.args, { on });
+    const result = await runCommand(exec, "gh", args, {
+        on,
+        env: { GIT_TERMINAL_PROMPT: "0", GH_PROMPT_DISABLED: "1" },
+    });
     if (result.code !== 0) {
         const failure = ghError(result.stderr);
         return {
@@ -296,7 +297,7 @@ export default class RepoPullRequests extends View {
                 const work = (async () => {
                     const found = await runCommand(exec, "sh", ["-c", SCRIPT, "sh", root], { on });
                     if (run !== this.readGeneration) return;
-                    if (found.code !== 0) throw new Error((found.stderr || `exit ${found.code}`).trim().split("\n")[0]);
+                    if (found.code !== 0) throw Object.assign(new Error(found.stderr || `exit ${found.code}`), found);
                     if (contextKey !== this.contextKey) return;
                     const discovery = parseRepos(found.stdout);
                     this.single = discovery.single;
@@ -949,6 +950,18 @@ export default class RepoPullRequests extends View {
             .when(Boolean(this.error), (el) =>
                 el.child(
                     div().flex_none().px(12).py(4).truncate().text_size(11).text_color(t.blocked).child(this.error),
+                ),
+            )
+            .when(Boolean(this.refreshProblem), (el) =>
+                el.child(
+                    div()
+                        .flex_none()
+                        .px(12)
+                        .py(2)
+                        .truncate()
+                        .text_size(10.5)
+                        .text_color(t.muted)
+                        .child(this.refreshProblem),
                 ),
             )
             .child(v_flex().id("prs-list").flex_1().min_h(0).p(6).overflow_y_scrollbar().children(rows));

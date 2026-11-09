@@ -403,7 +403,7 @@ export default class RepoChanges extends View {
             try {
                 const r = await runCommand(exec, "sh", ["-c", SCRIPT, "sh", root, targets], { on });
                 if (run !== this.readGeneration || context !== this.context) return;
-                if (r.code !== 0) throw new Error((r.stderr || `exit ${r.code}`).trim().split("\n")[0]);
+                if (r.code !== 0) throw Object.assign(new Error(r.stderr || `exit ${r.code}`), r);
                 this.repos = parseRepos(r.stdout, root);
                 this.error = null;
                 this.loaded = true;
@@ -411,7 +411,7 @@ export default class RepoChanges extends View {
                 badge(this.repos.filter((x) => x.files.length).length);
             } catch (e) {
                 if (run === this.readGeneration && context === this.context)
-                    this.error = String(e?.message ?? e).split("\n")[0];
+                    this.error = friendlyError(e, { what: "Reading", follow: true });
             } finally {
                 if (run === this.readGeneration) {
                     this.loading = false;

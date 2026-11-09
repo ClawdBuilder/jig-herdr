@@ -48,7 +48,7 @@ import {
     stageFile,
     unstageFile,
 } from "./lib.js";
-import { GIT_READ, run as runCommand } from "./refresh.js";
+import { friendlyError, GIT_READ, run as runCommand } from "./refresh.js";
 
 const EVERY = 5000; // re-list the files this often while the tab is shown
 const BASE_EVERY = 60000; // find the base branch again this often even when HEAD stays (origin may have been fetched)
@@ -186,7 +186,7 @@ export default class RepoReview extends View {
                     [...READ, "-c", "core.quotePath=false", "status", "--porcelain=v1", "-b", "--no-renames"],
                     { cwd: this.repo, on: this.on },
                 );
-                if (r.code !== 0) throw new Error((r.stderr || `exit ${r.code}`).trim().split("\n")[0]);
+                if (r.code !== 0) throw Object.assign(new Error(r.stderr || `exit ${r.code}`), r);
                 const s = parseStatus(r.stdout);
                 // The base costs a dozen git calls: find it again only when HEAD moves, or after a minute (a fetch).
                 const head = s.unborn
@@ -231,7 +231,7 @@ export default class RepoReview extends View {
                 this.fixSelection();
                 await this.loadDiff();
             } catch (e) {
-                this.error = String(e?.message ?? e).split("\n")[0];
+                this.error = friendlyError(e, { what: "Reading" });
             } finally {
                 this.loading = false;
                 this.last = this.again ? 0 : Date.now();
@@ -300,7 +300,7 @@ export default class RepoReview extends View {
                 [...READ, "diff", from, "--no-ext-diff", "--no-textconv", "--no-color", "--", file.path],
                 { cwd: this.repo, on: this.on },
             );
-            if (r.code !== 0) throw new Error(r.stderr);
+            if (r.code !== 0) throw Object.assign(new Error(r.stderr), r);
             const all = r.stdout.replace(/\n$/, "").split("\n"),
                 first = all.findIndex((l) => l.startsWith("@@"));
             return first < 0 ? ["No text diff available"] : all.slice(first);
@@ -356,7 +356,7 @@ export default class RepoReview extends View {
                 cwd: this.repo,
                 on: this.on,
             });
-            if (r.code !== 0) throw new Error(r.stderr);
+            if (r.code !== 0) throw Object.assign(new Error(r.stderr), r);
             return r.stdout;
         }
         return readTextFile(`${this.repo}/${file.path}`, { on: this.on });

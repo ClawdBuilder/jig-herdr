@@ -9,14 +9,6 @@ export const DEFAULT_REFRESH_SECONDS = 60;
 /** Flags every read-only git command uses: no optional locks and no fsmonitor side effects. */
 export const GIT_READ = ["--no-optional-locks", "-c", "core.fsmonitor=false"];
 
-/** A shell argv for a command under coreutils `timeout`, GNU `gtimeout` on macOS, or with no wrapper. */
-export function timedCommand(program, args, seconds = 20) {
-    const wrapper =
-        `if command -v timeout >/dev/null 2>&1; then exec timeout ${seconds} "$@"; ` +
-        `elif command -v gtimeout >/dev/null 2>&1; then exec gtimeout ${seconds} "$@"; fi; exec "$@"`;
-    return ["sh", ["-c", wrapper, "sh", program, ...args]];
-}
-
 /** Herdr 0.1.14 caps exec at 10 minutes; keep the shell below it and the outer deadline just after, so the shell's own
  *  timeout fires first and the result can say what happened. */
 export function execBudget(timeoutMs) {
@@ -39,9 +31,33 @@ function runnerScript(env, seconds) {
     return `${exports}; if command -v timeout >/dev/null 2>&1; then exec timeout ${seconds} "$@"; elif command -v gtimeout >/dev/null 2>&1; then exec gtimeout ${seconds} "$@"; fi; exec "$@"`;
 }
 
-/** Run one command for a panel. Herdr gets a deadline after the shell's own, and a timeout is returned as code 124. */
+/** Run one command for a panel. Without env, git is run directly; with env, a shell wrapper supplies the variables and
+ *  timeout/gtimeout. A timeout is returned as code 124 and every result carries the command name. */
 export async function run(exec, cmd, args, { cwd, on, seconds = 20, env } = {}) {
     const budget = execBudget(seconds * 1000);
+    const started = Date.now();
+    if (!env) {
+        try {
+            const result = await exec(cmd, args, { cwd, on, timeout: budget.shellTimeoutMs });
+            return { ...result, cmd, seconds: budget.shellSeconds, timedOut: result.code === 124 };
+        } catch (error) {
+            const message = String(error?.message ?? error);
+            const elapsed = Date.now() - started;
+            const timedOut = elapsed >= budget.shellTimeoutMs;
+            return {
+                code: timedOut
+                    ? 124
+                    : /could not (?:start|find)|not found|no such file|ENOENT|not installed/i.test(message)
+                      ? 127
+                      : 1,
+                cmd,
+                stdout: "",
+                stderr: message,
+                seconds: budget.shellSeconds,
+                timedOut,
+            };
+        }
+    }
     const script = runnerScript(env, budget.shellSeconds);
     try {
         const result = await exec("sh", ["-c", script, "sh", cmd, ...args], {

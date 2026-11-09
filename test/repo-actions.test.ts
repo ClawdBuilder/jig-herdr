@@ -617,7 +617,7 @@ test("network exec gives Herdr a deadline after the shell's own, including the 6
     assert.deepEqual(execBudget(600000), { shellSeconds: 595, shellTimeoutMs: 595000, herdrTimeoutMs: 600000 });
     assert.equal(
         timeoutMessage(600000),
-        "Push took too long and was stopped (595 s). Check the connection, or try in a terminal.",
+        "Command took too long and was stopped (595 s). Check the connection, or try in a terminal.",
     );
 });
 
@@ -882,11 +882,11 @@ test("a timed-out command says so, never `git exited with 124`", async () => {
     assert.equal(fetched.message, timeoutMessage(NETWORK_TIMEOUT, "Fetch"));
     assert.equal(
         timeoutMessage(NETWORK_TIMEOUT),
-        "Push took too long and was stopped (60 s). Check the connection, or try in a terminal.",
+        "Command took too long and was stopped (60 s). Check the connection, or try in a terminal.",
     );
     assert.equal(
         timeoutMessage(30000),
-        "Push took too long and was stopped (30 s). Check the connection, or try in a terminal.",
+        "Command took too long and was stopped (30 s). Check the connection, or try in a terminal.",
     );
     // A pull that timed out: the same answer instead of git's exit code.
     const upstreamFake = async (_cmd: string, args: string[]) => {
@@ -897,6 +897,23 @@ test("a timed-out command says so, never `git exited with 124`", async () => {
     const pulled: Result = await pullFastForward(upstreamFake, { checkout: "/w/a" });
     assert.equal(pulled.ok, false);
     assert.equal(pulled.message, timeoutMessage(NETWORK_TIMEOUT, "Pull"));
+});
+
+test("Review's add, unstage and discard keep their exact git argv", async () => {
+    const { stageFile, unstageFile, discardFile } = await load<Record<string, any>>("mods/jig-review/lib.js");
+    const calls: string[][] = [];
+    const fake = async (_cmd: string, args: string[]) => {
+        calls.push(args);
+        if (args.includes("rev-parse")) return { code: 0, stdout: "abc\n", stderr: "" };
+        if (args.includes("status")) return { code: 0, stdout: " M file.txt\0", stderr: "" };
+        return { code: 0, stdout: "", stderr: "" };
+    };
+    await stageFile(fake, { checkout: "/w", file: "file.txt" });
+    assert.deepEqual(calls.at(-1), ["--literal-pathspecs", "add", "--", "file.txt"]);
+    await unstageFile(fake, { checkout: "/w", file: "file.txt" });
+    assert.deepEqual(calls.at(-1), ["--literal-pathspecs", "restore", "--staged", "--", "file.txt"]);
+    await discardFile(fake, { checkout: "/w", file: "file.txt", expect: "restore" });
+    assert.deepEqual(calls.at(-1), ["--literal-pathspecs", "restore", "--worktree", "--staged", "--", "file.txt"]);
 });
 
 test("one lock per checkout: the panel and its dialog share it, and it expires", async () => {
