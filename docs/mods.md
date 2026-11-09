@@ -13,7 +13,7 @@ tests load.
 ## jig-work: the Work panel
 
 The Pi session in focus, from the status files the `jig-session` Pi plugin writes ([the format](https://github.com/ClawdBuilder/jig/blob/main/plugins/jig-session/README.md#the-status-file)). A pinned 42 px header with the folder's
-name at the left and `working` or `idle`, the `N sessions` picker and a refresh button at the right; a pinned second line
+name at the left and `working` or `idle`, the `N sessions` picker and a Refresh at the right; a pinned second line
 carries the model, thinking level, context, cost and terminal. Then four sections, Outputs and Recent folded by their
 headers:
 
@@ -36,7 +36,7 @@ headers:
   shown; else the one picked; else the one updated last. A Pi whose process ended is never shown.
 - **When it reads:** a first read on mount, then events — the panel being shown (or shown again), the focused session
   changing, the window regaining focus, the followed terminal's Herdr status changing (working ↔ idle/done), its own
-  actions and the refresh button. While the followed session works, every 3 s one tiny `sh` prints only the status files'
+  actions and the Refresh. While the followed session works, every 3 s one tiny `sh` prints only the status files'
   mtimes and sizes, and only the files that moved are read; while it is idle, nothing but events and the `refreshSeconds`
   backstop (60 s by default, never under 15). Reads pass a 20 s timeout, network calls 60 s, and Herdr's deadline is 5 s later (up to 600 s on 0.1.14+). On the machine (config `machine`, else the shown space's machine); for listed outputs of an older
   status file one `git rev-parse`/`git status` script when the list changes and every 30 s; pull requests through `gh`,

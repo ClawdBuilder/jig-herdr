@@ -9,7 +9,7 @@ Read-only. From Jig (https://github.com/ClawdBuilder/jig). No Jig required.
 **What you see:**
 
 A header with the **Open**/**Workspace** and **Mine** tabs on the left where the title would be, plus the Terminal/Space
-switch and refresh icon; rows with number, title,
+switch and Refresh; rows with number, title,
 branch, author, review state, age, and a check summary (`✓` pass, `×` fail, `•` pending, `–` skip, with counts). Expanding a
 PR shows checks grouped by name and the latest run, with a link that opens in the browser. The panel marks a failing check
 on the activity bar with a count and `blocked` tone. Empty, no-git, `gh` missing, signed-out and rate-limit states are one
@@ -34,10 +34,10 @@ Programs: `gh` (`pr list`, `pr view`, `run list`/`run view`; **Mine** runs `gh s
 `timeout`/`gtimeout` when present (20 s). Network: `gh` to GitHub (read-only API); no `git fetch`. Files read: the repository's git metadata for the workspace listing and `config.json`; nothing is written to the repository.
 
 The standalone listing has `"place": "none"`, so a layout block with `content.mod = "jig-prs"` is required; with no
-activity bar there is no badge. The panel has the **Terminal / Space** switch (per space): Terminal follows the focused
+activity bar there is no badge. The panel has the **Terminal/Space** switch (per space): Terminal follows the focused
 terminal's folder, Space uses the space's folder. Built from Herdr's `mods/workspace-chrome/*.svg` icons.
 
-**Header:** all git panels use one 42 px shared header: title, optional Terminal/Space switch, and a refresh icon whose
+**Header:** all git panels use one 42 px shared header: title, optional Terminal/Space switch, and a Refresh whose
 tooltip says `Refresh · read N ago` (`Refresh` before the first read, `Reading…` while busy). Git, History, PR & CI and
 Worktrees show the switch; Review has title and Refresh only. An error line sits under the header, above the kept rows.
 

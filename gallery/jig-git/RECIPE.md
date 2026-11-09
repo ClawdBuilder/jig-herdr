@@ -16,8 +16,8 @@ changed files; a **↳ <folder>** row for each linked worktree under its main ch
 `Type to search N more on origin` when N origin-only branches exist; typing shows ranked local and origin-only matches:
 an exact name, then names that start with the text, then the last path segment, then any substring, locals first. The row Enter would pick has a
 2 px `t.accent` left edge (other rows keep their hover background), `↑↓ to choose · Enter to switch` is shown while a row is pickable, and Enter
-switches only that row. The push dialog shows the destination git will use. Empty, no-git, detached-HEAD, busy
-and problem lines are one line, never a raw git dump.
+switches only that row. The push dialog shows the destination git will use. Empty, no-git, detached-HEAD, busy and
+problem states each show one short line that says what to do next.
 
 A filter box under the header matches a checkout's name or a file's path. Checkouts are 26 px rows: a fold chevron, the
 name (a worktree indented, with its repo prefix dropped), branch chip, ahead/behind chips and changed-file count; its file
@@ -52,7 +52,7 @@ pull and push. Nothing here creates a worktree. It opens `jig-review` with `tab.
 standalone listing therefore bundles `jig-review` (see below). Icons come from Herdr's `mods/workspace-chrome/*.svg` and this
 mod's own `*.svg`.
 
-**Header:** all git panels use one 42 px shared header: title, optional Terminal/Space switch, and a refresh icon whose
+**Header:** all git panels use one 42 px shared header: title, optional Terminal/Space switch, and a Refresh whose
 tooltip says `Refresh · read N ago` (`Refresh` before the first read, `Reading…` while busy). Git, History, PR & CI and
 Worktrees show the switch; Review has title and Refresh only. An error line sits under the header, above the kept rows.
 
@@ -65,7 +65,7 @@ Windows-local without WSL has no `sh`. The
 checkout walk covers three folder levels and skips `node_modules`; a repository deeper than that is not found. Very large
 working trees are capped by the read limits. Discard is permanent and never offers an undo. `gh` is not used here. The
 standalone listing has `"place": "none"`, so a layout block with `content.mod = "jig-git"` is required. File and branch
-clicks need `jig-review`; this listing bundles it. The panel has the **Terminal / Space** switch (per space): Terminal
+clicks need `jig-review`; this listing bundles it. The panel has the **Terminal/Space** switch (per space): Terminal
 follows the focused terminal's folder, Space uses the space's folder.
 
 **Done when:**

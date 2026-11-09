@@ -33,7 +33,7 @@ Programs: `git worktree list`, `git status`, `git rev-list`, `git reflog`, `git 
 `git branch -d`, `sh` for the script, `timeout`/`gtimeout` when present (20 s). Network: none. Files read: the repository's
 `.git` metadata and the worktree folders; the only write is the explicit Remove.
 
-**Header:** all git panels use one 42 px shared header: title, optional Terminal/Space switch, and a refresh icon whose
+**Header:** all git panels use one 42 px shared header: title, optional Terminal/Space switch, and a Refresh whose
 tooltip says `Refresh · read N ago` (`Refresh` before the first read, `Reading…` while busy). Git, History, PR & CI and
 Worktrees show the switch; Review has title and Refresh only. An error line sits under the header, above the kept rows.
 
@@ -44,7 +44,7 @@ conservative: an unmerged branch, uncommitted data, a lock, a terminal or an age
 path is refused, except a top-level `node_modules/`, `dist/`, `build/` or `target/` directory; `.env*` is always refused.**
 The main checkout is never offered. There is no configured root: a row opens the space at that path (or a new tab) wherever
 the worktree is. The standalone listing has `"place": "none"`, so a layout block with `content.mod = "jig-worktrees"` is
-required. The panel has the **Terminal / Space** switch (per space): Terminal follows the focused terminal's folder, Space
+required. The panel has the **Terminal/Space** switch (per space): Terminal follows the focused terminal's folder, Space
 uses the space's folder.
 
 **Done when:**
