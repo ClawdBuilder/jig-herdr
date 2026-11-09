@@ -637,10 +637,52 @@ export async function listBranches(exec, checkout) {
     return { ok: true, message: "", current, branches };
 }
 
-/** Branches whose name holds the text, in the same order. */
+/** The quick-pick ranking: exact name, then prefix, then the last path segment's prefix, then any substring. */
+function rankBranch(name, query) {
+    const lower = name.toLowerCase();
+    if (lower === query) return 0;
+    if (lower.startsWith(query)) return 1;
+    const last = lower.slice(lower.lastIndexOf("/") + 1);
+    if (last.startsWith(query)) return 2;
+    if (lower.includes(query)) return 3;
+    return 4;
+}
+
+/** Filter and rank branches; within a tier the list order is kept, with local branches before origin-only ones. */
 export function filterBranches(branches, text) {
-    const q = text.trim().toLowerCase();
-    return q ? branches.filter((b) => b.name.toLowerCase().includes(q)) : branches;
+    const query = text.trim().toLowerCase();
+    if (query === "") return branches;
+    return branches
+        .map((branch, index) => ({ branch, index, rank: rankBranch(branch.name, query) }))
+        .filter((row) => row.rank < 4)
+        .sort(
+            (a, b) =>
+                Number(Boolean(a.branch.remote)) - Number(Boolean(b.branch.remote)) ||
+                a.rank - b.rank ||
+                a.index - b.index,
+        )
+        .map((row) => row.branch);
+}
+
+/** A stable key for a branch row: a local and an origin-only branch can share a name. */
+export const branchKey = (branch) => `${branch.remote ? "r" : "l"}:${branch.name}`;
+
+/** Rows Enter/↑/↓ can choose: not the current branch, and not one checked out in another worktree. */
+export const pickableBranches = (branches) => branches.filter((branch) => !branch.current && !branch.inUse);
+
+/** The active key for a filter: the best pickable row, or null. */
+export function defaultActive(branches, text) {
+    const first = pickableBranches(filterBranches(branches, text))[0];
+    return first ? branchKey(first) : null;
+}
+
+/** Move the active key by `delta`, clamped at the ends. An inactive/unknown key starts at the nearest end. */
+export function moveActive(branches, text, active, delta) {
+    const rows = pickableBranches(filterBranches(branches, text));
+    if (rows.length === 0) return null;
+    const at = rows.findIndex((branch) => branchKey(branch) === active);
+    const next = at < 0 ? (delta > 0 ? 0 : rows.length - 1) : Math.min(rows.length - 1, Math.max(0, at + delta));
+    return branchKey(rows[next]);
 }
 
 /** `git switch <branch>`, or `git switch --track origin/<branch>` for a branch only origin has. Refused (no switch run)

@@ -33,7 +33,8 @@ Programs: `git log`, `git show`, `git status` on the space's machine; `sh` for t
 (20 s). Network: none; History never fetches. Files read: the chosen repository's `.git` metadata, its working tree for
 status, and its config.
 
-The header's branch control opens the branch picker (`Find a branch`), which filters local and remote branches. The
+The header's branch control opens the branch picker (`Find a branch`), which ranks local and remote branches the same way
+(exact, prefix, last segment, substring), highlights the active row, moves with `↑`/`↓`, and Enter selects that row to view. The
 **Terminal / Space** switch is per space: Terminal follows the focused terminal's folder, Space uses the space's folder.
 A layout block with `content.mod = "jig-history"` is required (`"place": "none"`).
 

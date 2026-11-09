@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- The Repos and History branch pickers rank matches (exact, prefix, last path segment, substring) and highlight the row
+  Enter will pick; `↑`/`↓` move it, Enter acts only on it, and a dim `↑↓ to choose · Enter to switch` hint appears while a
+  row is pickable.
+
+
 ### Changed
 
 - Worktrees' header title is its count (`15 worktrees`, `1 worktree`, `Worktrees` before the first read), with the full

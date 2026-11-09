@@ -7,10 +7,13 @@ import { h_flex, Input, InputState, v_flex } from "gpui-base";
 import { div, svg } from "gpui-kit";
 import { appHome, closeOverlay, exec, panes, readTextFile, setShared, spaces, theme } from "herdr";
 import {
+    branchKey,
     busyAgents,
+    defaultActive,
     defaultBase,
     filterBranches,
     listBranches,
+    moveActive,
     newBranch,
     panesOn,
     parseConfig,
@@ -73,6 +76,7 @@ export class BranchPicker {
         this.config = parseConfig(null);
         this.base = null;
         this.filter = "";
+        this.active = null;
         this.warning = null; // why a switch would be refused now, shown before anything is picked
         this.message = null; // the last refusal or git error
         this.creating = false;
@@ -80,11 +84,12 @@ export class BranchPicker {
         this.search = InputState.new({ placeholder: "Find a branch" });
         this.search.on("change", (_e, cx) => {
             this.filter = this.search.value();
+            this.resetActive();
             cx.notify();
         });
         this.search.on("submit", (_e, cx) => {
-            const first = filterBranches(this.branches ?? [], this.filter).find(pickable);
-            if (first) this.pick(cx, first);
+            const target = this.activeBranch();
+            if (target) this.pick(cx, target);
         });
         this.nameInput = InputState.new({ placeholder: "feature/PROJ-123" });
         this.nameInput.on("submit", (_e, cx) => this.create(cx));
@@ -112,6 +117,7 @@ export class BranchPicker {
             const list = await listBranches(this.exec(), this.path);
             if (!list.ok) throw new Error(list.message);
             this.branches = list.branches;
+            this.resetActive();
             this.base = await defaultBase(this.exec(), this.path, this.config);
             this.nameInput.set_value(this.config.newBranchPrefix);
             this.warning = await switchRefusal(this.exec(), this.path, this.busyHere());
@@ -144,6 +150,30 @@ export class BranchPicker {
         cx.notify();
     }
 
+    /** The active key is always the row Enter would pick, or null when nothing is pickable. */
+    resetActive() {
+        this.active = defaultActive(this.branches ?? [], this.filter);
+    }
+
+    /** Rows the filter shows and Enter can pick; resets a stale active before the row is drawn. */
+    activeRows() {
+        const rows = filterBranches(this.branches ?? [], this.filter).filter(pickable);
+        if (this.active !== null && !rows.some((branch) => branchKey(branch) === this.active)) this.resetActive();
+        return rows;
+    }
+
+    activeBranch() {
+        const rows = this.activeRows();
+        return rows.find((branch) => branchKey(branch) === this.active) ?? null;
+    }
+
+    key(e, cx) {
+        if (e.keystroke !== "up" && e.keystroke !== "down") return;
+        this.active = moveActive(this.branches ?? [], this.filter, this.active, e.keystroke === "up" ? -1 : 1);
+        cx.stop_propagation();
+        cx.notify();
+    }
+
     pick(cx, branch) {
         if (!pickable(branch)) return;
         this.act(cx, () =>
@@ -160,6 +190,7 @@ export class BranchPicker {
 
     row(t, b) {
         const can = pickable(b) && !this.working;
+        const isActive = branchKey(b) === this.active;
         return h_flex()
             .id(`pick-${b.remote ? "r" : "l"}-${b.name}`)
             .h(26)
@@ -170,10 +201,12 @@ export class BranchPicker {
             .rounded(6)
             .text_size(12.5)
             .text_color(b.inUse ? t.dim : t.foreground)
+            .pl(isActive ? 6 : 8)
+            .when(isActive, (el) => el.border_l(2).border_color(t.accent))
             .when(can, (el) =>
                 el
                     .cursor_pointer()
-                    .hover((s) => s.bg(t.hover))
+                    .when(!isActive, (row) => row.hover((s) => s.bg(t.hover)))
                     .on_click((_e, cx) => this.pick(cx, b)),
             )
             .child(
@@ -204,6 +237,7 @@ export class BranchPicker {
                     .text_color(t.dim)
                     .child(this.message ? "" : "Reading branches…"),
             ];
+        this.activeRows();
         const shown = filterBranches(this.branches, this.filter);
         const local = shown.filter((b) => !b.remote),
             remote = shown.filter((b) => b.remote);
@@ -274,6 +308,7 @@ export class BranchPicker {
             .bg(t.popover)
             .text_color(t.foreground)
             .text_size(13)
+            .on_key_down((e, cx) => this.key(e, cx))
             .child(
                 h_flex()
                     .flex_none()
@@ -289,6 +324,11 @@ export class BranchPicker {
                 ),
             )
             .child(field(t, "branch-search", this.search))
+            .when(this.activeRows().length > 0, (el) =>
+                el.child(
+                    div().flex_none().px(2).text_size(11).text_color(t.dim).child("↑↓ to choose · Enter to switch"),
+                ),
+            )
             .child(v_flex().id("branch-list").flex_1().min_h(0).overflow_y_scrollbar().children(this.list(t)))
             .when(Boolean(this.message), (el) =>
                 el.child(div().flex_none().text_size(11.5).text_color(t.blocked).child(this.message)),
