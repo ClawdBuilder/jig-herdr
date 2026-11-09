@@ -704,6 +704,24 @@ test("jig-history finds repos and worktrees by folder name or branch, for a filt
     assert.equal(matchRepos(repos, "/w", "nothing").length, 0);
 });
 
+test("PR & CI folds every No PR repository into one group", async () => {
+    const { workspaceSplit } = await load<Lib>("mods/jig-prs/lib.js");
+    const split = workspaceSplit([
+        { status: "pr", name: "a" },
+        { status: "nopr", name: "b" },
+        { status: "nopr", name: "c" },
+        { status: "default", name: "d" },
+        { status: "noremote", name: "e" },
+        { status: "error", name: "f" },
+    ]);
+    assert.deepEqual(split.featured.map((r: any) => r.name), ["a", "f"]);
+    assert.deepEqual(split.noPr.map((r: any) => r.name), ["b", "c"]);
+    assert.deepEqual(split.parked.map((r: any) => r.name), ["d", "e"]);
+    const source = readFileSync(new URL("../mods/jig-prs/main.js", import.meta.url), "utf8");
+    assert.match(source, /group\("No PR", "nopr-group"/);
+    assert.match(source, /showNoPr/);
+});
+
 test("jig-prs keeps the author and merge conflicts from gh json", async () => {
     const { shapePr } = await load<{ shapePr: (raw: unknown, slug: string) => Record<string, unknown> }>(
         "mods/jig-prs/lib.js",

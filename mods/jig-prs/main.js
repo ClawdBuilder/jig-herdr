@@ -40,6 +40,7 @@ import {
     shapeRuns,
     since,
     watchdog,
+    workspaceSplit,
 } from "./lib.js";
 import { panelError, panelHeader } from "./panel-header.js";
 import {
@@ -155,6 +156,7 @@ export default class RepoPullRequests extends View {
         this.expanded = new Set();
         this.folded = new Set();
         this.showDefaults = false;
+        this.showNoPr = false;
         this.fetching = new Set();
         this.refreshState = new RefreshState();
         this.configAt = 0;
@@ -705,12 +707,10 @@ export default class RepoPullRequests extends View {
         if (!data) return [this.note(t, this.error ? "" : "Looking for repos…")];
         const urgency = (repo) => {
             if (repo.pr) return countOf(repo.pr, "fail") ? 0 : countOf(repo.pr, "pending") ? 1 : 2;
-            return { error: 3, nopr: 4 }[repo.status] ?? 5;
+            return { error: 3 }[repo.status] ?? 5;
         };
-        const featured = data.repos
-            .filter((r) => ["pr", "nopr", "error", "loading"].includes(r.status))
-            .sort((a, b) => urgency(a) - urgency(b) || a.name.localeCompare(b.name));
-        const parked = data.repos.filter((r) => r.status === "default" || r.status === "noremote");
+        const { featured, noPr, parked } = workspaceSplit(data.repos);
+        featured.sort((a, b) => urgency(a) - urgency(b) || a.name.localeCompare(b.name));
         const rows = featured.map((repo) => {
             const head = h_flex()
                 .id(`repo-${repo.path}`)
@@ -727,45 +727,43 @@ export default class RepoPullRequests extends View {
                     .flex_none()
                     .child(head)
                     .child(this.prBlock(t, repo.pr, repo.path, { showBranch: false }));
-            const line = repo.status === "nopr" ? "No PR" : repo.status === "loading" ? "Looking up…" : repo.err;
+            const line = repo.status === "loading" ? "Looking up…" : repo.err;
             const tone = repo.status === "error" ? t.blocked : t.dim;
             return v_flex()
                 .flex_none()
                 .child(head)
                 .child(div().pl(8).pb(2).truncate().text_size(11.5).text_color(tone).child(line));
         });
-        if (parked.length) {
-            const toggle = (cx) => {
-                this.showDefaults = !this.showDefaults;
-                cx.notify();
-            };
-            rows.push(
-                this.heading(t, `On default branch (${parked.length})`, "default-group", {
-                    folded: !this.showDefaults,
-                    onClick: toggle,
-                }),
-            );
-            if (this.showDefaults) {
-                for (const repo of parked) {
-                    rows.push(
-                        h_flex()
-                            .id(`def-${repo.path}`)
-                            .flex_none()
-                            .h(24)
-                            .pl(24)
-                            .pr(8)
-                            .gap(8)
-                            .items_center()
-                            .text_color(t.muted)
-                            .child(this.repoName(t, repo))
-                            .child(this.branchTag(t, repo.branch))
-                            .when(repo.status === "noremote", (el) =>
-                                el.child(div().flex_none().text_size(10.5).text_color(t.dim).child("no remote")),
-                            ),
-                    );
-                }
-            }
-        }
+        const group = (label, id, repos, shown, toggle) => {
+            if (!repos.length) return;
+            rows.push(this.heading(t, `${label} (${repos.length})`, id, { folded: !shown, onClick: toggle }));
+            if (!shown) return;
+            for (const repo of repos)
+                rows.push(
+                    h_flex()
+                        .id(`${id}-${repo.path}`)
+                        .flex_none()
+                        .h(24)
+                        .pl(24)
+                        .pr(8)
+                        .gap(8)
+                        .items_center()
+                        .text_color(t.muted)
+                        .child(this.repoName(t, repo))
+                        .child(this.branchTag(t, repo.branch))
+                        .when(repo.status === "noremote", (el) =>
+                            el.child(div().flex_none().text_size(10.5).text_color(t.dim).child("no remote")),
+                        ),
+                );
+        };
+        group("No PR", "nopr-group", noPr, this.showNoPr, (cx) => {
+            this.showNoPr = !this.showNoPr;
+            cx.notify();
+        });
+        group("On default branch", "default-group", parked, this.showDefaults, (cx) => {
+            this.showDefaults = !this.showDefaults;
+            cx.notify();
+        });
         if (!data.repos.length) rows.push(this.note(t, "No git repositories here."));
         return rows;
     }
