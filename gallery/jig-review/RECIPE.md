@@ -22,7 +22,7 @@ Unstage and Discard are per file; Discard asks inline. A second request for the 
 
 **Built from:**
 
-`main.js` + `lib.js` + `refresh.js` (the shared header, runner and `GIT_READ`); no `config.json`. Props: `{ on, repo, name, file?, mode? }`. Herdr: `exec`, `run`,
+`main.js` + `lib.js` + `refresh.js` (the shared runner and `GIT_READ`) + `panel-header.js` (the shared header and error line); no `config.json`. Props: `{ on, repo, name, file?, mode? }`. Herdr: `exec`, `run`,
 `tab.new`, `shared`/`setShared`, `appHome`, `readTextFile`, `theme`, `layout`, `panes`, `spaces`, `Editor`/`TextView` from
 `gpui-base`. Shared key `jig-review.open`; localStorage stores divider width, pane choice and wrap. Base candidates, in order:
 `origin/develop`, the remote HEAD branch, `origin/main`, `origin/master`, `develop`, `main`, `master`.
