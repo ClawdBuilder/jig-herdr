@@ -40,6 +40,7 @@ import {
     sameOrInside,
     since,
     terminalsInsideWorktree,
+    worktreeTitle,
 } from "./lib.js";
 import { panelError, panelHeader } from "./panel-header.js";
 import {
@@ -553,7 +554,8 @@ export default class RepoWorktrees extends View {
         const space = spaces().find((s) => s.active);
         const follow = readFollow(space?.id);
         const header = panelHeader(t, {
-            title: `${title} · ${count}`,
+            title: worktreeTitle(rows.length),
+            titleTooltip: `${title} · ${count}`,
             follow,
             onFollow: (cx) => {
                 writeFollow(space?.id, !follow);

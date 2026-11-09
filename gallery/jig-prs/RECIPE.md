@@ -8,11 +8,13 @@ Read-only. From Jig (https://github.com/ClawdBuilder/jig). No Jig required.
 
 **What you see:**
 
-A header with the folder and a refresh button; two tabs, **Open** in one repository or **Workspace** on many, and **Mine**; rows with number, title,
+A header with the **Open**/**Workspace** and **Mine** tabs on the left where the title would be, plus the Terminal/Space
+switch and refresh icon; rows with number, title,
 branch, author, review state, age, and a check summary (`✓` pass, `×` fail, `•` pending, `–` skip, with counts). Expanding a
 PR shows checks grouped by name and the latest run, with a link that opens in the browser. The panel marks a failing check
 on the activity bar with a count and `blocked` tone. Empty, no-git, `gh` missing, signed-out and rate-limit states are one
-line.
+line. Repositories without a PR are folded into one `No PR (N)` section, like `On default branch (N)`; repos with a PR,
+failing or pending checks stay at the top.
 
 **How it behaves:**
 

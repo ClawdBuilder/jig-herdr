@@ -44,6 +44,15 @@ wait
 i=0
 while [ $i -lt $count ]; do cat "$work/$i.out"; i=$((i + 1)); done`;
 
+/** Split workspace repositories: PR/error/loading stay in the list, "no PR" and default/remote-less get folded groups. */
+export function workspaceSplit(repos) {
+    return {
+        featured: (repos ?? []).filter((repo) => ["pr", "error", "loading"].includes(repo.status)),
+        noPr: (repos ?? []).filter((repo) => repo.status === "nopr"),
+        parked: (repos ?? []).filter((repo) => repo.status === "default" || repo.status === "noremote"),
+    };
+}
+
 /** "owner/repo" from a remote url, whatever its form: https, scp-style with a host alias, or ssh://. Null when there is none. */
 export function slugOf(url) {
     const match = /[:/]([^/:\s]+)\/([^/\s]+?)(?:\.git)?\/*$/.exec((url ?? "").trim());

@@ -4,6 +4,10 @@
 
 ### Changed
 
+- Worktrees' header title is its count (`15 worktrees`, `1 worktree`, `Worktrees` before the first read), with the full
+  repo · count in the tooltip. PR & CI puts its tabs in the shared header's lead slot, and folds repositories without a PR
+  into one `No PR (N)` group. Biome ignores Herdr's generated `gpui-kit.d.ts` and `jsconfig.json`.
+
 - The git panels share one 42 px header: one Terminal/Space switch, one refresh icon with a `Refresh · read N ago`
   tooltip, and one error line under the header. History's Branch/All moves to a second row; Repos' summary and PR & CI's
   summary move to body lines so nothing is lost in a 380 px panel.
