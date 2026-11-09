@@ -18,7 +18,7 @@ test("check-gallery refuses a stray top-level file and a malformed recipe", () =
             execFileSync(process.execPath, [path.join(root, "scripts", "check-gallery.mjs"), out], { stdio: "pipe" }),
         );
         rmSync(path.join(out, "stray.txt"));
-        writeFileSync(path.join(out, "jig-repos", "RECIPE.md"), "# Repos\n\nTODO\n");
+        writeFileSync(path.join(out, "jig-git", "RECIPE.md"), "# Git\n\nTODO\n");
         assert.throws(() =>
             execFileSync(process.execPath, [path.join(root, "scripts", "check-gallery.mjs"), out], { stdio: "pipe" }),
         );

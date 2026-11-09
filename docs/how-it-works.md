@@ -46,7 +46,7 @@ runs the call there through herdr-core.
    JSON. The switch is drawn dimmed until the status file's `lastRequest.id` is the id sent; after 10 seconds the panel says
    the session does not answer. The round trip is in [jig-session's How it works](../../plugins/jig-session/docs/how-it-works.md#a-switch-there-and-back).
 
-The repository panels do the same with `git` and `gh` on the space's machine: `jig-repos` runs one script that reads
+The repository panels do the same with `git` and `gh` on the space's machine: `jig-git` runs one script that reads
 every checkout's `git status`, and `jig-prs` asks `gh` and caches the answer for 5 minutes in its `localStorage`.
 
 ## The layout
@@ -68,7 +68,7 @@ root (row)
             ├─ panel-body (stack: one child shows)
             │   ├─ jig-work ....... Jig · Work      ┐ the Jig group, a line under it
             │   ├─ jig-context .... Jig · Context   ┘
-            │   ├─ changes ........ jig-repos
+            │   ├─ changes ........ jig-git
             │   ├─ history ........ jig-history
             │   ├─ pr ............. jig-prs
             │   ├─ worktrees ...... jig-worktrees
@@ -78,7 +78,7 @@ root (row)
 
 - **The icon bar holds no list.** `jig-activity` reads the stack's children from `layout()`: each child's `title` is the
   tooltip, and `content.props.activity` gives its icon, `divider` or `end`. A click runs `layout.select`.
-- **Counts** come from shared values: `jig-repos`, `jig-prs` and `jig-worktrees` call `setShared("badge.<mod>", { count,
+- **Counts** come from shared values: `jig-git`, `jig-prs` and `jig-worktrees` call `setShared("badge.<mod>", { count,
   tone })`, and the icon bar draws them.
 - **The tab bar's `Jig` button** runs `layout.select` on `jig-work` and `layout.show` on `panel`; `Panel` shows or hides it.
 - **A panel of your own** is one more child of `panel-body` with a `title` and `content.props.activity.icon`.
@@ -119,8 +119,8 @@ Start with `jig-work`; the others follow the same pattern. In each, `main.js` is
 | `jig-activity`   | The icon bar: buttons from the stack's children, badges from shared values          | the `activity` block            |
 | `jig-tabs`       | Herdr's tab bar with `Panel` and `Jig` buttons                                      | the `tabs` block                |
 | `jig-theme-sync` | Follows Pi's palette                                                                | the 0 px `jig-theme` block      |
-| `jig-repos`      | Checkouts and their files; `picker.js` the branch picker; `lib.js` the git actions  | the stack's `changes` child     |
-| `jig-review`     | A repository's changed files and a diff, in a tab; stage, unstage, discard          | `tab.new` from Changes and Work |
+| `jig-git`        | Checkouts and their files; `picker.js` the branch picker; `lib.js` the git actions  | the stack's `changes` child     |
+| `jig-review`     | A repository's changed files and a diff, in a tab; stage, unstage, discard          | `tab.new` from Git and Work     |
 | `jig-history`    | Repository picker and commit graph                                                  | the stack's `history` child     |
 | `jig-prs`        | Pull requests and checks through `gh`                                               | the stack's `pr` child          |
 | `jig-worktrees`  | Linked worktrees, ready or in progress, and their removal                           | the stack's `worktrees` child   |

@@ -18,7 +18,8 @@ const MANIFEST = ".jig-herdr-install.json";
 const FOLDERS = ["themes", "mods", "layouts"];
 /** The 0.1.2 mod names and the names this version gives them. Their config.json is the person's. */
 const RENAMED: ReadonlyArray<[string, string]> = [
-    ["repo-changes", "jig-repos"],
+    ["repo-changes", "jig-git"],
+    ["jig-repos", "jig-git"],
     ["repo-history", "jig-history"],
     ["repo-prs", "jig-prs"],
     ["repo-worktrees", "jig-worktrees"],

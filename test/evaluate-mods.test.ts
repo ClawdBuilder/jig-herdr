@@ -14,7 +14,7 @@ const mods = [
     "jig-theme-sync",
     "jig-work",
     "jig-keep-awake",
-    "jig-repos",
+    "jig-git",
     "jig-history",
     "jig-prs",
     "jig-review",

@@ -4,7 +4,7 @@ Herdr panels for git work: what changed, the commit history, pull requests and C
 files, and a switch that keeps the computer awake. The generic panels and the **Jig Workbench** layout work without Jig.
 The Jig layout adds the Pi session panels.
 
-**No Jig required** for Changes, History, PR & CI, Worktrees, Review, Files and Keep awake, or for the Jig Workbench layout.
+**No Jig required** for Git, History, PR & CI, Worktrees, Review, Files and Keep awake, or for the Jig Workbench layout.
 
 ![The Jig Workbench: sidebar, activity bar, panels and terminal](preview.png)
 
@@ -34,15 +34,15 @@ From **herdr.dev**: coming soon. The listings will be installable there; until t
 
 ## What each panel needs
 
-| Panel           | Needs                      | Reads and runs                                                                                                |
-| --------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Changes (Repos) | `git`, POSIX `sh`          | The focused folder's git metadata and `config.json`; stages, commits, fetches, pulls and pushes on your click |
-| History         | `git`, POSIX `sh`          | Git log, show and status; opens a diff in a terminal; no writes                                               |
-| PR & CI         | `gh` signed in, POSIX `sh` | GitHub PRs and checks through `gh`; opens links in your browser; no writes                                    |
-| Worktrees       | `git`, POSIX `sh`          | Worktree metadata; removes a ready worktree and its merged branch after a confirm; no network                 |
-| Review          | `git`, POSIX `sh`          | A repository's changed files and diffs; stages, unstages or discards a file; no commit                        |
-| Files           | POSIX `sh`                 | The focused folder; opens a file in a read-only tab at any path                                               |
-| Keep awake      | Platform sleep tool        | Runs `powershell`/`taskkill` on Windows, `caffeinate` on macOS, `systemd-inhibit` on Linux; no network        |
+| Panel      | Needs                      | Reads and runs                                                                                                |
+| ---------- | -------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Git        | `git`, POSIX `sh`          | The focused folder's git metadata and `config.json`; stages, commits, fetches, pulls and pushes on your click |
+| History    | `git`, POSIX `sh`          | Git log, show and status; opens a diff in a terminal; no writes                                               |
+| PR & CI    | `gh` signed in, POSIX `sh` | GitHub PRs and checks through `gh`; opens links in your browser; no writes                                    |
+| Worktrees  | `git`, POSIX `sh`          | Worktree metadata; removes a ready worktree and its merged branch after a confirm; no network                 |
+| Review     | `git`, POSIX `sh`          | A repository's changed files and diffs; stages, unstages or discards a file; no commit                        |
+| Files      | POSIX `sh`                 | The focused folder; opens a file in a read-only tab at any path                                               |
+| Keep awake | Platform sleep tool        | Runs `powershell`/`taskkill` on Windows, `caffeinate` on macOS, `systemd-inhibit` on Linux; no network        |
 
 `timeout` (Linux) or `gtimeout` (macOS) is used when present for 20-second command caps; without it, the command runs
 unbounded up to Herdr's own 30-second cap. Everything runs on the machine the space is on. Linux, WSL and macOS work; a

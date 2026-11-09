@@ -1,7 +1,7 @@
 # Jig Workbench
 
 A Herdr window with a 300 px sidebar for spaces and agents, a 40 px activity bar, and a right panel that switches between
-Changes (Repos), History, PR & CI, Worktrees, Review and Files, beside Herdr's normal tab bar and terminal. It is the generic Jig
+Git, History, PR & CI, Worktrees, Review and Files, beside Herdr's normal tab bar and terminal. It is the generic Jig
 layout: no Jig session is needed. From Jig (https://github.com/ClawdBuilder/jig). No Jig required.
 
 ![Jig Workbench](preview.png)
@@ -18,8 +18,8 @@ layout). The main pane has an 8 px gap, 10 px corner radius, a 30 px header, a 1
 `accent`. The tab bar is Herdr's shipped `tabs` at 30 px, not `jig-tabs`: the Jig button would be dead without Jig's Work and
 Context panels.
 
-The panel stack shows one of six titles, top to bottom: **Changes**, **History**, **PR & CI**, **Worktrees**, **Review**,
-**Files**. Changes is active on first open. The activity bar has one icon per panel, in that order, using the existing
+The panel stack shows one of six titles, top to bottom: **Git**, **History**, **PR & CI**, **Worktrees**, **Review**,
+**Files**. Git is active on first open. The activity bar has one icon per panel, in that order, using the existing
 `workspace-chrome` and `jig-activity` SVGs.
 
 **How it behaves:**
@@ -31,7 +31,7 @@ section is `layout:jig-workbench`. The sidebar's spaces and agents are Herdr's s
 control in this layout; its key is `Ctrl+Shift+Alt+K` (cycle Off / On / While agents work), and its state is shared with the
 zero-height block. Each panel's own refresh triggers, clicks and hover actions are those in its recipe below.
 
-Panels refresh when shown and on focus, and when a terminal in the panel's folder finishes a command, with their configured backstop (Repos, History, Worktrees and
+Panels refresh when shown and on focus, and when a terminal in the panel's folder finishes a command, with their configured backstop (Git, History, Worktrees and
 Files default 60 s; PR & CI defaults 180 s, never below 15 s). A loading state appears immediately only on first load;
 a click-started refresh shows busy after 400 ms, and automatic refreshes stay silent.
 
@@ -40,7 +40,7 @@ a click-started refresh shows busy after 400 ms, and automatic refreshes stay si
 Layout `jig-workbench.json`: root row, `sidebar` column, `brand` (workspace-chrome), `spaces`, `agents`, 0 px
 `jig-keep-awake`, `sidebar-footer` (workspace-chrome, `footer: true`), `work` column with shipped `tabs`, `work-body`, `main`
 (`tab: active`, pane header `pane`), `panel` with stack `panel-body` and `activity` (`jig-activity`, `{ stack: "panel-body" }`).
-Panel children: `jig-repos`, `jig-history`, `jig-prs`, `jig-worktrees`, `jig-review`, `jig-files`; `jig-file-view` opens as a
+Panel children: `jig-git`, `jig-history`, `jig-prs`, `jig-worktrees`, `jig-review`, `jig-files`; `jig-file-view` opens as a
 tab from Files. Shipped mods: `workspace-chrome`, `spaces`, `agents`, `pane`, `tabs`.
 
 Programs run by the panels: `sh`, `git`, `gh`, and keep-awake's `powershell`, `taskkill`, `caffeinate`,
@@ -50,7 +50,7 @@ file tabs). Network: `gh` on automatic refresh as well as clicks (GitHub), and `
 those actions. Files read: the focused space's folder and its `.git` metadata, each mod's
 `${appHome()}/mods/<id>/config.json`, keep-awake's `${appHome()}/jig-keep-awake.stop` and `jig-keep-awake.helper.json`,
 and jig-file-view reads any absolute path the user opens. No telemetry. Icons: Herdr's `mods/workspace-chrome/*.svg` and
-the `jig-activity`/`jig-repos` SVGs.
+the `jig-activity`/`jig-git` SVGs.
 
 **Watch out:**
 
@@ -64,5 +64,5 @@ Sidebar 44 px is Herdr's compact rail; the panel never goes below 300 px. The ta
 
 `herdr-app check` passes for every mod; `layout.switch { name: "jig-workbench" }` renders the six activity buttons; clicking
 each shows its titled panel; `Ctrl+Shift+R` hides and restores the side panel; `Ctrl+Shift+Alt+K` cycles keep-awake; a
-`git` demo repo in a space shows Repos and History, a worktree shows Worktrees, Files opens a file in a `jig-file-view` tab,
+`git` demo repo in a space shows Git and History, a worktree shows Worktrees, Files opens a file in a `jig-file-view` tab,
 and a folder without a repository says so without an error. Restore the previous layout afterwards.

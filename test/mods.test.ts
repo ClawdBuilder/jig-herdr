@@ -1,4 +1,4 @@
-// The pure parts of the mods (their lib.js files), and the shell scripts of jig-repos and jig-work run on real files.
+// The pure parts of the mods (their lib.js files), and the shell scripts of jig-git and jig-work run on real files.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -43,8 +43,8 @@ function repo(root: string, name: string, files: Record<string, string>): string
     return dir;
 }
 
-test("jig-repos lists every repository under a folder, nested ones too, with their changes", async () => {
-    const { SCRIPT, parseRepos } = await load<Changes>("mods/jig-repos/lib.js");
+test("jig-git lists every repository under a folder, nested ones too, with their changes", async () => {
+    const { SCRIPT, parseRepos } = await load<Changes>("mods/jig-git/lib.js");
     const root = mkdtempSync(path.join(tmpdir(), "jig-herdr-"));
     try {
         const orders = repo(root, "orders-api", { "src/a.ts": "one\n", "README.md": "x\n" });
@@ -78,8 +78,8 @@ test("jig-repos lists every repository under a folder, nested ones too, with the
     }
 });
 
-test("jig-repos reads a branch with a dot, ahead and behind, a detached head and an error", async () => {
-    const { parseRepos } = await load<Changes>("mods/jig-repos/lib.js");
+test("jig-git reads a branch with a dot, ahead and behind, a detached head and an error", async () => {
+    const { parseRepos } = await load<Changes>("mods/jig-git/lib.js");
     const out = [
         "@@repo /w/a",
         "## release/1.2...origin/release/1.2 [ahead 2, behind 1]",
@@ -98,8 +98,8 @@ test("jig-repos reads a branch with a dot, ahead and behind, a detached head and
     assert.equal(c?.error, "fatal: not a git repository");
 });
 
-test("jig-repos filters by repository name or file, and splits a path", async () => {
-    const { parseRepos, filterRepos, splitPath } = await load<Changes>("mods/jig-repos/lib.js");
+test("jig-git filters by repository name or file, and splits a path", async () => {
+    const { parseRepos, filterRepos, splitPath } = await load<Changes>("mods/jig-git/lib.js");
     const repos = parseRepos(
         [
             "@@repo /w/orders",
@@ -559,7 +559,7 @@ test("jig-work reads its config, words decisions, and knows when it is on screen
                         active: "changes",
                         children: [
                             { id: "jig-work", content: { mod: "jig-work" } },
-                            { id: "changes", content: { mod: "jig-repos" } },
+                            { id: "changes", content: { mod: "jig-git" } },
                         ],
                     },
                 ],
@@ -567,9 +567,9 @@ test("jig-work reads its config, words decisions, and knows when it is on screen
         ],
     };
     assert.equal(lib.isShown(layout, "jig-work"), false);
-    assert.equal(lib.isShown(layout, "jig-repos"), true);
+    assert.equal(lib.isShown(layout, "jig-git"), true);
     (layout.children[0] as { hidden?: boolean }).hidden = true;
-    assert.equal(lib.isShown(layout, "jig-repos"), false);
+    assert.equal(lib.isShown(layout, "jig-git"), false);
     assert.equal(lib.isShown(layout, "jig-file-view"), true, "a mod in a tab of its own counts as shown");
 });
 
@@ -579,7 +579,7 @@ test("jig-activity draws a divider after a button that asks for one", async () =
         id: "body",
         children: [
             { id: "jig-work", content: { mod: "jig-work", props: { activity: { divider: true } } } },
-            { id: "changes", content: { mod: "jig-repos" } },
+            { id: "changes", content: { mod: "jig-git" } },
         ],
     };
     assert.deepEqual(

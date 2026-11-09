@@ -1,4 +1,4 @@
-// Shared by every repo panel: which folder to show. `jig-repos` owns the rule; the others import this rather than copy it.
+// Shared by every repo panel: which folder to show. `jig-git` owns the rule; the others import this rather than copy it.
 // Follow the focused terminal by default, or the space's folder when the header says Space. The choice is per space.
 import { focused, panes, spaces } from "herdr";
 

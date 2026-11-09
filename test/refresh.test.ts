@@ -11,7 +11,7 @@ import {
     RefreshState,
     refreshSeconds,
     terminalFinished,
-} from "../mods/jig-repos/refresh.js";
+} from "../mods/jig-git/refresh.js";
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -58,7 +58,7 @@ test("a click during a refresh queues exactly one more run", () => {
 
 test("every panel calls the shared refresh helper, with no inline copy", () => {
     const root = new URL("../mods/", import.meta.url);
-    for (const mod of ["jig-repos", "jig-history", "jig-prs", "jig-worktrees"]) {
+    for (const mod of ["jig-git", "jig-history", "jig-prs", "jig-worktrees"]) {
         const source = readFileSync(new URL(`${mod}/main.js`, root), "utf8");
         assert.match(source, /from "\.\/refresh\.js"/, `${mod}: import`);
         assert.match(source, /this\.refreshState = new RefreshState\(\)/, `${mod}: state`);
@@ -78,7 +78,7 @@ test("every panel calls the shared refresh helper, with no inline copy", () => {
 
 test("every panel starts its first read from the constructor, not the timer", () => {
     const root = new URL("../mods/", import.meta.url);
-    for (const mod of ["jig-repos", "jig-history", "jig-prs", "jig-worktrees"]) {
+    for (const mod of ["jig-git", "jig-history", "jig-prs", "jig-worktrees"]) {
         const source = readFileSync(new URL(`${mod}/main.js`, root), "utf8");
         assert.match(source, /this\.initialRead\(cx\);/, `${mod}: constructor call`);
         assert.match(source, /initialRead\(cx\)\s*\{[\s\S]*?cx\.spawn\(/, `${mod}: spawn`);
@@ -88,7 +88,7 @@ test("every panel starts its first read from the constructor, not the timer", ()
 
 test("every panel starts its first read from the constructor, not the timer", () => {
     const root = new URL("../mods/", import.meta.url);
-    const source = readFileSync(new URL("jig-repos/refresh.js", root), "utf8");
+    const source = readFileSync(new URL("jig-git/refresh.js", root), "utf8");
     const mods = readdirSync(root).filter((mod) => {
         try {
             return readFileSync(new URL(`${mod}/refresh.js`, root)).length > 0;
@@ -162,7 +162,7 @@ test("refreshSeconds clamps at 15 and reads the config object", () => {
 });
 
 test("run passes env, a shell timeout and a later Herdr timeout, and recognises 124", async () => {
-    const { run } = await import("../mods/jig-repos/refresh.js");
+    const { run } = await import("../mods/jig-git/refresh.js");
     const calls: Array<{ args: string[]; options: any }> = [];
     const fake = async (_cmd: string, args: string[], options: any) => {
         calls.push({ args, options });
@@ -192,7 +192,7 @@ test("run passes env, a shell timeout and a later Herdr timeout, and recognises 
 });
 
 test("friendlyError maps timeout, no repo, missing tools and gh classes", async () => {
-    const { friendlyError } = await import("../mods/jig-repos/refresh.js");
+    const { friendlyError } = await import("../mods/jig-git/refresh.js");
     assert.equal(
         friendlyError({ code: 124, seconds: 60 }),
         "Reading took too long and was stopped (60 s). Check the connection, or try in a terminal.",
@@ -232,7 +232,7 @@ test("friendlyError maps timeout, no repo, missing tools and gh classes", async 
 });
 
 test("parseRefreshConfig has a 15 s minimum and no maximum", async () => {
-    const { parseRefreshConfig } = await import("../mods/jig-repos/refresh.js");
+    const { parseRefreshConfig } = await import("../mods/jig-git/refresh.js");
     assert.deepEqual(parseRefreshConfig('{ "refreshSeconds": 10 }', 60).seconds, 15);
     assert.match(parseRefreshConfig('{ "refreshSeconds": 10 }', 60).problems[0], /15/);
     assert.equal(parseRefreshConfig('{ "refreshSeconds": 1000000 }', 60).seconds, 1000000);
@@ -241,7 +241,7 @@ test("parseRefreshConfig has a 15 s minimum and no maximum", async () => {
 });
 
 test("run uses direct exec with cwd, on and a plain Herdr deadline when there is no env", async () => {
-    const { run, friendlyError } = await import("../mods/jig-repos/refresh.js");
+    const { run, friendlyError } = await import("../mods/jig-git/refresh.js");
     const calls: Array<{ cmd: string; args: string[]; options: any }> = [];
     const fake = async (cmd: string, args: string[], options: any) => {
         calls.push({ cmd, args, options });
@@ -263,7 +263,7 @@ test("run uses direct exec with cwd, on and a plain Herdr deadline when there is
 });
 
 test("direct exec classifies a rejection within one second of the deadline as a timeout", async () => {
-    const { run } = await import("../mods/jig-repos/refresh.js");
+    const { run } = await import("../mods/jig-git/refresh.js");
     const realNow = Date.now;
     let clock = 0;
     Date.now = () => clock;

@@ -59,7 +59,7 @@ test("each panel knows whether its block is on screen: hidden nodes and other st
         ["mods/jig-prs/lib.js", "isOnScreen"],
         ["mods/jig-worktrees/lib.js", "isOnScreen"],
         ["mods/jig-history/lib.js", "isOnScreen"],
-        ["mods/jig-repos/layout.js", "shown"],
+        ["mods/jig-git/layout.js", "shown"],
     ] as const) {
         const onScreen = (await load<Lib>(file))[name] as (root: unknown, mod: string) => boolean;
         assert.equal(onScreen(layout, "jig-prs"), true, `${file}: the active child`);
@@ -924,14 +924,14 @@ test("jig-prs opens only GitHub links", async () => {
 
 test("the follow-state copies agree and pickRoot follows the focused terminal first", async () => {
     const root = new URL("../mods/", import.meta.url);
-    const source = readFileSync(new URL("jig-repos/follow-state.js", root), "utf8");
+    const source = readFileSync(new URL("jig-git/follow-state.js", root), "utf8");
     for (const mod of ["jig-history", "jig-prs", "jig-worktrees"])
         assert.equal(
             readFileSync(new URL(`${mod}/follow-state.js`, root), "utf8"),
             source,
             `${mod}/follow-state.js is the odd one out`,
         );
-    const { pickRoot } = await load<Lib>("mods/jig-repos/follow-state.js");
+    const { pickRoot } = await load<Lib>("mods/jig-git/follow-state.js");
     assert.equal(pickRoot({ follow: true, focusedCwd: "/f", spaceFolder: "/s", first: "/1" }), "/f");
     assert.equal(pickRoot({ follow: false, focusedCwd: "/f", spaceFolder: "/s", first: "/1" }), "/s");
     assert.equal(pickRoot({ follow: true, focusedCwd: null, spaceFolder: null, first: "/1" }), "/1");
@@ -1040,7 +1040,7 @@ test("the live panel files call the tested seams, not inline copies", () => {
 });
 
 test("the changed read and destructive commands keep their exact argv", () => {
-    const repo = readFileSync(new URL("../mods/jig-repos/main.js", import.meta.url), "utf8");
+    const repo = readFileSync(new URL("../mods/jig-git/main.js", import.meta.url), "utf8");
     assert.match(repo, /runCommand\(exec, "sh", \["-c", SCRIPT, "sh", root, targets\]/);
     const pr = readFileSync(new URL("../mods/jig-prs/main.js", import.meta.url), "utf8");
     assert.match(pr, /runCommand\(exec, "sh", \["-c", SCRIPT, "sh", root\]/);

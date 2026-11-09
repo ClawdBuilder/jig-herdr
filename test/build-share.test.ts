@@ -15,7 +15,7 @@ test("build-share writes every listing with its recipe, preview, mods and licens
         buildShare(out);
         for (const id of [
             "jig-workbench",
-            "jig-repos",
+            "jig-git",
             "jig-history",
             "jig-prs",
             "jig-worktrees",
@@ -41,14 +41,14 @@ test("--check fails when a generated file is stale", () => {
     const out = mkdtempSync(path.join(tmpdir(), "jig-share-check-"));
     try {
         buildShare(out);
-        const recipe = path.join(out, "jig-repos", "RECIPE.md");
+        const recipe = path.join(out, "jig-git", "RECIPE.md");
         writeFileSync(recipe, `${readFileSync(recipe, "utf8")}stale\n`);
         assert.ok(compareShare(out, out).length === 0);
         // compareShare is called by the CLI as (fresh, share): a changed share file is the difference.
         const fresh = mkdtempSync(path.join(tmpdir(), "jig-share-fresh-"));
         try {
             buildShare(fresh);
-            assert.deepEqual(compareShare(fresh, out), ["changed jig-repos/RECIPE.md"]);
+            assert.deepEqual(compareShare(fresh, out), ["changed jig-git/RECIPE.md"]);
         } finally {
             rmSync(fresh, { recursive: true, force: true });
         }
@@ -62,7 +62,7 @@ test("check-gallery accepts the built tree and refuses a broken listing", () => 
     try {
         buildShare(out);
         execFileSync(process.execPath, [path.join(root, "scripts", "check-gallery.mjs"), out], { stdio: "pipe" });
-        rmSync(path.join(out, "jig-repos", "RECIPE.md"));
+        rmSync(path.join(out, "jig-git", "RECIPE.md"));
         assert.throws(() =>
             execFileSync(process.execPath, [path.join(root, "scripts", "check-gallery.mjs"), out], { stdio: "pipe" }),
         );

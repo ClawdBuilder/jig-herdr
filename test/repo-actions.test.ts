@@ -1,4 +1,4 @@
-// The Changes panel's nesting of worktrees and its git actions (jig-repos/lib.js, and the file actions copied into
+// The Changes panel's nesting of worktrees and its git actions (jig-git/lib.js, and the file actions copied into
 // jig-review/lib.js), run on real git repositories in temporary folders, with a bare repository as their origin.
 import assert from "node:assert/strict";
 import { execFile, execFileSync, spawnSync } from "node:child_process";
@@ -77,7 +77,7 @@ const porcelain = (dir: string) =>
 
 test("checkouts nest under their main repository; a worktree whose main is outside the root stands alone", async (t) => {
     const { SCRIPT, parseRepos, groupRepos, isClean, checkoutsOf, filterGroups } =
-        await load<Lib>("mods/jig-repos/lib.js");
+        await load<Lib>("mods/jig-git/lib.js");
     const root = scratch(t);
     const { repo } = cloned(root);
     git(repo, "worktree", "add", "-q", "-b", "feature/PROJ-1", path.join(root, "worktrees/PROJ-1/orders-api"));
@@ -140,7 +140,7 @@ test("checkouts nest under their main repository; a worktree whose main is outsi
 });
 
 test("a file's staged state comes from porcelain's XY", async () => {
-    const { parseRepos } = await load<Lib>("mods/jig-repos/lib.js");
+    const { parseRepos } = await load<Lib>("mods/jig-git/lib.js");
     const [repo] = parseRepos(
         [
             "@@repo /w/a",
@@ -168,7 +168,7 @@ test("a file's staged state comes from porcelain's XY", async () => {
 });
 
 test("a branch switch is refused while an agent works in the checkout, and only for that checkout", async () => {
-    const { busyAgents } = await load<Lib>("mods/jig-repos/lib.js");
+    const { busyAgents } = await load<Lib>("mods/jig-git/lib.js");
     const panes = [
         { cwd: "/w/orders-api/src", status: "working", name: "Pi" },
         { cwd: "/w/orders-api/.trees/PROJ-2", status: "blocked", name: "Claude Code" },
@@ -188,7 +188,7 @@ test("a branch switch is refused while an agent works in the checkout, and only 
     );
     assert.deepEqual(busyAgents("/w/billing", panes, others), [], "an idle agent does not block");
 
-    const { switchBranch, newBranch } = await load<Lib>("mods/jig-repos/lib.js");
+    const { switchBranch, newBranch } = await load<Lib>("mods/jig-git/lib.js");
     const before = ran.length;
     const busy = [{ cwd: "/w/orders-api/src", status: "working", name: "Pi" }];
     const refused: Result = await switchBranch(exec, { checkout: "/nonexistent", branch: "main", busy });
@@ -205,7 +205,7 @@ test("a branch switch is refused while an agent works in the checkout, and only 
 });
 
 test("a dirty checkout keeps its branch: the switch is refused, naming how many files changed", async (t) => {
-    const { switchBranch, newBranch } = await load<Lib>("mods/jig-repos/lib.js");
+    const { switchBranch, newBranch } = await load<Lib>("mods/jig-git/lib.js");
     const root = scratch(t);
     const { repo } = cloned(root);
     git(repo, "branch", "other");
@@ -223,7 +223,7 @@ test("a dirty checkout keeps its branch: the switch is refused, naming how many 
 });
 
 test("branches: local first with the current marked, a branch in another worktree not pickable, then origin's", async (t) => {
-    const { listBranches, switchBranch, filterBranches } = await load<Lib>("mods/jig-repos/lib.js");
+    const { listBranches, switchBranch, filterBranches } = await load<Lib>("mods/jig-git/lib.js");
     const root = scratch(t);
     const { repo } = cloned(root);
     git(repo, "branch", "release/1.2");
@@ -256,7 +256,7 @@ test("branches: local first with the current marked, a branch in another worktre
 });
 
 test("a switch to a local branch, and to a branch only origin has, which then tracks it", async (t) => {
-    const { switchBranch } = await load<Lib>("mods/jig-repos/lib.js");
+    const { switchBranch } = await load<Lib>("mods/jig-git/lib.js");
     const root = scratch(t);
     const { repo } = cloned(root);
     git(repo, "branch", "release/1.2");
@@ -272,7 +272,7 @@ test("a switch to a local branch, and to a branch only origin has, which then tr
 });
 
 test("a new branch starts from origin's base after a fetch, and a bad name is refused before anything runs", async (t) => {
-    const { newBranch, defaultBase, parseConfig } = await load<Lib>("mods/jig-repos/lib.js");
+    const { newBranch, defaultBase, parseConfig } = await load<Lib>("mods/jig-git/lib.js");
     const root = scratch(t);
     const { origin, repo } = cloned(root);
     // origin moves on after the clone: the new branch must start from the fetched tip.
@@ -307,7 +307,7 @@ test("a new branch starts from origin's base after a fetch, and a bad name is re
 });
 
 test("stage, unstage and discard a tracked and an untracked file, in both panels' copies", async (t) => {
-    for (const file of ["mods/jig-repos/lib.js", "mods/jig-review/lib.js"]) {
+    for (const file of ["mods/jig-git/lib.js", "mods/jig-review/lib.js"]) {
         const { stageFile, unstageFile, discardFile, discardKind } = await load<Lib>(file);
         const root = scratch(t);
         const { repo } = cloned(root);
@@ -356,7 +356,7 @@ test("stage, unstage and discard a tracked and an untracked file, in both panels
 });
 
 test("stage all and unstage all, also before the first commit", async (t) => {
-    const { stageAll, unstageAll, unstageFile } = await load<Lib>("mods/jig-repos/lib.js");
+    const { stageAll, unstageAll, unstageFile } = await load<Lib>("mods/jig-git/lib.js");
     const root = scratch(t);
     const { repo } = cloned(root);
     writeFileSync(path.join(repo, "app.ts"), "two\n");
@@ -380,7 +380,7 @@ test("stage all and unstage all, also before the first commit", async (t) => {
 });
 
 test("a commit takes the staged files only and says its hash; an empty message or nothing staged is refused", async (t) => {
-    const { commit, stageFile } = await load<Lib>("mods/jig-repos/lib.js");
+    const { commit, stageFile } = await load<Lib>("mods/jig-git/lib.js");
     const root = scratch(t);
     const { repo } = cloned(root);
     writeFileSync(path.join(repo, "app.ts"), "two\n");
@@ -412,7 +412,7 @@ const writeCommit = (dir: string, file: string, message = `add ${file}`) => {
 
 test("a fetch moves the remote-tracking branches, a pull fast-forwards, a push sends the commits and a publish sets the upstream", async (t) => {
     const { fetchRemote, pullFastForward, pushBranch, publishBranch, commitsToPush } =
-        await load<Lib>("mods/jig-repos/lib.js");
+        await load<Lib>("mods/jig-git/lib.js");
     const root = scratch(t);
     const { origin, repo } = cloned(root);
     const other = path.join(root, "other");
@@ -456,7 +456,7 @@ test("a fetch moves the remote-tracking branches, a pull fast-forwards, a push s
 });
 
 test("a publish goes to the push remote, so a fork branch never lands in the shared origin", async (t) => {
-    const { pushTarget, publishBranch } = await load<Lib>("mods/jig-repos/lib.js");
+    const { pushTarget, publishBranch } = await load<Lib>("mods/jig-git/lib.js");
     const root = scratch(t);
     const { origin, repo } = cloned(root);
     const fork = path.join(root, "fork.git");
@@ -488,7 +488,7 @@ test("a publish goes to the push remote, so a fork branch never lands in the sha
 });
 
 test("a push git calls up to date says so, instead of Pushed to X", async () => {
-    const { pushBranch } = await load<Lib>("mods/jig-repos/lib.js");
+    const { pushBranch } = await load<Lib>("mods/jig-git/lib.js");
     const fake = async (_cmd: string, args: string[]) => {
         if (args[0] === "symbolic-ref") return { code: 0, stdout: "main\n", stderr: "" };
         if (args[0] === "config") {
@@ -509,7 +509,7 @@ test("a push git calls up to date says so, instead of Pushed to X", async () => 
 });
 
 test("a pull that cannot fast-forward is refused with git's message and merges nothing", async (t) => {
-    const { pullFastForward } = await load<Lib>("mods/jig-repos/lib.js");
+    const { pullFastForward } = await load<Lib>("mods/jig-git/lib.js");
     const root = scratch(t);
     const { origin, repo } = cloned(root);
     writeCommit(repo, "app.ts", "local work");
@@ -528,7 +528,7 @@ test("a pull that cannot fast-forward is refused with git's message and merges n
 });
 
 test("a detached HEAD and an agent at work refuse pull, push and publish before any command runs", async (t) => {
-    const { fetchRemote, pullFastForward, pushBranch, publishBranch } = await load<Lib>("mods/jig-repos/lib.js");
+    const { fetchRemote, pullFastForward, pushBranch, publishBranch } = await load<Lib>("mods/jig-git/lib.js");
     const root = scratch(t);
     const { repo } = cloned(root);
     git(repo, "checkout", "-q", "--detach", "HEAD");
@@ -560,7 +560,7 @@ test("a detached HEAD and an agent at work refuse pull, push and publish before 
 });
 
 test("a network command runs with no prompt, the person's own ssh command and a timeout", async (t) => {
-    const { fetchRemote, networkEnv, shQuote, wrapperScript } = await load<Lib>("mods/jig-repos/lib.js");
+    const { fetchRemote, networkEnv, shQuote, wrapperScript } = await load<Lib>("mods/jig-git/lib.js");
     const root = scratch(t);
     const { repo } = cloned(root);
     calls.length = 0;
@@ -598,7 +598,7 @@ test("a network command runs with no prompt, the person's own ssh command and a 
 });
 
 test("network exec gives Herdr a deadline after the shell's own, including the 600 s edge", async () => {
-    const { execBudget, networkExec, timeoutMessage } = await load<Lib>("mods/jig-repos/lib.js");
+    const { execBudget, networkExec, timeoutMessage } = await load<Lib>("mods/jig-git/lib.js");
     const calls: Array<{ args: string[]; options: any }> = [];
     const fake = async (_cmd: string, args: string[], options: any) => {
         calls.push({ args, options });
@@ -622,7 +622,7 @@ test("network exec gives Herdr a deadline after the shell's own, including the 6
 });
 
 test("the scan tells a checkout's upstream, remote and last commit, and a gone upstream", async (t) => {
-    const { SCRIPT, parseRepos } = await load<Lib>("mods/jig-repos/lib.js");
+    const { SCRIPT, parseRepos } = await load<Lib>("mods/jig-git/lib.js");
     const root = scratch(t);
     const { repo } = cloned(root);
     writeCommit(repo, "app.ts", "fix(app): keep the last commit");
@@ -648,7 +648,7 @@ test("the scan tells a checkout's upstream, remote and last commit, and a gone u
 });
 
 test("the push confirm lists at most ten commits, newest first, and says how many more there are", async (t) => {
-    const { commitsToPush } = await load<Lib>("mods/jig-repos/lib.js");
+    const { commitsToPush } = await load<Lib>("mods/jig-git/lib.js");
     const root = scratch(t);
     const { repo } = cloned(root);
     for (let i = 0; i < 12; i++) writeCommit(repo, `file-${i}.ts`, `change ${i}`);
@@ -659,7 +659,7 @@ test("the push confirm lists at most ten commits, newest first, and says how man
 });
 
 test("the panel follows the focused terminal, then the space folder, then the space's first terminal", async () => {
-    const { pickRoot, panesOn } = await load<Lib>("mods/jig-repos/lib.js");
+    const { pickRoot, panesOn } = await load<Lib>("mods/jig-git/lib.js");
     const cases: [{ [key: string]: unknown }, string | null][] = [
         [{ follow: true, focusedCwd: "/w/orders-api", spaceFolder: "/w", first: "/w/first" }, "/w/orders-api"],
         [{ follow: true, focusedCwd: null, spaceFolder: "/w", first: "/w/first" }, "/w"],
@@ -673,7 +673,7 @@ test("the panel follows the focused terminal, then the space folder, then the sp
 
     const panes = [
         { terminal: "t1", tab: "tab1", cwd: "/w/a", status: "working", program: { name: "Pi" }, title: "pi" },
-        { terminal: null, tab: "tab1", cwd: null, title: "Changes" },
+        { terminal: null, tab: "tab1", cwd: null, title: "Git" },
         { terminal: "t2", tab: "tab2", cwd: "/w/b", status: "idle", title: "zsh" },
     ];
     const spaces = [
@@ -692,7 +692,7 @@ test("the panel follows the focused terminal, then the space folder, then the sp
 });
 
 test("an age reads as words, like the other panels", async () => {
-    const { ago } = await load<Lib>("mods/jig-repos/lib.js");
+    const { ago } = await load<Lib>("mods/jig-git/lib.js");
     const now = Date.parse("2026-01-10T12:00:00Z");
     assert.equal(ago(now - 10_000, now), "just now");
     assert.equal(ago(now - 5 * 60_000, now), "5m ago");
@@ -707,7 +707,7 @@ test("an age reads as words, like the other panels", async () => {
 // ---- Round 2: the real push target, one lock per checkout, and shells without `timeout` ----
 
 test("a push goes exactly where git's own settings send it (pushRemote), never to another branch", async (t) => {
-    const { pushTarget, pushBranch, commitsToPush } = await load<Lib>("mods/jig-repos/lib.js");
+    const { pushTarget, pushBranch, commitsToPush } = await load<Lib>("mods/jig-git/lib.js");
     const root = scratch(t);
     const { origin, repo } = cloned(root);
     const fork = path.join(root, "fork.git");
@@ -745,7 +745,7 @@ test("a push goes exactly where git's own settings send it (pushRemote), never t
 });
 
 test("a branch whose push target is another branch is published as itself, and that branch is left alone", async (t) => {
-    const { pushTarget, pushBranch, publishBranch, commitsToPush } = await load<Lib>("mods/jig-repos/lib.js");
+    const { pushTarget, pushBranch, publishBranch, commitsToPush } = await load<Lib>("mods/jig-git/lib.js");
     const root = scratch(t);
     const { origin, repo } = cloned(root);
     const main = git(origin, "rev-parse", "main");
@@ -771,7 +771,7 @@ test("a branch whose push target is another branch is published as itself, and t
 });
 
 test("a branch or a push target that changed after the dialog opened is refused, and nothing is sent", async (t) => {
-    const { pushBranch, publishBranch } = await load<Lib>("mods/jig-repos/lib.js");
+    const { pushBranch, publishBranch } = await load<Lib>("mods/jig-git/lib.js");
     const root = scratch(t);
     const { origin, repo } = cloned(root);
     writeCommit(repo, "mine.ts");
@@ -798,7 +798,7 @@ test("a branch or a push target that changed after the dialog opened is refused,
 });
 
 test("the sh wrapper keeps the person's ssh command and adds BatchMode only when there is none", async (t) => {
-    const { wrapperScript } = await load<Lib>("mods/jig-repos/lib.js");
+    const { wrapperScript } = await load<Lib>("mods/jig-git/lib.js");
     const root = scratch(t);
     const repo = path.join(root, "repo");
     mkdirSync(repo);
@@ -825,7 +825,7 @@ test("the sh wrapper keeps the person's ssh command and adds BatchMode only when
 });
 
 test("without `timeout`, the wrapper still stops a slow command and exits 124", async (t) => {
-    const { wrapperScript } = await load<Lib>("mods/jig-repos/lib.js");
+    const { wrapperScript } = await load<Lib>("mods/jig-git/lib.js");
     const root = scratch(t);
     const bin = path.join(root, "bin");
     mkdirSync(bin);
@@ -861,7 +861,7 @@ test("without `timeout`, the wrapper still stops a slow command and exits 124", 
     assert.equal(slow.status, 124, "a watchdog, not a hang");
     assert.ok(Date.now() - started < 4000, "stopped at about the timeout");
     assert.deepEqual(
-        readdirSync(root).filter((f) => f.startsWith("jig-repos-timeout-")),
+        readdirSync(root).filter((f) => f.startsWith("jig-git-timeout-")),
         [],
         "no flag left",
     );
@@ -874,7 +874,7 @@ test("without `timeout`, the wrapper still stops a slow command and exits 124", 
 });
 
 test("a timed-out command says so, never `git exited with 124`", async () => {
-    const { fetchRemote, pullFastForward, timeoutMessage, NETWORK_TIMEOUT } = await load<Lib>("mods/jig-repos/lib.js");
+    const { fetchRemote, pullFastForward, timeoutMessage, NETWORK_TIMEOUT } = await load<Lib>("mods/jig-git/lib.js");
     const fake = (code: number) => async (_cmd: string, args: string[]) =>
         args.includes("get-url") ? { code: 0, stdout: "", stderr: "" } : { code, stdout: "", stderr: "" };
     const fetched: Result = await fetchRemote(fake(124), { checkout: "/w/a" });
@@ -931,7 +931,7 @@ test("Review's add, unstage and discard keep their exact git argv", async () => 
 });
 
 test("one lock per checkout: the panel and its dialog share it, and it expires", async () => {
-    const lib = await load<Lib>("mods/jig-repos/lib.js");
+    const lib = await load<Lib>("mods/jig-git/lib.js");
     const {
         runningKey,
         liveLocks,
@@ -1026,7 +1026,7 @@ test("the actions never force, delete a branch, reset, amend or skip hooks; a pu
             assert.ok(explicit || firstPublish, `unexpected push: ${command.join(" ")}`);
         }
     }
-    for (const mod of ["jig-repos", "jig-review"]) {
+    for (const mod of ["jig-git", "jig-review"]) {
         const code = readdirSync(path.join(HERDR, "mods", mod))
             .filter((f) => f.endsWith(".js"))
             .map((f) => readFileSync(path.join(HERDR, "mods", mod, f), "utf8"))
@@ -1058,7 +1058,7 @@ test("the list's look: short names, folds per repo, badges and the one commit li
         changedBadge,
         worktreeSignal,
         FOLD_KEY,
-    } = await load<Lib>("mods/jig-repos/lib.js");
+    } = await load<Lib>("mods/jig-git/lib.js");
 
     assert.deepEqual(rowName({ path: "/repos/bss-services" }), { name: "bss-services", dir: null });
     assert.deepEqual(
@@ -1098,7 +1098,7 @@ test("the list's look: short names, folds per repo, badges and the one commit li
     assert.equal(deeper.get("/x/repos/a/orders"), "repos/a");
     assert.equal(deeper.get("/x/other/a/orders"), "other/a");
 
-    assert.equal(FOLD_KEY, "jig-repos.folded");
+    assert.equal(FOLD_KEY, "jig-git.folded");
     const cleanTree = { path: "/r/jig-dark", files: [], ahead: 0, behind: 0 };
     const dirtyTree = { path: "/r/jig-dirty", files: [{ path: "a" }] };
     const behindTree = { path: "/r/jig-behind", files: [], ahead: 0, behind: 2 };
@@ -1145,8 +1145,8 @@ test("the list's look: short names, folds per repo, badges and the one commit li
 });
 
 test("the Changes panel's config.json has its defaults, and a wrong field is reported", async () => {
-    const { parseConfig } = await load<Lib>("mods/jig-repos/lib.js");
-    const shipped = parseConfig(readFileSync(path.join(HERDR, "mods/jig-repos/config.json"), "utf8"));
+    const { parseConfig } = await load<Lib>("mods/jig-git/lib.js");
+    const shipped = parseConfig(readFileSync(path.join(HERDR, "mods/jig-git/config.json"), "utf8"));
     assert.deepEqual(shipped, {
         newBranchPrefix: "feature/",
         baseBranch: null,
@@ -1212,7 +1212,7 @@ function plain(root: string, name: string, first: string, ...others: string[]): 
 
 /** The base both ways: the Changes panel's scan script and the Review tab's findBase must agree. */
 async function bases(root: string, dirs: string[]) {
-    const { SCRIPT, parseRepos } = await load<Lib>("mods/jig-repos/lib.js");
+    const { SCRIPT, parseRepos } = await load<Lib>("mods/jig-git/lib.js");
     const { findBase } = await load<Lib>("mods/jig-review/lib.js");
     const scanned = parseRepos(scanRoot(SCRIPT, root), root);
     return Promise.all(
@@ -1319,7 +1319,7 @@ test("the closest candidate is the base, and a checkout on a base branch has non
 });
 
 test("the Changes panel's chip counts commits over the base; a clean checkout with commits is not clean", async (t) => {
-    const { SCRIPT, parseRepos, groupRepos, isClean, aheadChip } = await load<Lib>("mods/jig-repos/lib.js");
+    const { SCRIPT, parseRepos, groupRepos, isClean, aheadChip } = await load<Lib>("mods/jig-git/lib.js");
     const root = realpathSync(scratch(t));
     const ticket = plain(root, "orders-api", "main");
     gitc(ticket, "switch", "-q", "-c", "feature/PROJ-123");
@@ -1392,7 +1392,7 @@ test("the branch view lists the committed files and the uncommitted ones against
 });
 
 test("a gone upstream names the tracking remote, not the push remote", async (t) => {
-    const { pushTarget } = await load<Lib>("mods/jig-repos/lib.js");
+    const { pushTarget } = await load<Lib>("mods/jig-git/lib.js");
     const root = scratch(t);
     const { origin, repo } = cloned(root);
     const fork = path.join(root, "fork.git");

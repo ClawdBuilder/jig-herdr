@@ -12,7 +12,7 @@ const ROOT = path.resolve(args.find((arg) => !arg.startsWith("--")) ?? "share");
 const PLACEHOLDER = "90528e8d20ef8285fabe621d6fd74db7f49b1e08bf85cd3a55cb3610fb1a0a2e";
 const LISTINGS = new Set([
     "jig-workbench",
-    "jig-repos",
+    "jig-git",
     "jig-history",
     "jig-prs",
     "jig-worktrees",
@@ -21,7 +21,7 @@ const LISTINGS = new Set([
 ]);
 const LAYOUT = "jig-workbench";
 const SHIPPED = new Set(["workspace-chrome", "spaces", "agents", "tabs", "pane"]);
-const DEPENDENCIES = { "jig-repos": ["jig-review"] };
+const DEPENDENCIES = { "jig-git": ["jig-review"] };
 const SECTIONS = ["What you see:", "How it behaves:", "Built from:", "Watch out:", "Done when:"];
 const failures = [];
 const fail = (message) => failures.push(message);
@@ -122,7 +122,7 @@ for (const id of LISTINGS) {
     } else {
         const own = path.join(dir, "mods", id);
         if (!exists(path.join(own, "mod.json"))) fail(`${id}: its own mod is missing`);
-        const allowed = new Set([id, ...(id === "jig-repos" ? ["jig-review"] : [])]);
+        const allowed = new Set([id, ...(id === "jig-git" ? ["jig-review"] : [])]);
         for (const mod of mods) if (!allowed.has(mod.name)) fail(`${id}: stray mod ${mod.name}`);
     }
 }
