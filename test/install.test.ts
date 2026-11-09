@@ -333,3 +333,17 @@ test("an existing new config wins over the old file, which only fills gaps", (t)
     assert.equal(merged.rowDetail, "compact");
     assert.equal(merged.baseBranch, "develop");
 });
+
+test("the newest old config wins, and a dry run reports the same migrations as a real run", (t) => {
+    const old = "jig-" + "repos";
+    const target = folder(t);
+    mkdirSync(path.join(target, "mods", old), { recursive: true });
+    mkdirSync(path.join(target, "mods/repo-changes"), { recursive: true });
+    writeFileSync(path.join(target, "mods", old, "config.json"), JSON.stringify({ refreshSeconds: 90 }));
+    writeFileSync(path.join(target, "mods/repo-changes/config.json"), JSON.stringify({ refreshSeconds: 30 }));
+    const dry = install(target, { dryRun: true });
+    assert.equal(existsSync(path.join(target, "mods/jig-git/config.json")), false);
+    const real = install(target);
+    assert.deepEqual(dry.migrated, real.migrated);
+    assert.equal(JSON.parse(read(target, "mods/jig-git/config.json")).refreshSeconds, 90);
+});

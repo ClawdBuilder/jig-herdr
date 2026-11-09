@@ -4,6 +4,12 @@
 
 ### Fixed
 
+- When both `repo-changes` and the newer `jig-repos` config exist, `jig-repos` now wins: the installer lists the newest
+  old name first, and a `--dry-run` reports the same migrations as a real run.
+
+
+### Fixed
+
 - The Repos and History branch pickers rank matches (exact, prefix, last path segment, substring) and highlight the row
   Enter will pick; `↑`/`↓` move it, Enter acts only on it, and a dim `↑↓ to choose · Enter to switch` hint appears while a
   row is pickable.
