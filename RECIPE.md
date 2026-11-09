@@ -4,11 +4,14 @@ A black window with lime highlights for working with coding agents on several gi
 agents lists stand on the left, terminals are cards in the middle, and a side panel on the right shows, one at a time and
 switched by a narrow icon bar: the Work panel of the Pi session in focus (its ticket, workflow stages, pull requests, the
 files it changed and its recent tool calls), the Context panel of that session (what fills its context, and a switch for
-each tool and skill), then the changes, commit history, pull requests and checks, worktrees and files
-of every repository under the space's folder. There is no status bar: the agents list on the left shows their states. The
+each tool and skill), then Git, History, PR & CI, Worktrees and Files
+for the repositories under the space's folder. There is no status bar: the agents list on the left shows their states. The
 window follows, unseen, the colour palette the Jig plugins give Pi.
 
 ![Jig](preview.png)
+
+Each listed panel's full brief lives in `gallery/<id>/RECIPE.md`; this recipe adds only what the private `jig` layout and
+its Jig-only panels contribute.
 
 ## What you see
 
@@ -31,22 +34,20 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
   Context gauge are first, with a 1 px `border` line under them. A round badge (15 px, `blocked` or `accent` colour, the count in the window's background colour, `99+` at most)
   sits at the top right of an icon that has a count.
 - **Work panel.** On `chrome`. A header: `π` in `accent`, the folder's name, `·`, the model in `muted`, the thinking level,
-  and at the right a 7 px dot and `working` (`working`) or `idle` (`idle`, `dim`); a second line in `dim` with `context N% of
-  200k`, the cost, the terminal and `N sessions ▾` when several run. Then sections with a 10.5 px semibold `dim` heading:
+  and at the right a 7 px dot and `working` (`working`) or `idle` (`idle`, `dim`); a second line in `dim` with `context N% of <window>`, the cost, the terminal and `N sessions ▾` when several run. Then sections with a 10.5 px semibold `dim` heading:
   `TICKET` (the key in `accent`, the title; the stages as 20 px pills joined by 1 px lines, done ones ticked with an `accent`
   border, the current one filled `accent` with `accent_foreground` text, later ones `dim`), `PULL REQUESTS` (a branch icon,
   `#N`, the title, `open`/`draft`/`merged`, the review state, `✗N` in `ansi1`, `●N` in `working`, `✓N` in `ansi2`; failing
   check names below in `ansi1`), `OUTPUTS` (`A` in `ansi2` or `M` in `blocked`, the name, the folder dimmed, a diff button,
   the time) and `RECENT` (time, tool and action, the decision, the outcome coloured). Rows are 22 to 26 px.
-- **Context panel.** On `chrome`. The same header as Work with a `Reload` button at the right (outlined, 22 px). Then `62%
-  used · 124k / 200k` (15 px semibold), a 10 px bar split by share of the window, and a legend of 22 px rows: a 10 px square,
+- **Context panel.** On `chrome`. The same header as Work with a `Reload` button at the right (outlined, 22 px). Then the live `<percent>% used · <used> / <window>` line (15 px semibold), a 10 px bar split by share of the window, and a legend of 22 px rows: a 10 px square,
   the part, the tokens (`≈` before counted ones) in `muted`, the percentage in `dim`. Colours: Messages `accent`, Tools
   `ansi6`, System prompt `foreground`, Skills `ansi5`, Context files `ansi3`, Compaction buffer `dim`, Free space `raised`.
   Under it the last answer (`✓` in `done`, `✗` in `blocked`), then folded sections `▸ TOOLS N of M on`, `▸ SKILLS N` and `▸
   CONTEXT FILES N`: 24 px rows with the name, the size and a 28×16 switch (`accent` when on, a 10 px knob).
-- **Git panel.** A 42 px header with the folder's name (full path on hover), a `Terminal`/`Space` toggle, a fold-all
-  chevron, a fetch-everything icon and a refresh icon; a muted body line under it carries `N repos · M changed` (with the
-  worktree count when there is room); a filter box; then a
+- **Git panel.** A 42 px header with the folder's name (full path on hover), the `Terminal`/`Space` switch and Refresh;
+  fold-all appears when there are several repo groups, fetch-all when a checkout has a remote. A muted body line under the
+  header carries `N repos · M changed` (with the worktree count when there is room); a filter box; then a
   one line for each checkout with changes (its name, a branch chip with an icon, the parent folder only on a name clash, a `2 vs main` chip
   when the branch has commits its base lacks, `↑` ahead in `foreground`, `↓` behind in `blocked`, then pull and push/publish
   icons, and a count in a small outlined box), and under it its linked worktrees as `↳ <folder>` rows, indented 18 px,
@@ -86,8 +87,8 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
 - **Git.** It follows the focused terminal's folder (its checkout and linked worktrees, else the repositories below it),
   or the space's folder when the header's toggle says `Space`; the choice is kept per space in `localStorage`, and a switch
   keeps the old rows until the new ones arrive and never clears the filter. One `sh` script on the space's machine reads
-  them: every 5 seconds while the panel is shown, when it is opened, when a terminal changes status or the folder changes,
-  and at once after an action. A click on a repository's row folds it; the filter keeps repositories whose name matches
+  them: when the panel is shown, when it is opened, when a terminal changes status or the folder changes, after an action,
+  and at its 60-second backstop. A click on a repository's row folds it; the filter keeps repositories whose name matches
   (with all their files) or whose files match. Hovering a row shows `+` (stage all), `−` (unstage all), the fetch icon and a
   terminal button; hovering a file shows `↺`, which asks inline before discarding (`DELETED` for a new file). A checkbox
   stages or unstages its file; the message box commits the staged files, `Commit & Push` then asks before pushing. Fetch
@@ -97,19 +98,25 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
   branch is published under its own name instead, never pushed onto that branch. Network commands run with
   `GIT_TERMINAL_PROMPT=0` and, where the machine and the repository set none, `GIT_SSH_COMMAND="ssh -o BatchMode=yes"`,
   under a 60-second `timeout` or a `sleep`/`kill` watchdog. One action at a time per checkout, shared by the panel and its
-  dialog. A click on the branch chip opens a 360×440 popup: a search box, local branches (current ticked, one in another
-  worktree greyed `in use by <folder>`), origin-only branches, and `New branch…` (name box prefilled from `config.json`). A
+  dialog. A click on the branch chip opens a 360×440 popup: a search box; before typing it shows local branches only, with `Type to
+  search N more on origin` when origin has more; typing ranks exact, prefix, last-segment and substring matches, locals
+  first. The current branch is ticked, one in another worktree is greyed `in use by <folder>`, and the row Enter would
+  choose has a 2 px `accent` left edge. `New branch…` prefills its name box from `config.json`. A
   switch is refused while an agent works in the checkout or files are uncommitted; a pull, push or publish, while an
   agent works there or on a detached HEAD; a push, when git's destination for the branch is a different branch or there is
   none. A click on a file opens or retargets the tab `Review · <repository>`.
-- **History.** A picker of the repositories (inside one repository, no picker), then the commit graph: 28 px rows with lanes
-  14 px apart, a dot per commit (a ring for the checked-out one), the author's initials, branch and tag pills, the pull
-  request number, the conventional-commit type, the subject and the age. A click opens the message and files under the
-  row; a file or `Open diff` opens `git show` in a terminal beside. `Branch` or `All` chooses the scope; `Load more` adds 100.
+- **History.** A 42 px header with the branch title, the `Terminal`/`Space` switch and Refresh; a second 24 px row holds
+  `Branch`/`All`. A picker of the repositories (inside one repository, no picker), then the commit graph: 24 px rows with
+  lanes 14 px apart, a dot per commit (a ring for the checked-out one), the author's initials, branch and tag pills, the
+  pull request number, the conventional-commit type, the subject and the age. A click opens the message and files under the
+  row; a file or `Open diff` opens `git show` in a terminal beside. The branch title opens the picker; local branches come
+  first, and the row Enter would choose has an accent edge. `Branch` or `All` chooses the scope; `Load more` adds 100.
 - **PR & CI.** The `Workspace` tab: each repository on a feature branch with its pull request, its checks (`×` failed, `•`
-  pending, `✓` passed, `–` skipped; a cancelled run is skipped) and review state; repositories on a default branch fold
-  into a group. The `Mine` tab: your open pull requests by repository. A click opens the pull request or check in the browser.
-- **Worktrees.** Linked worktrees of every repository, grouped, newest first, each `Ready to remove` or `In progress`. Ready
+  pending, `✓` passed, `–` skipped; a cancelled run is skipped) and review state. Repositories without a PR fold into
+  `No PR (N)`; default-branch repositories fold into `On default branch (N)`. The `Mine` tab: your open pull requests by repository. A click opens the pull request or check in the browser.
+- **Worktrees.** A 42 px header titled with the count (`15 worktrees`, `1 worktree`, or `Worktrees` before a read; the
+  full repo · count is the tooltip), the `Terminal`/`Space` switch, `Prune merged (N)` and Refresh. Linked worktrees of every
+  repository, grouped, newest first, each `Ready to remove` or `In progress`. Ready
   needs: nobody working there, not locked, no uncommitted change, **no commit on no remote (unpushed commits are never ready)**,
   and the work in the base or the remote branch deleted. `Remove` asks twice and runs `git worktree remove` (no `--force`)
   and `git branch -d` (never `-D`).
@@ -172,7 +179,7 @@ The mods, all in `mods/`, each with `mod.json` `{ "place": "none", "title": "...
 - **`jig-file-view`** (props `{ on, path }` from `tab.new`). `readTextFile(path, { on })`, `EditorState` and `Editor` from
   `gpui-base`, read-only.
 - **`jig-git`** (props: none; `{ picker }` for its branch popup, `{ push }` for its push dialog; settings in
-  `config.json`: `{ newBranchPrefix, baseBranch, remote, networkTimeoutSeconds }`). Reads `spaces()`, `panes()`,
+  `config.json`: `{ newBranchPrefix, baseBranch, remote, networkTimeoutSeconds, rowDetail, refreshSeconds }`). Reads `spaces()`, `panes()`,
   `focused()`, `terminals()`, `layout()`, `appHome()`, `shared("jig-git.running")`; reads its `config.json` with
   `readTextFile`; runs `exec("sh", ["-c", SCRIPT, "sh", root], { on })` with the space's machine, `exec("git", ..., { cwd,
   on })` for the actions, and the network ones through one `sh -c` that sets the environment and a `timeout` (or a
@@ -181,21 +188,25 @@ The mods, all in `mods/`, each with `mod.json` `{ "place": "none", "title": "...
   `render`) and the picker. Icons: its own `fetch`, `pull`, `push`, `refresh`, and `mods/workspace-chrome/`
   `branch`, `check`, `chevron-down`, `chevron-right`, `folder`, `minus`, `plus`, `terminal`. Files: `main.js` (the panel),
   `picker.js`, `push.js` (the confirm dialog), `lib.js` (the script, the parsing, the grouping and the git actions, each
-  taking `exec` and returning `{ ok, message }`), `layout.js`, `config.json`, `RECIPE.md`, `preview.png`.
+  taking `exec` and returning `{ ok, message }`), `layout.js`, `refresh.js`, `panel-header.js`, `follow.js`,
+  `follow-state.js`, the SVG icons, `config.json`, `RECIPE.md`, `preview.png`.
 - **`jig-review`** (props `{ on, repo, name, file? }` from `tab.new`; read them with `props()`). `exec("git", ...)` and
   `readTextFile` with `{ on }`; `v_virtual_list` and `Scrollbar` from `gpui-base`. Its `lib.js` copies the stage, unstage
-  and discard functions of `jig-git`.
+  and discard functions of `jig-git`. Files: `main.js`, `lib.js`, `refresh.js`, `panel-header.js`.
 - **`jig-history`** (props: none). `exec("sh", ["-c", SCRIPT, "sh", root], { on })` for the repositories, `exec("git", ...,
   { cwd, on })` for `log`, `status` and `show`, `run("terminal.open", ...)` for a diff. `InputState` and `Input` from
-  `gpui-base` for the filter and the picker. Files: `main.js`, `lib.js`.
+  `gpui-base` for the filter and the picker. Files: `main.js`, `lib.js`, `refresh.js`, `panel-header.js`, `follow.js`,
+  `follow-state.js`.
 - **`jig-prs`** (props: none). `exec("sh", ...)` for the repositories, `exec("gh", ...)` for `pr view`, `pr list` and `search
   prs` (four at a time, cached 5 minutes in `localStorage`), `exec` of the browser opener here, `setShared` for the badge.
-  Files: `main.js`, `lib.js`.
+  Files: `main.js`, `lib.js`, `refresh.js`, `panel-header.js`, `follow.js`, `follow-state.js`.
 - **`jig-worktrees`** (props: none). `exec("sh", ...)` for the worktrees, `spaces()`, `panes()` for who is at a checkout,
   `run("space.select" | "tab.new")`, and for Remove only `exec("git", ["worktree", "remove", path])` and `exec("git",
-  ["branch", "-d", branch])`. `setShared` for the badge. Files: `main.js`, `lib.js`.
+  ["branch", "-d", branch])`. `setShared` for the badge. Files: `main.js`, `lib.js`, `refresh.js`, `panel-header.js`,
+  `follow.js`, `follow-state.js`.
 - **`jig-files`** (props: none). Herdr's `files` mod (Apache-2.0, header kept) with `run("tab.new", { mod: "jig-file-view" })`
-  instead of an in-panel preview; icons from `mods/workspace-chrome/`. File: `main.js`.
+  instead of an in-panel preview; icons from `mods/workspace-chrome/`. Files: `main.js`, `lib.js`, `refresh.js`,
+  `config.json`.
 - **`jig-activity`** (props `{ stack }`; a child's `activity` may have `divider: true`). `layout()`, `shared()`, `readTextFile` of `mods/<mod>/mod.json` to see which mods exist,
   `run("layout.select", { stack, child })`. Icons in `mods/jig-activity/icons/`: 24 px viewBox, stroke `currentColor`, 1.5.
 - **`jig-theme-sync`** (props: none; settings in `config.json`: `{ machine, agentDir, themeFolders }`). `exec("sh", ...)`
