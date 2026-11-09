@@ -298,6 +298,13 @@ test("jig-worktrees is ready only when the work is in the base and nothing is at
     assert.equal(readiness({ ...clean, baseAhead: null }, false), null);
 });
 
+test("the Worktrees header title says 0, 1 or n", async () => {
+    const { worktreeTitle } = await load<Lib>("mods/jig-worktrees/lib.js");
+    assert.equal(worktreeTitle(0), "Worktrees");
+    assert.equal(worktreeTitle(1), "1 worktree");
+    assert.equal(worktreeTitle(15), "15 worktrees");
+});
+
 test("jig-worktrees reads the script's lines, keeping what git could not tell as null", async () => {
     const { parseTrees, nameOf, relName } = await load<Lib>("mods/jig-worktrees/lib.js");
     const line = (...f: string[]) => ["W", ...f].join("\t");

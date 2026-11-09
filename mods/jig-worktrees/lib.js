@@ -94,6 +94,12 @@ while IFS= read -r r; do
     END { if (p != "" && !pr) { if (first) main = p; printf "%s\\0%s\\0%s\\0%s\\0%s\\0%s\\0", main, p, h, b, l, base } }' >> "$tmp/jobs"
 done < "$tmp/repos"
 if [ -s "$tmp/jobs" ]; then xargs -0 -n 6 sh "$tmp/stat.sh" < "$tmp/jobs"; fi`;
+/** The header's short title: no count before a read, singular at one. */
+export function worktreeTitle(count) {
+    const n = Math.max(0, Number(count) || 0);
+    return n === 0 ? "Worktrees" : `${n} worktree${n === 1 ? "" : "s"}`;
+}
+
 /** A number from the script's output; empty, "?" (git failed) and missing all give null. */
 const num = (text) => (text === "" || text === "?" || text === undefined ? null : Number(text));
 

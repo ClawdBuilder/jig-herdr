@@ -38,6 +38,7 @@ import {
     removalRefusal,
     SCRIPT,
     sameOrInside,
+    worktreeTitle,
     since,
     terminalsInsideWorktree,
 } from "./lib.js";
@@ -553,7 +554,8 @@ export default class RepoWorktrees extends View {
         const space = spaces().find((s) => s.active);
         const follow = readFollow(space?.id);
         const header = panelHeader(t, {
-            title: `${title} · ${count}`,
+            title: worktreeTitle(rows.length),
+            titleTooltip: `${title} · ${count}`,
             follow,
             onFollow: (cx) => {
                 writeFollow(space?.id, !follow);
