@@ -14,6 +14,10 @@ bar and no panel. The state is in Herdr's shared state (`jig-keep-awake.mode` an
 `${appHome()}/jig-keep-awake.stop` and `${appHome()}/jig-keep-awake.helper.json`. `Keep screen
 on` is a config value (`display: true`), not a separate window.
 
+The Jig layout's tab-bar sun opens a popup with the three modes, what is happening now, and a **Keep screen on** switch; a
+right-click opens the same popup. The standalone mod has no popup of its own. The helper is a child process on Herdr's
+machine, not a space's.
+
 **How it behaves:**
 
 **It draws no panel**, so `Ctrl+Shift+Alt+K` is the whole standalone interface (the Jig layout's tab-bar sun is the same
