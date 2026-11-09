@@ -47,7 +47,7 @@ const key = () => JSON.stringify(location());
 const ICON = (name) => `mods/workspace-chrome/${name}.svg`;
 const OWN = (name) => `mods/jig-files/${name}.svg`;
 
-// A 22x20 icon button for the header, like the Changes panel's.
+// A 22x20 icon button for the header, like the Git panel's.
 function iconButton(t, id, icon, tip, onClick, busy = false) {
     return div()
         .id(id)

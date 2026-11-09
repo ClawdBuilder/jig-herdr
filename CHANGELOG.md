@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Listing recipes now match the built panels: Review's header is title and Refresh (Copy and Diff/File/Patch are body
+  controls), History's title is the chosen branch under its repository chooser, and keep-awake separates its shared
+  `jig-keep-awake.helper` key from the `jig-keep-awake.helper.json` file.
+
+
 ### Changed
 
 - Listing titles now match what the layout shows: `Files`, `File view` and `Activity bar` for the generic mods;

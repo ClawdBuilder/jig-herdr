@@ -7,9 +7,9 @@ beside. Read-only. From Jig (https://github.com/ClawdBuilder/jig). No Jig requir
 
 **What you see:**
 
-A header with the repository or folder name, the Terminal/Space switch and Refresh; a second 24 px row holds the scope
-switch (`branch` or `all` branches/remotes/tags). The
-graph lists commit rows with a narrow coloured lane gutter, a short hash, subject, author and age; a type word (`feat`, `fix`, `docs`,
+A repository chooser sits above the 42 px header. The header title is the chosen branch (`Detached HEAD` when detached),
+with the Terminal/Space switch and Refresh; a second 24 px row holds the scope switch (`branch` or `all`
+branches/remotes/tags). The graph lists commit rows with a narrow coloured lane gutter, a short hash, subject, author and age; a type word (`feat`, `fix`, `docs`,
 `refactor`, `perf`, `test`, `build`, `ci`, `revert`) gets a hue. A commit opens a detail pane with its message and files;
 a file row or **Open diff** opens the diff in a terminal to the right. On a folder with many repositories, a list of
 repositories and worktrees comes first, with the chosen one remembered in `jig-history.branch`. Empty and no-git states

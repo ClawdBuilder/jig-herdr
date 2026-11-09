@@ -1,4 +1,4 @@
-// The branch picker: a popup the Changes panel opens on a checkout's branch chip (openOverlay of this same mod, with
+// The branch picker: a popup the Git panel opens on a checkout's branch chip (openOverlay of this same mod, with
 // `props().picker`). A search box, the local branches (the current one ticked, one checked out in another worktree greyed
 // and not pickable), then origin's branches that have no local one, and "New branch…". The git work is in lib.js; this
 // file only draws and passes Herdr's exec with the space's machine. A refusal is shown here and the popup stays open.

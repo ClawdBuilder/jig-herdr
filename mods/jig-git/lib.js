@@ -2,7 +2,7 @@ import { execBudget, friendlyError, parseRefreshConfig } from "./refresh.js";
 
 export { execBudget };
 
-// Helpers of the Changes panel that need no Herdr: the read script and its parsing, how checkouts nest, and the git
+// Helpers of the Git panel that need no Herdr: the read script and its parsing, how checkouts nest, and the git
 // actions. They live apart from main.js so the tests can load them outside Herdr and run the actions on real repositories.
 
 // Most changed files listed per checkout; the rest become "+N more".

@@ -27,8 +27,8 @@ mod checks the mode, agents and idle timer every second, verifies a running help
 **Built from:**
 
 `main.js` + `lib.js`; no panel. Herdr: `agents`, `appHome`, `exec`, `run`, `shared`/`setShared`, `theme`, `layout`,
-`openOverlay`/`closeOverlay`. Shared keys `jig-keep-awake.mode`, `.active`, `.helper`, `.helper.json`, `.display`, and the
-`cycle` command used by a tab bar. Config `${appHome()}/mods/jig-keep-awake/config.json`: `idleMinutes` (0–1440) and
+`openOverlay`/`closeOverlay`. Shared keys `jig-keep-awake.mode`, `.active`, `.helper`, `.display`, and the `cycle` command used by a tab bar;
+`${appHome()}/jig-keep-awake.helper.json` is the helper's claim file, not a shared key. Config `${appHome()}/mods/jig-keep-awake/config.json`: `idleMinutes` (0–1440) and
 `display` (keep the screen on too); defaults 5 and `true`.
 
 Programs: on Windows `powershell`/`powershell.exe` (hidden `SetThreadExecutionState` child) and `taskkill`; on macOS
