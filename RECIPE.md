@@ -190,7 +190,7 @@ The mods, all in `mods/`, each with `mod.json` `{ "place": "none", "title": "...
   `branch`, `check`, `chevron-down`, `chevron-right`, `folder`, `minus`, `plus`, `terminal`. Files: `main.js` (the panel),
   `picker.js`, `push.js` (the confirm dialog), `lib.js` (the script, the parsing, the grouping and the git actions, each
   taking `exec` and returning `{ ok, message }`), `layout.js`, `refresh.js`, `panel-header.js`, `follow.js`,
-  `follow-state.js`, the SVG icons, `config.json`, `RECIPE.md`, `preview.png`.
+  `follow-state.js`, the SVG icons and `config.json`.
 - **`jig-review`** (props `{ on, repo, name, file? }` from `tab.new`; read them with `props()`). `exec("git", ...)` and
   `readTextFile` with `{ on }`; `v_virtual_list` and `Scrollbar` from `gpui-base`. Its `lib.js` copies the stage, unstage
   and discard functions of `jig-git`. Files: `main.js`, `lib.js`, `refresh.js`, `panel-header.js`.
