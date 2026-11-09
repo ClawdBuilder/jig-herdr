@@ -4,6 +4,13 @@
 
 ### Changed
 
+- The git panels share one 42 px header: one Terminal/Space switch, one refresh icon with a `Refresh · read N ago`
+  tooltip, and one error line under the header. History's Branch/All moves to a second row; Repos' summary and PR & CI's
+  summary move to body lines so nothing is lost in a 380 px panel.
+
+
+### Changed
+
 - The public-facing mods now carry the `jig-` prefix: `repo-changes` → `jig-repos`, `repo-history` → `jig-history`,
   `repo-prs` → `jig-prs`, `repo-worktrees` → `jig-worktrees`, `repo-review` → `jig-review`, `keep-awake` →
   `jig-keep-awake`, and `file-view` → `jig-file-view`. Shared-state keys and `config.json` paths follow. The installer

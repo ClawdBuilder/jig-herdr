@@ -48,6 +48,7 @@ import {
     stageFile,
     unstageFile,
 } from "./lib.js";
+import { panelError, panelHeader } from "./panel-header.js";
 import { friendlyError, GIT_READ, run as runCommand } from "./refresh.js";
 
 const EVERY = 5000; // re-list the files this often while the tab is shown
@@ -702,24 +703,13 @@ export default class RepoReview extends View {
             .border_r(1)
             .border_color(t.border)
             .child(
-                h_flex()
-                    .h(32)
-                    .flex_none()
-                    .px(12)
-                    .gap(8)
-                    .items_center()
-                    .child(div().flex_1().min_w(0).truncate().font_semibold().child(this.name))
-                    .child(
-                        div()
-                            .id("review-refresh")
-                            .flex_none()
-                            .text_size(11)
-                            .text_color(t.dim)
-                            .cursor_pointer()
-                            .hover((s) => s.text_color(t.foreground))
-                            .on_click((_e, cx) => this.refresh(cx))
-                            .child(this.loading ? "Reading…" : "Refresh"),
-                    ),
+                panelHeader(t, {
+                    title: this.name,
+                    readAt: this.last,
+                    busy: this.loading,
+                    onRefresh: (cx) => this.refresh(cx),
+                    refreshIcon: "mods/jig-review/refresh.svg",
+                }),
             )
             .child(
                 h_flex()
@@ -749,11 +739,7 @@ export default class RepoReview extends View {
             )
             .children(this.modeSwitch(t))
             .children(this.branchHeader(t))
-            .when(Boolean(this.error), (el) =>
-                el.child(
-                    div().flex_none().px(12).py(3).truncate().text_size(11).text_color(t.blocked).child(this.error),
-                ),
-            )
+            .when(Boolean(this.error), (el) => el.child(panelError(t, this.error)))
             .child(
                 v_flex()
                     .id("review-files")

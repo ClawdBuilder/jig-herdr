@@ -6,9 +6,9 @@ without leaving the window. ![Changes](preview.png)
 
 ## What you see
 
-- **The header**, one row: the folder's name (its full path on hover), a toggle that says `Terminal` or `Space`, a fold-all
-  chevron (fold or unfold every repo), how many checkouts were found and how many have changes, a fetch-everything icon and a
-  refresh icon.
+- **The header**, one 42 px row: the folder's name (its full path on hover), a toggle that says `Terminal` or `Space`,
+  a fold-all chevron (fold or unfold every repo), a fetch-everything icon and a refresh icon whose tooltip says
+  `Refresh · read N ago` (`Reading…` while busy). The count and changed-file summary is a muted body line under the header.
 - **The filter box** under it, a single line matching a checkout's name or a file's path.
 - **A checkout's row**, 26 pixels high and one line: a chevron (on a main checkout with worktrees: fold/unfold them; on the
   others: show/hide files), the name in semibold (a worktree indented 16 pixels, its repo prefix dropped: `jig-dark` → `dark`;

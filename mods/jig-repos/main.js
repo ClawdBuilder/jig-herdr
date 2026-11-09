@@ -79,6 +79,7 @@ import {
     withoutLock,
     worktreeSignal,
 } from "./lib.js";
+import { panelError, panelHeader } from "./panel-header.js";
 import { BranchPicker, DONE } from "./picker.js";
 import { PushConfirm } from "./push.js";
 import {
@@ -1565,79 +1566,53 @@ export default class RepoChanges extends View {
                 cx.notify();
             })
             .child(
-                h_flex()
-                    .h(42)
-                    .flex_none()
-                    .px(12)
-                    .gap(7)
-                    .items_center()
-                    .border_b(1)
-                    .border_color(t.border)
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w(0)
-                            .truncate()
-                            .font_semibold()
-                            .tooltip(loc.root || "No folder")
-                            .child(loc.root ? lastSegment(loc.root) || "/" : "Repos"),
-                    )
-                    .child(this.followToggle(t))
-                    .when(groups.length > 1, (el) => el.child(this.foldAllButton(t, groups)))
-                    .when(Boolean(this.switching) && !narrow, (el) =>
-                        el.child(div().flex_none().text_size(10.5).text_color(t.dim).child("Reading…")),
-                    )
-                    .when(!this.switching && !narrow && this.width >= 560, (el) =>
-                        el.child(div().flex_none().text_size(11).text_color(t.muted).child(summary)),
-                    )
-                    .when(
-                        Boolean(this.fetching) || (this.fetchNote && Date.now() - this.fetchNote.at < NOTE_MS),
-                        (el) =>
-                            el
-                                .when(Boolean(this.fetching), (e) =>
-                                    e
-                                        .child(div().flex_none().text_size(10.5).text_color(t.dim).child("Fetching…"))
-                                        .child(
-                                            div().flex_none().text_size(10.5).text_color(t.accent).frames(SPINNER, 90),
-                                        ),
-                                )
-                                .when(Boolean(this.fetchNote) && !this.fetching, (e) =>
-                                    e.child(
-                                        div().flex_none().text_size(10.5).text_color(t.done).child(this.fetchNote.text),
-                                    ),
-                                ),
-                    )
-                    .when(
-                        this.repos.some((r) => r.remote),
-                        (el) =>
-                            el.child(
-                                iconButton(
-                                    t,
-                                    "repos-fetch-all",
-                                    OWN("fetch"),
-                                    "Fetch every repo from its remote",
-                                    (cx) => this.fetchAll(cx),
-                                    this.fetching || this.switching || this.repos.some((r) => this.lock(r)),
-                                ),
-                            ),
-                    )
-                    .when(Boolean(this.error), (el) =>
-                        el.child(div().flex_none().text_size(10.5).text_color(t.blocked).child(this.error)),
-                    )
-                    .child(
-                        iconButton(
-                            t,
-                            "repos-refresh",
-                            OWN("refresh"),
-                            this.refreshState.busy ? "Reading repos…" : "Read the repos again",
-                            (cx) => {
-                                this.last = 0;
-                                this.refresh(cx, true, true);
-                            },
-                            false,
-                            this.refreshState.busy,
+                panelHeader(t, {
+                    title: loc.root ? lastSegment(loc.root) || "/" : "Repos",
+                    titleTooltip: loc.root || "No folder",
+                    follow: this.follow,
+                    onFollow: (cx) => this.setFollow(!this.follow, cx),
+                    readAt: this.last,
+                    busy: this.refreshState.busy,
+                    onRefresh: (cx) => {
+                        this.last = 0;
+                        this.refresh(cx, true, true);
+                    },
+                    refreshIcon: OWN("refresh"),
+                    extra: [
+                        groups.length > 1 ? this.foldAllButton(t, groups) : null,
+                        this.repos.some((r) => r.remote)
+                            ? iconButton(
+                                  t,
+                                  "repos-fetch-all",
+                                  OWN("fetch"),
+                                  "Fetch every repo from its remote",
+                                  (cx) => this.fetchAll(cx),
+                                  this.fetching || this.switching || this.repos.some((r) => this.lock(r)),
+                              )
+                            : null,
+                    ].filter(Boolean),
+                }),
+            )
+            .when(Boolean(this.error), (el) => el.child(panelError(t, this.error)))
+            .when(Boolean(summary) || this.switching || this.fetching || Boolean(this.fetchNote), (el) =>
+                el.child(
+                    div()
+                        .flex_none()
+                        .px(12)
+                        .py(2)
+                        .text_size(10.5)
+                        .text_color(t.muted)
+                        .truncate()
+                        .child(
+                            this.switching
+                                ? "Reading…"
+                                : this.fetching
+                                  ? "Fetching…"
+                                  : this.fetchNote
+                                    ? this.fetchNote.text
+                                    : summary,
                         ),
-                    ),
+                ),
             )
             .child(
                 div()

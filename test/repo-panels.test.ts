@@ -990,7 +990,7 @@ test("realpath comparison sees a terminal inside a symlinked folder", async (t) 
 
 test("the live panel files call the tested seams, not inline copies", () => {
     const read = (name: string) => readFileSync(new URL(`../mods/${name}/main.js`, import.meta.url), "utf8");
-    for (const name of ["jig-history", "jig-prs", "jig-worktrees"]) assert.match(read(name), /followReload\(/, name);
+    for (const name of ["jig-history", "jig-prs", "jig-worktrees"]) assert.match(read(name), /writeFollow\(/, name);
     const wt = read("jig-worktrees");
     for (const seam of [
         "pruneAll(",

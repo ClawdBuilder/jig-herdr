@@ -197,6 +197,19 @@ export class RefreshScheduler {
     }
 }
 
+/** Short relative age for the panel Refresh tooltip. */
+export function readAgo(now, at) {
+    if (!at || at <= 0) return "";
+    const seconds = Math.max(0, Math.round((now - at) / 1000));
+    if (seconds < 5) return "just now";
+    if (seconds < 60) return `${seconds}s`;
+    const minutes = Math.round(seconds / 60);
+    if (minutes < 60) return `${minutes}m`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return `${hours}h`;
+    return `${Math.round(hours / 24)}d`;
+}
+
 /** One sentence for a failed git/gh read. `follow` adds the folder-panel switch hint. */
 export function friendlyError(result, { what = "Reading", follow = false } = {}) {
     const text = String(result?.stderr ?? result?.stdout ?? result?.message ?? result ?? "").trim();
