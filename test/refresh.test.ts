@@ -158,3 +158,67 @@ test("refreshSeconds clamps at 15 and reads the config object", () => {
     assert.equal(refreshSeconds({}), 60);
     assert.equal(refreshSeconds({ refreshSeconds: 1 }, 180), 15);
 });
+
+test("run passes env, a shell timeout and a later Herdr timeout, and recognises 124", async () => {
+    const { run } = await import("../mods/jig-repos/refresh.js");
+    const calls: Array<{ args: string[]; options: any }> = [];
+    const fake = async (_cmd: string, args: string[], options: any) => {
+        calls.push({ args, options });
+        return { code: 0, stdout: "", stderr: "" };
+    };
+    const result = await run(fake, "git", ["status"], { on: "box", seconds: 60, env: { FOO: "bar" } });
+    assert.equal(result.timedOut, false);
+    assert.equal(calls[0].options.timeout, 65000);
+    assert.match(calls[0].args[1], /export GIT_TERMINAL_PROMPT='0'/);
+    assert.match(calls[0].args[1], /export GH_PROMPT_DISABLED='1'/);
+    assert.match(calls[0].args[1], /export FOO='bar'/);
+    assert.match(calls[0].args[1], /timeout 60/);
+    assert.deepEqual(calls[0].args.slice(-2), ["git", "status"]);
+    const timed = await run(async () => ({ code: 124, stdout: "", stderr: "" }), "git", ["fetch"]);
+    assert.equal(timed.timedOut, true);
+    const rejected = await run(
+        async () => {
+            throw new Error("exec timed out");
+        },
+        "git",
+        ["fetch"],
+    );
+    assert.equal(rejected.code, 124);
+    assert.equal(rejected.timedOut, true);
+});
+
+test("friendlyError maps timeout, no repo, missing tools and gh classes", async () => {
+    const { friendlyError } = await import("../mods/jig-repos/refresh.js");
+    assert.equal(
+        friendlyError({ code: 124, seconds: 60 }),
+        "Reading took too long and was stopped (60 s). Check the connection, or try in a terminal.",
+    );
+    assert.equal(
+        friendlyError({ stderr: "fatal: not a git repository (or any of the parent directories)" }, { follow: true }),
+        "No git repo in this folder. Open a terminal in one, or switch to Space.",
+    );
+    assert.equal(
+        friendlyError({ code: 127, stderr: "git: command not found" }),
+        "git isn't installed on this machine.",
+    );
+    assert.equal(
+        friendlyError({ code: 127, stderr: "gh: command not found" }),
+        "The GitHub CLI (gh) isn't installed here. Install it, then run gh auth login.",
+    );
+    assert.equal(
+        friendlyError({ stderr: "gh auth login required" }),
+        "gh is not logged in on this machine (run gh auth login).",
+    );
+    assert.equal(friendlyError({ stderr: "API rate limit exceeded" }), "GitHub rate limit reached; try again later.");
+    assert.match(friendlyError({ stderr: "could not resolve host: github.com" }), /^Network error: /);
+    assert.equal(friendlyError({ stderr: "fatal: bad revision" }), "fatal: bad revision");
+});
+
+test("parseRefreshConfig has a 15 s minimum and no maximum", async () => {
+    const { parseRefreshConfig } = await import("../mods/jig-repos/refresh.js");
+    assert.deepEqual(parseRefreshConfig('{ "refreshSeconds": 10 }', 60).seconds, 15);
+    assert.match(parseRefreshConfig('{ "refreshSeconds": 10 }', 60).problems[0], /15/);
+    assert.equal(parseRefreshConfig('{ "refreshSeconds": 1000000 }', 60).seconds, 1000000);
+    assert.equal(parseRefreshConfig("{", 60).seconds, 60);
+    assert.match(parseRefreshConfig("{", 60).problems[0], /not valid JSON/);
+});

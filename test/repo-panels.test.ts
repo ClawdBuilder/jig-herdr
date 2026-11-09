@@ -1015,6 +1015,12 @@ test("the live panel files call the tested seams, not inline copies", () => {
     assert.match(read("jig-prs"), /runCommand\(/);
 });
 
+test("History keeps its last good rows when a log read fails", () => {
+    const source = readFileSync(new URL("../mods/jig-history/main.js", import.meta.url), "utf8");
+    assert.doesNotMatch(source, /log\.code !== 0[\s\S]{0,120}this\.commits = null/);
+    assert.match(source, /this\.error = friendlyError\(log/);
+});
+
 test("a fresh branch from base and one from origin/develop are not ready; a merged one is", async () => {
     const { readiness, terminalInside } = await load<Lib>("mods/jig-worktrees/lib.js");
     const base = {
