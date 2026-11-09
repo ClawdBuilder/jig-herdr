@@ -4,6 +4,13 @@
 
 ### Fixed
 
+- The Git and History branch pickers draw local branches first and keep origin-only rows behind the search field, with a
+  `Type to search N more on origin` line. Both lists now have their own height and scroll; the Git picker no longer
+  collapses to zero rows in its popup.
+
+
+### Fixed
+
 - When both `repo-changes` and the newer `jig-repos` config exist, `jig-repos` now wins: the installer lists the newest
   old name first, and a `--dry-run` reports the same migrations as a real run.
 

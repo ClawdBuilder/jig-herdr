@@ -28,7 +28,7 @@ import {
     colourSeed,
     commitMatches,
     FORMAT,
-    filterBranches,
+    hiddenOriginCount,
     initialsOf,
     isOnScreen,
     laneColumns,
@@ -44,6 +44,7 @@ import {
     SCRIPT,
     since,
     toggleBranchPicker,
+    visibleBranches,
 } from "./lib.js";
 import { panelError, panelHeader, ROW_FONT } from "./panel-header.js";
 import {
@@ -350,7 +351,7 @@ export default class RepoHistory extends View {
     /** The branch list's Enter: the active row, if any. */
     selectActiveBranch(cx) {
         if (!this.branchOpen) return;
-        const rows = filterBranches(
+        const rows = visibleBranches(
             this.branches ?? [],
             this.branchBox.value(),
             this.branchFilter ?? this.headBranch ?? null,
@@ -366,7 +367,7 @@ export default class RepoHistory extends View {
     /** The branch list, filtered: ranked, local first, remotes marked, current ticked. */
     branchList(t) {
         const query = this.branchBox.value();
-        const rows = filterBranches(this.branches ?? [], query, this.branchFilter ?? this.headBranch ?? null);
+        const rows = visibleBranches(this.branches ?? [], query, this.branchFilter ?? this.headBranch ?? null);
         const keys = rows.map(branchKey);
         if (this.branchActive === null || !keys.includes(this.branchActive)) this.branchActive = keys[0] ?? null;
         const choose = (name, cx) => {
@@ -397,29 +398,48 @@ export default class RepoHistory extends View {
             .when(rows.length > 0, (el) =>
                 el.child(div().px(2).text_size(11).text_color(t.dim).child("↑↓ to choose · Enter to show")),
             )
-            .children(
-                rows.map((b) =>
-                    h_flex()
-                        .id(`br-${b.remote ? "r" : "l"}-${b.name}`)
-                        .h(22)
-                        .px(6)
-                        .gap(6)
-                        .items_center()
-                        .rounded(5)
-                        .cursor_pointer()
-                        .hover((s) => s.bg(t.hover))
-                        .when(branchKey(b) === this.branchActive, (el) =>
-                            el.bg(t.hover).border_l(2).border_color(t.accent),
-                        )
-                        .on_click((_e, cx) => choose(b.name, cx))
-                        .child(
-                            div()
-                                .w(10)
-                                .text_color(t.done)
-                                .child(b.current ? "✓" : ""),
-                        )
-                        .child(div().flex_1().min_w(0).truncate().child(b.name))
-                        .when(b.remote, (el) => el.child(div().text_size(9.5).text_color(t.dim).child("remote"))),
+            .child(
+                v_flex()
+                    .id("branch-list-rows")
+                    .flex_none()
+                    .max_h(160)
+                    .overflow_y_scrollbar()
+                    .children(
+                        rows.map((b) =>
+                            h_flex()
+                                .id(`br-${b.remote ? "r" : "l"}-${b.name}`)
+                                .h(22)
+                                .px(6)
+                                .gap(6)
+                                .items_center()
+                                .rounded(5)
+                                .cursor_pointer()
+                                .hover((s) => s.bg(t.hover))
+                                .when(branchKey(b) === this.branchActive, (el) =>
+                                    el.bg(t.hover).border_l(2).border_color(t.accent),
+                                )
+                                .on_click((_e, cx) => choose(b.name, cx))
+                                .child(
+                                    div()
+                                        .w(10)
+                                        .text_color(t.done)
+                                        .child(b.current ? "✓" : ""),
+                                )
+                                .child(div().flex_1().min_w(0).truncate().child(b.name))
+                                .when(b.remote, (el) =>
+                                    el.child(div().text_size(9.5).text_color(t.dim).child("remote")),
+                                ),
+                        ),
+                    ),
+            )
+            .when(hiddenOriginCount(this.branches ?? [], query) > 0, (el) =>
+                el.child(
+                    div()
+                        .px(8)
+                        .pt(4)
+                        .text_size(11)
+                        .text_color(t.dim)
+                        .child(`Type to search ${hiddenOriginCount(this.branches ?? [], query)} more on origin`),
                 ),
             );
     }

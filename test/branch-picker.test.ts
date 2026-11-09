@@ -82,3 +82,54 @@ test("locals stay before an exact origin-only match, and down reaches it last", 
         ["feature/PROJ-1234", "PROJ-1234"],
     );
 });
+
+test("empty pickers show locals only, count origin-only rows, and never choose a hidden one", async () => {
+    const git = await load<Lib>("mods/jig-git/lib.js");
+    const history = await load<Lib>("mods/jig-history/lib.js");
+    assert.deepEqual(
+        git.visibleBranches(branches, "").map((b: any) => b.name),
+        ["feature/PROJ-1234", "feature/PROJ-12345", "fix/PROJ-1234-old", "PROJ-1234"],
+    );
+    assert.equal(git.hiddenOriginCount(branches, ""), 2);
+    assert.equal(git.hiddenOriginCount(branches, "PROJ"), 0);
+    assert.equal(git.defaultActive(branches, ""), git.branchKey(branches[1]));
+    assert.equal(git.moveActive(branches, "", git.defaultActive(branches, ""), 1), git.branchKey(branches[3]));
+    assert.equal(git.moveActive(branches, "", git.branchKey(branches[3]), 1), git.branchKey(branches[3]));
+    assert.deepEqual(
+        history.visibleBranches(branches, "", null).map((b: any) => b.name),
+        ["feature/PROJ-1234", "feature/PROJ-12345", "fix/PROJ-1234-old", "PROJ-1234"],
+    );
+    assert.equal(history.hiddenOriginCount(branches, ""), 1);
+    assert.deepEqual(
+        git.visibleBranches(branches, "PROJ-1234").map((b: any) => b.remote),
+        [false, false, false, false, true],
+    );
+});
+
+test("no origin-only rows means no hidden-count line", async () => {
+    const git = await load<Lib>("mods/jig-git/lib.js");
+    assert.equal(
+        git.hiddenOriginCount(
+            branches.filter((b: any) => !b.remote),
+            "",
+        ),
+        0,
+    );
+});
+
+test("History counts origin-only refs, skipping HEAD and remotes with a local branch", async () => {
+    const history = await load<Lib>("mods/jig-history/lib.js");
+    const refs = [
+        { name: "main", remote: false },
+        { name: "feature/x", remote: false },
+        { name: "origin/HEAD", remote: true },
+        { name: "origin/main", remote: true },
+        { name: "origin/feature/x", remote: true },
+        { name: "origin/feature/y", remote: true },
+    ];
+    assert.equal(history.hiddenOriginCount(refs, ""), 1);
+    assert.deepEqual(
+        history.visibleBranches(refs, "feature", null).map((b: any) => b.name),
+        ["feature/x", "origin/feature/y"],
+    );
+});

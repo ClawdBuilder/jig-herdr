@@ -316,6 +316,28 @@ export function filterBranches(branches, text, current) {
         .map(({ index: _index, rank: _rank, ...b }) => b);
 }
 
+/** Remote refs with no local branch of that name, skipping each remote's HEAD. History lists raw names like origin/x. */
+function originOnly(branches) {
+    const locals = new Set(branches.filter((branch) => !branch.remote).map((branch) => branch.name));
+    return branches.filter((branch) => {
+        if (!branch.remote || branch.name.endsWith("/HEAD")) return false;
+        const slash = branch.name.indexOf("/");
+        return slash < 0 || !locals.has(branch.name.slice(slash + 1));
+    });
+}
+
+/** What History draws: only locals before typing; ranked local and origin-only matches afterward. */
+export function visibleBranches(branches, text, current) {
+    const originals = originOnly(branches);
+    const locals = branches.filter((branch) => !branch.remote);
+    const usable = [...locals, ...originals];
+    const rows = filterBranches(usable, text, current);
+    return text.trim() === "" ? rows.filter((branch) => !branch.remote) : rows;
+}
+
+/** How many origin-only branches the empty list is hiding. */
+export const hiddenOriginCount = (branches, text) => (text.trim() === "" ? originOnly(branches).length : 0);
+
 export const branchKey = (branch) => `${branch.remote ? "r" : "l"}:${branch.name}`;
 
 export function moveBranch(rows, active, delta) {

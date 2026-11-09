@@ -12,8 +12,9 @@ and **Commit & Push**;
 **Fetch** and **Pull** buttons; a list of checkouts, each with a fold arrow, name, branch, ahead/behind chips and a count of
 changed files; a **↳ <folder>** row for each linked worktree under its main checkout. A file row has a status letter
 (`A`, `M`, `D`, `R`, `U`, `??`) in a theme colour (added `ansi2`, deleted/conflict `ansi1`, renamed `ansi5`, modified
-`blocked`), a checkbox, a path, and on hover Stage/Unstage or Discard. The branch picker is an overlay with a search field and ranked rows: an exact name, then names that start with the text,
-then the last path segment, then any substring; local branches come before origin-only ones. The row Enter would pick has a
+`blocked`), a checkbox, a path, and on hover Stage/Unstage or Discard. The branch picker is an overlay with a search field. Before anything is typed it shows local branches only, plus
+`Type to search N more on origin` when N origin-only branches exist; typing shows ranked local and origin-only matches:
+an exact name, then names that start with the text, then the last path segment, then any substring, locals first. The row Enter would pick has a
 2 px `t.accent` left edge (other rows keep their hover background), `↑↓ to choose · Enter to switch` is shown while a row is pickable, and Enter
 switches only that row. The push dialog shows the destination git will use. Empty, no-git, detached-HEAD, busy
 and problem lines are one line, never a raw git dump.
