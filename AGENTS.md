@@ -9,7 +9,7 @@ page. Keep the Apache-2.0 headers on mods derived from Herdr (`jig-files`, `jig-
 - **The full layout:** read `RECIPE.md`; `docs/mods.md` explains each mod's role and shared keys.
 - **Sharing or publishing:** read the gallery recipe; `share/` is generated from `gallery/`, `mods/` and `layouts/`.
 - **Installing or renaming:** read `scripts/install.ts`; `RENAMED` is the migration order, newest old name first.
-- **A test or CI failure:** read `.github/workflows/ci.yml` and `docs/install.md`.
+- **A test or CI failure:** read `npm run test:ci` and `.github/workflows/ci.yml`.
 
 ## Gotchas
 
