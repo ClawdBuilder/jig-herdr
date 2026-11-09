@@ -2,7 +2,8 @@
 // session (its format: https://github.com/ClawdBuilder/jig/blob/main/plugins/jig-session/README.md). Its ticket and the workflow's stages, the ticket's pull requests, the files the
 // session created or changed outside any git repository (the Git panel has the rest), and its recent tool calls with jig-core's decision on each.
 //
-// While the panel is on screen it reads the status files every 2 seconds with one `sh` on the machine where Pi runs
+// While the panel is on screen it ticks once a second, checks mtimes every 3 s while the followed session works, reads on
+// events, and does a full read on the `refreshSeconds` backstop, with one `sh` on the machine where Pi runs
 // (config.json's `machine`, else the shown space's machine). The session shown is the one whose terminal is focused, else the
 // one picked, else the one updated last. Pull requests come from the workflow's readings; with none, from one `gh search prs`
 // for the ticket (in config.json's `prOwners`, else involving you), kept 5 minutes. A file opens in a `jig-file-view` tab; one
@@ -472,7 +473,7 @@ export default class JigWork extends View {
             .when(extra != null, (el) => el.child(div().text_color(t.dim).font_normal().child(String(extra))));
     }
 
-    // The pinned 42 px header: title left; state, session picker and the refresh button right.
+    // The pinned 42 px header: title left; state, session picker and Refresh right.
     topBar(t, cx, s, live, by) {
         const st = s?.status ?? null,
             busy = st?.state === "busy",

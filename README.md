@@ -44,12 +44,10 @@ From **herdr.dev**: coming soon. The listings will be installable there; until t
 | Files      | POSIX `sh`                 | The focused folder; opens a file in a read-only tab at any path                                               |
 | Keep awake | Platform sleep tool        | Runs `powershell`/`taskkill` on Windows, `caffeinate` on macOS, `systemd-inhibit` on Linux; no network        |
 
-`timeout` (Linux) or `gtimeout` (macOS) is used when present for 20-second command caps; without it, the command runs
-unbounded up to Herdr's own 30-second cap. Everything runs on the machine the space is on. Linux, WSL and macOS work; a
+Reads get a 20 s deadline and network actions 60 s, with Herdr's own deadline 5 s later; `networkTimeoutSeconds` can
+raise the network budget, up to Herdr's 600 s cap. Detail and the per-panel programs are in each
+[gallery recipe](gallery/jig-git/RECIPE.md). Everything runs on the machine the space is on. Linux, WSL and macOS work; a
 Windows-local space without WSL has no POSIX `sh` and the git panels will not work.
-
-Network commands longer than 30 seconds need **Herdr 0.1.14 or newer**; older versions ignore the `exec` timeout and
-still stop them at 30 seconds.
 
 The panels show what is there: no approval, no merge, no comment, no write except the explicit stage, commit, discard,
 worktree-remove and fetch/pull/push actions above.
@@ -62,8 +60,9 @@ npm run check
 npm test
 ```
 
-`npm run check` includes the commit-email guard. It checks author and committer emails against the private word list in
-`JIG_SCAN_WORDS` or `~/.config/jig/scan-words.txt`; with no list, as in public CI, it skips.
+`npm run check` includes the commit-email guard. It reads the private word list from `JIG_SCAN_WORDS_TEXT`; if that is
+unset, from the file named by `JIG_SCAN_WORDS`; if that is unset too, from `~/.config/jig/scan-words.txt`. With no list, as
+in public CI, it skips.
 
 ## Licence
 

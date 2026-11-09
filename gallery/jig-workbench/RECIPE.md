@@ -54,7 +54,7 @@ the `jig-activity`/`jig-git` SVGs.
 
 **Watch out:**
 
-Herdr caps every `exec` at 30 s; the panels aim for 20 s and a user-started action disables its controls while it runs.
+Reads pass a 20 s timeout and network/`gh` calls 60 s, with Herdr's deadline 5 s later (600 s at most on 0.1.14+); 0.1.13 or older uses Herdr's 30 s default. A user-started action disables its controls while it runs.
 Mods have no JavaScript timers: they use Herdr's `cx.timer` and the refresh scheduler. The panel assumes `git` on PATH, a
 POSIX `sh`, and a signed-in `gh` for PR & CI; a Windows-local space without WSL has no POSIX `sh` and will not work.
 Sidebar 44 px is Herdr's compact rail; the panel never goes below 300 px. The tab bar is shipped Herdr, so there is no

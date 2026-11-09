@@ -33,18 +33,18 @@ Programs: `git worktree list`, `git status`, `git rev-list`, `git reflog`, `git 
 `git branch -d`, `sh` for the script, `timeout`/`gtimeout` when present (20 s). Network: none. Files read: the repository's
 `.git` metadata and the worktree folders; the only write is the explicit Remove.
 
-**Header:** all git panels use one 42 px shared header: title, optional Terminal/Space switch, and a refresh icon whose
+**Header:** all git panels use one 42 px shared header: title, optional Terminal/Space switch, and a Refresh whose
 tooltip says `Refresh · read N ago` (`Refresh` before the first read, `Reading…` while busy). Git, History, PR & CI and
 Worktrees show the switch; Review has title and Refresh only. An error line sits under the header, above the kept rows.
 
 **Watch out:**
 
-Herdr's 30 s cap; `git` and POSIX `sh` are required, so Windows-local without WSL is unsupported. Readiness is
+Reads pass a 20 s timeout; Herdr's deadline is 25 s, and Herdr 0.1.13 or older cuts at its own 30 s default. `git` and POSIX `sh` are required, so Windows-local without WSL is unsupported. Readiness is
 conservative: an unmerged branch, uncommitted data, a lock, a terminal or an agent keeps a row in progress. **Every ignored
 path is refused, except a top-level `node_modules/`, `dist/`, `build/` or `target/` directory; `.env*` is always refused.**
 The main checkout is never offered. There is no configured root: a row opens the space at that path (or a new tab) wherever
 the worktree is. The standalone listing has `"place": "none"`, so a layout block with `content.mod = "jig-worktrees"` is
-required. The panel has the **Terminal / Space** switch (per space): Terminal follows the focused terminal's folder, Space
+required. The panel has the **Terminal/Space** switch (per space): Terminal follows the focused terminal's folder, Space
 uses the space's folder.
 
 **Done when:**

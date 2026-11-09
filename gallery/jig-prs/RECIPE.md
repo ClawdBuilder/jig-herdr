@@ -9,7 +9,7 @@ Read-only. From Jig (https://github.com/ClawdBuilder/jig). No Jig required.
 **What you see:**
 
 A header with the **Open**/**Workspace** and **Mine** tabs on the left where the title would be, plus the Terminal/Space
-switch and refresh icon; rows with number, title,
+switch and Refresh; rows with number, title,
 branch, author, review state, age, and a check summary (`✓` pass, `×` fail, `•` pending, `–` skip, with counts). Expanding a
 PR shows checks grouped by name and the latest run, with a link that opens in the browser. The panel marks a failing check
 on the activity bar with a count and `blocked` tone. Empty, no-git, `gh` missing, signed-out and rate-limit states are one
@@ -34,10 +34,10 @@ Programs: `gh` (`pr list`, `pr view`, `run list`/`run view`; **Mine** runs `gh s
 `timeout`/`gtimeout` when present (20 s). Network: `gh` to GitHub (read-only API); no `git fetch`. Files read: the repository's git metadata for the workspace listing and `config.json`; nothing is written to the repository.
 
 The standalone listing has `"place": "none"`, so a layout block with `content.mod = "jig-prs"` is required; with no
-activity bar there is no badge. The panel has the **Terminal / Space** switch (per space): Terminal follows the focused
+activity bar there is no badge. The panel has the **Terminal/Space** switch (per space): Terminal follows the focused
 terminal's folder, Space uses the space's folder. Built from Herdr's `mods/workspace-chrome/*.svg` icons.
 
-**Header:** all git panels use one 42 px shared header: title, optional Terminal/Space switch, and a refresh icon whose
+**Header:** all git panels use one 42 px shared header: title, optional Terminal/Space switch, and a Refresh whose
 tooltip says `Refresh · read N ago` (`Refresh` before the first read, `Reading…` while busy). Git, History, PR & CI and
 Worktrees show the switch; Review has title and Refresh only. An error line sits under the header, above the kept rows.
 
@@ -45,7 +45,7 @@ Worktrees show the switch; Review has title and Refresh only. An error line sits
 
 Requires `gh` on PATH and signed in; missing auth/rate limits are reported, not retried. **Mine** searches all of GitHub for
 PRs authored by `@me`, not only the demo folder, so the standalone preview is demo data; it makes a network call to GitHub's
-search API. The 30 s exec cap can end a slow
+search API. Discovery reads pass a 20 s timeout and `gh` calls 60 s; Herdr's deadline is 5 s later (600 s at most on 0.1.14+), while 0.1.13 or older cuts at 30 s default. A slow
 GitHub call. No write actions: no comment, approve, merge or rerun. A Windows-local space without WSL has no POSIX `sh`.
 The API's own limits apply; a very large PR list is capped and says so. Link opening depends on the desktop opener.
 

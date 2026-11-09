@@ -9,7 +9,7 @@ It needs Node.js 22.19 or later, the same as Jig. The folder is the Herdr app's 
 first start.
 
 ```bash
-node herdr/scripts/install.ts [folder] [--force] [--dry-run]
+node scripts/install.ts [folder] [--force] [--dry-run] [--remove-old]
 ```
 
 | Folder                                  | When                                                 |
@@ -48,7 +48,11 @@ own files from yours.
 
 A report line `LEFT ALONE` makes the script exit with 1: the install is not complete. A key in `keys.json` that you have
 bound to something else is kept and listed, and `--force` takes it over. A `keys.json` that is not valid JSON is not touched.
-`--dry-run` prints what would happen and writes nothing, not even the record.
+`--dry-run` prints what would happen and writes nothing, not even the record. `--remove-old` deletes an old renamed mod
+folder after every key in its `config.json` has been carried over; it is off by default.
+
+Two old names can lead to one new one (`repo-changes` is the older name for `jig-git`). The migration lists the newest old
+name first, so its values win and the older file only fills keys it did not set.
 
 ## What the layout needs from Herdr
 

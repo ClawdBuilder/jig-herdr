@@ -32,13 +32,13 @@ Programs: `git` — `diff`, `show`, `status`, `rev-parse`, `add`, `restore --sta
 `restore --worktree --staged`, `clean -f`; `sh` for the script; `timeout`/`gtimeout` when present. Network: none. Files read:
 the repository's `.git` and working tree. Writes: stage, unstage, discard. No commit, fetch or push.
 
-**Header:** all git panels use one 42 px shared header: title, optional Terminal/Space switch, and a refresh icon whose
+**Header:** all git panels use one 42 px shared header: title, optional Terminal/Space switch, and a Refresh whose
 tooltip says `Refresh · read N ago` (`Refresh` before the first read, `Reading…` while busy). Git, History, PR & CI and
 Worktrees show the switch; Review has title and Refresh only. An error line sits under the header, above the kept rows.
 
 **Watch out:**
 
-Herdr's 30 s cap; `git` and POSIX `sh` are required, so Windows-local without WSL is unsupported. The mode is **not
+Reads pass a 20 s timeout; Herdr's deadline is 25 s, and Herdr 0.1.13 or older cuts at its own 30 s default. `git` and POSIX `sh` are required, so Windows-local without WSL is unsupported. The mode is **not
 read-only**: stage, unstage and discard write. Branch mode needs one of the base candidates above; without one it says so.
 Very large diffs are capped and say when cut. Binary files show a notice, not content. This mod is opened by `jig-git` via
 `tab.new`; the standalone listing has `"place": "none"`, so a layout block with `content.mod = "jig-review"` (or the tab

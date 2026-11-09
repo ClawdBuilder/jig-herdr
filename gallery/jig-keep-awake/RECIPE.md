@@ -14,6 +14,10 @@ bar and no panel. The state is in Herdr's shared state (`jig-keep-awake.mode` an
 `${appHome()}/jig-keep-awake.stop` and `${appHome()}/jig-keep-awake.helper.json`. `Keep screen
 on` is a config value (`display: true`), not a separate window.
 
+The Jig layout's tab-bar sun opens a popup with the three modes, what is happening now, and a **Keep screen on** switch; a
+right-click opens the same popup. The standalone mod has no popup of its own. The helper is a child process on Herdr's
+machine, not a space's.
+
 **How it behaves:**
 
 **It draws no panel**, so `Ctrl+Shift+Alt+K` is the whole standalone interface (the Jig layout's tab-bar sun is the same
@@ -38,7 +42,7 @@ the helper's state; the helper runs on Herdr's own machine, never a space's mach
 
 **Watch out:**
 
-Herdr's 30 s `exec` cap is above the 8 s helper command limit; a failed start is reported and leaves the previous mode.
+The helper command has an 8 s limit, below Herdr's default `exec` deadline; a failed start is reported and leaves the previous mode.
 The helper depends on the platform tools above; a system without `caffeinate` or `systemd-inhibit` cannot hold the
 request. The standalone mod has `"place": "none"` and no panel; a layout needs a 0 px block with
 `content.mod = "jig-keep-awake"` (and the Jig layout's sun is in `jig-tabs`). A laptop lid close or power button still sleeps it. Windows-local without WSL is supported for this mod (it uses
