@@ -100,9 +100,9 @@ function friendly(text) {
     const line = String(text ?? "")
         .trim()
         .split("\n")[0];
-    if (/does not have any commits yet/i.test(line))
-        return "This repository has no commits yet — make the first commit.";
-    if (/not a git repository/i.test(line)) return "Not a git repository here — cd into one, or pick another folder.";
+    if (/does not have any commits yet/i.test(line)) return "This repo has no commits yet — make the first commit.";
+    if (/not a git repository/i.test(line))
+        return "No git repo in this folder. Open a terminal in one, or switch to Space.";
     return line;
 }
 
@@ -735,7 +735,7 @@ export default class RepoHistory extends View {
             )
             .child(div().text_color(t.foreground).child(commit.subject))
             .when(Boolean(detail?.body), (el) => el.child(div().text_size(11.5).text_color(t.muted).child(detail.body)))
-            .when(!detail, (el) => el.child(div().text_color(t.dim).child("Loading…")))
+            .when(!detail, (el) => el.child(div().text_color(t.dim).child("Reading…")))
             .when(files.length > 0, (el) =>
                 el.child(
                     v_flex()
@@ -937,7 +937,7 @@ export default class RepoHistory extends View {
                                 this.reposAt = 0;
                                 this.loadLog(cx, true);
                             })
-                            .child(this.refreshState.busy ? "Loading…" : "Refresh"),
+                            .child(this.refreshState.busy ? "Reading…" : "Refresh"),
                     ),
             )
             .child(
@@ -984,9 +984,10 @@ export default class RepoHistory extends View {
             .map((commit, i) => [commit, this.rows[i]])
             .filter(([commit]) => commitMatches(commit, query));
         const waiting = !this.error && !this.commits;
-        let waitingText = "Loading…";
+        let waitingText = "Reading…";
         if (!this.where.root) waitingText = "No folder.";
-        else if (this.repos && !this.repo) waitingText = "No git repository found here.";
+        else if (this.repos && !this.repo)
+            waitingText = "No git repo in this folder. Open a terminal in one, or switch to Space.";
         // The filter matched no commit: repos and worktrees whose folder or branch has the text (a ticket number).
         const other =
             this.single || !query.trim() || (this.repos?.length ?? 0) < 2
@@ -1039,7 +1040,7 @@ export default class RepoHistory extends View {
                                     this.limit += PAGE;
                                     this.loadLog(cx, true);
                                 })
-                                .child(this.refreshState.busy ? "Loading…" : "Load more"),
+                                .child(this.refreshState.busy ? "Reading…" : "Load more"),
                         ),
                     ),
             );

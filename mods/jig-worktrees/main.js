@@ -62,7 +62,8 @@ function friendly(text) {
     const line = String(text ?? "")
         .trim()
         .split("\n")[0];
-    if (/not a git repository/i.test(line)) return "Not a git repository here — cd into one.";
+    if (/not a git repository/i.test(line))
+        return "No git repo in this folder. Open a terminal in one, or switch to Space.";
     return line;
 }
 
@@ -624,7 +625,7 @@ export default class RepoWorktrees extends View {
                     .cursor_pointer()
                     .hover((s) => s.text_color(t.foreground))
                     .on_click((_e, cx) => this.load(cx, true))
-                    .child(this.refreshState.busy ? "Loading…" : "Refresh"),
+                    .child(this.refreshState.busy ? "Reading…" : "Refresh"),
             );
         const pruneBanner = this.pruning
             ? v_flex()
@@ -711,7 +712,7 @@ export default class RepoWorktrees extends View {
                     .children(notices)
                     .when(Boolean(this.error), (el) => el.child(message(this.error)))
                     .when(!this.error && !this.trees, (el) =>
-                        el.child(message(this.where?.root ? "Loading…" : "No folder.")),
+                        el.child(message(this.where?.root ? "Reading…" : "No folder.")),
                     )
                     .when(Boolean(this.trees) && rows.length === 0, (el) =>
                         el.child(message("No linked worktrees found.")),

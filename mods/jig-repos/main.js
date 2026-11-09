@@ -213,8 +213,8 @@ export default class RepoChanges extends View {
         this.hover = null; // the checkout row under the pointer
         this.hoverFile = null; // the file row under the pointer
         this.confirm = null; // { key, repo, file, kind }: a discard waiting for its second click
-        this.fetching = false; // the header's Fetch every checkout
-        this.fetchNote = null; // { text, at }: the last Fetch every checkout
+        this.fetching = false; // the header's Fetch every repo
+        this.fetchNote = null; // { text, at }: the last Fetch every repo
         this.notes = {}; // path -> { ok, message, at }: the last action's result there
         this.commits = new Map(); // path -> InputState of its commit message
         this.config = parseConfig(null);
@@ -1511,15 +1511,15 @@ export default class RepoChanges extends View {
      * would list: another place to look when this one holds nothing. */
     emptyState(there) {
         if (!this.loc?.root) return "No folder here: open a terminal, or pick a space with one.";
-        if (!this.loaded) return this.error ? null : "Reading checkouts…";
-        if (this.filter.trim()) return "No checkout or file matches.";
+        if (!this.loaded) return this.error ? null : "Reading repos…";
+        if (this.filter.trim()) return "No repo or file matches.";
         if (this.repos.length) return null;
         const other = there && there !== this.loc.root;
         if (this.follow)
             return other
                 ? "Not a git repository here — cd into one, or list the space's folder."
-                : "Not a git repository here — cd into one.";
-        return "No git repository under this folder — open a terminal inside one, or follow the terminal.";
+                : "No git repo in this folder. Open a terminal in one, or switch to Space.";
+        return "No git repo in this folder. Open a terminal in one, or switch to Space.";
     }
 
     render(cx) {
@@ -1614,7 +1614,7 @@ export default class RepoChanges extends View {
                                     t,
                                     "repos-fetch-all",
                                     OWN("fetch"),
-                                    "Fetch every checkout from its remote",
+                                    "Fetch every repo from its remote",
                                     (cx) => this.fetchAll(cx),
                                     this.fetching || this.switching || this.repos.some((r) => this.lock(r)),
                                 ),
@@ -1628,7 +1628,7 @@ export default class RepoChanges extends View {
                             t,
                             "repos-refresh",
                             OWN("refresh"),
-                            this.refreshState.busy ? "Reading the checkouts…" : "Read the checkouts again",
+                            this.refreshState.busy ? "Reading repos…" : "Read the repos again",
                             (cx) => {
                                 this.last = 0;
                                 this.refresh(cx, true, true);
@@ -1690,7 +1690,7 @@ export default class RepoChanges extends View {
             );
     }
 
-    /** Fetch every checkout that has the remote, one after another, and say how many moved. */
+    /** Fetch every repo that has the remote, one after another, and say how many moved. */
     fetchAll(cx) {
         if (this.fetching || this.switching) return;
         const repos = this.repos.filter((r) => r.remote);
@@ -1722,7 +1722,7 @@ export default class RepoChanges extends View {
             this.fetching = false;
             if (context === this.context) {
                 this.fetchNote = {
-                    text: failed ? `Fetched ${ok}, ${failed} failed` : `Fetched ${plural(ok, "checkout")}`,
+                    text: failed ? `Fetched ${ok}, ${failed} failed` : `Fetched ${plural(ok, "repo")}`,
                     at: Date.now(),
                 };
                 this.last = 0;

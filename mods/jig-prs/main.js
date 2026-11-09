@@ -84,7 +84,8 @@ function friendly(text) {
     const line = String(text ?? "")
         .trim()
         .split("\n")[0];
-    if (/not a git repository/i.test(line)) return "Not a git repository here — cd into one.";
+    if (/not a git repository/i.test(line))
+        return "No git repo in this folder. Open a terminal in one, or switch to Space.";
     if (/does not have any commits yet/i.test(line)) return "This repository has no commits yet.";
     return line;
 }
@@ -810,7 +811,7 @@ export default class RepoPullRequests extends View {
     /** Inside one repository: this branch's pull request, then the others. */
     oneRepoRows(t) {
         const data = this.data[this.tab];
-        if (!data) return [this.note(t, this.error ? "" : "Loading…")];
+        if (!data) return [this.note(t, this.error ? "" : "Reading…")];
         const rows = [];
         if (data.here)
             rows.push(
@@ -928,7 +929,7 @@ export default class RepoPullRequests extends View {
             .child(div().flex_1().min_w(0).truncate().pl(6).text_size(11).text_color(t.dim).child(this.summaryText()))
             .child(followButton(t, (cx) => this.load(cx, true)))
             .child(
-                link(t, "prs-refresh", this.refreshState.busy ? "Loading…" : "Refresh", (_e, cx) =>
+                link(t, "prs-refresh", this.refreshState.busy ? "Reading…" : "Refresh", (_e, cx) =>
                     this.load(cx, true),
                 ),
             );
