@@ -714,9 +714,18 @@ test("PR & CI folds every No PR repository into one group", async () => {
         { status: "noremote", name: "e" },
         { status: "error", name: "f" },
     ]);
-    assert.deepEqual(split.featured.map((r: any) => r.name), ["a", "f"]);
-    assert.deepEqual(split.noPr.map((r: any) => r.name), ["b", "c"]);
-    assert.deepEqual(split.parked.map((r: any) => r.name), ["d", "e"]);
+    assert.deepEqual(
+        split.featured.map((r: any) => r.name),
+        ["a", "f"],
+    );
+    assert.deepEqual(
+        split.noPr.map((r: any) => r.name),
+        ["b", "c"],
+    );
+    assert.deepEqual(
+        split.parked.map((r: any) => r.name),
+        ["d", "e"],
+    );
     const source = readFileSync(new URL("../mods/jig-prs/main.js", import.meta.url), "utf8");
     assert.match(source, /group\("No PR", "nopr-group"/);
     assert.match(source, /showNoPr/);

@@ -38,9 +38,9 @@ import {
     removalRefusal,
     SCRIPT,
     sameOrInside,
-    worktreeTitle,
     since,
     terminalsInsideWorktree,
+    worktreeTitle,
 } from "./lib.js";
 import { panelError, panelHeader } from "./panel-header.js";
 import {

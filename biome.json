@@ -48,5 +48,8 @@
                 "globals": ["localStorage"]
             }
         }
-    ]
+    ],
+    "files": {
+        "includes": ["**", "!**/gpui-kit.d.ts", "!**/jsconfig.json"]
+    }
 }
