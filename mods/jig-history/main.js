@@ -24,6 +24,7 @@ import {
 } from "herdr";
 import { location, readFollow, writeFollow } from "./follow.js";
 import {
+    branchKey,
     colourSeed,
     commitMatches,
     FORMAT,
@@ -33,6 +34,7 @@ import {
     laneColumns,
     layoutGraph,
     matchRepos,
+    moveBranch,
     parseBranches,
     parseCommitDetail,
     parseLog,
@@ -170,8 +172,13 @@ export default class RepoHistory extends View {
         this.pickBox = InputState.new({ placeholder: "Find a repo" });
         this.pickBox.on("change", (_e, cx) => cx.notify());
         this.branchOpen = false;
+        this.branchActive = null;
         this.branchBox = InputState.new({ placeholder: "Find a branch" });
-        this.branchBox.on("change", (_e, cx) => cx.notify());
+        this.branchBox.on("change", (_e, cx) => {
+            this.branchActive = null;
+            cx.notify();
+        });
+        this.branchBox.on("submit", (_e, cx) => this.selectActiveBranch(cx));
         this.filterBox = InputState.new({ placeholder: "Filter by message, author, hash or branch" });
         this.filterBox.on("change", (_e, cx) => cx.notify());
         this.refreshState = new RefreshState();
@@ -340,10 +347,33 @@ export default class RepoHistory extends View {
         cx.notify();
     }
 
-    /** The branch list, filtered: local first, remotes marked, current ticked. */
+    /** The branch list's Enter: the active row, if any. */
+    selectActiveBranch(cx) {
+        const rows = filterBranches(
+            this.branches ?? [],
+            this.branchBox.value(),
+            this.branchFilter ?? this.headBranch ?? null,
+        );
+        const active = rows.find((b) => branchKey(b) === this.branchActive);
+        if (!active) return;
+        this.branchFilter = active.name;
+        this.branchOpen = false;
+        this.clearLog();
+        this.loadLog(cx, true);
+    }
+
+    /** The branch list, filtered: ranked, local first, remotes marked, current ticked. */
     branchList(t) {
-        const query = this.branchBox.value().trim().toLowerCase();
+        const query = this.branchBox.value();
         const rows = filterBranches(this.branches ?? [], query, this.branchFilter ?? this.headBranch ?? null);
+        const keys = rows.map(branchKey);
+        if (this.branchActive === null || !keys.includes(this.branchActive)) this.branchActive = keys[0] ?? null;
+        const choose = (name, cx) => {
+            this.branchFilter = name;
+            this.branchOpen = false;
+            this.clearLog();
+            this.loadLog(cx, true);
+        };
         return v_flex()
             .id("branch-list-panel")
             .flex_none()
@@ -355,11 +385,24 @@ export default class RepoHistory extends View {
             .border_1()
             .border_color(t.border)
             .p(6)
+            .on_key_down((e, cx) => {
+                if (e.keystroke === "up" || e.keystroke === "down") {
+                    this.branchActive = moveBranch(rows, this.branchActive, e.keystroke === "up" ? -1 : 1);
+                    cx.stop_propagation();
+                    cx.notify();
+                } else if (e.keystroke === "enter" || e.keystroke === "return") {
+                    this.selectActiveBranch(cx);
+                    cx.stop_propagation();
+                }
+            })
             .child(Input.new(this.branchBox).h(26).w_full().text_size(11.5))
+            .when(rows.length > 0, (el) =>
+                el.child(div().px(2).text_size(11).text_color(t.dim).child("↑↓ to choose · Enter to switch")),
+            )
             .children(
                 rows.map((b) =>
                     h_flex()
-                        .id(`br-${b.name}`)
+                        .id(`br-${b.remote ? "r" : "l"}-${b.name}`)
                         .h(22)
                         .px(6)
                         .gap(6)
@@ -367,12 +410,10 @@ export default class RepoHistory extends View {
                         .rounded(5)
                         .cursor_pointer()
                         .hover((s) => s.bg(t.hover))
-                        .on_click((_e, cx) => {
-                            this.branchFilter = b.name;
-                            this.branchOpen = false;
-                            this.clearLog();
-                            this.loadLog(cx, true);
-                        })
+                        .when(branchKey(b) === this.branchActive, (el) =>
+                            el.bg(t.hover).border_l(2).border_color(t.accent),
+                        )
+                        .on_click((_e, cx) => choose(b.name, cx))
                         .child(
                             div()
                                 .w(10)

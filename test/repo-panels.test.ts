@@ -843,8 +843,8 @@ test("jig-history filters branches, local first, with the current one marked", a
     assert.deepEqual(
         filterBranches(list, "a", "main").map((b: { name: string; current: boolean }) => [b.name, b.current]),
         [
-            ["main", true],
             ["feature/a", false],
+            ["main", true],
             ["origin/main", false],
         ],
     );

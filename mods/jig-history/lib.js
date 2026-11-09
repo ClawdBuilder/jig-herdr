@@ -291,12 +291,37 @@ export function laneColumns(width, row = 300, lanePx = 14, cap = 4) {
 }
 
 /** Branch names with a filter; the current branch stays in the list, local branches before remotes. */
+function rankBranch(name, query) {
+    const lower = name.toLowerCase();
+    if (lower === query) return 0;
+    if (lower.startsWith(query)) return 1;
+    const last = lower.slice(lower.lastIndexOf("/") + 1);
+    if (last.startsWith(query)) return 2;
+    if (lower.includes(query)) return 3;
+    return 4;
+}
+
 export function filterBranches(branches, text, current) {
     const needle = (text ?? "").trim().toLowerCase();
     return branches
-        .filter((b) => !needle || b.name.toLowerCase().includes(needle))
-        .map((b) => ({ ...b, current: b.name === current }))
-        .sort((a, b) => Number(a.remote) - Number(b.remote));
+        .filter((b) => !needle || rankBranch(b.name, needle) < 4)
+        .map((b, index) => ({
+            ...b,
+            current: b.name === current,
+            index,
+            rank: needle ? rankBranch(b.name, needle) : 0,
+        }))
+        .sort((a, b) => a.rank - b.rank || Number(Boolean(a.remote)) - Number(Boolean(b.remote)) || a.index - b.index)
+        .map(({ index: _index, rank: _rank, ...b }) => b);
+}
+
+export const branchKey = (branch) => `${branch.remote ? "r" : "l"}:${branch.name}`;
+
+export function moveBranch(rows, active, delta) {
+    if (rows.length === 0) return null;
+    const at = rows.findIndex((branch) => branchKey(branch) === active);
+    const next = at < 0 ? (delta > 0 ? 0 : rows.length - 1) : Math.min(rows.length - 1, Math.max(0, at + delta));
+    return branchKey(rows[next]);
 }
 
 /** The branch header's click: open the list, or close it. Kept pure so the handler has a test. */
