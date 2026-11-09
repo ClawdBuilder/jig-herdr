@@ -914,6 +914,20 @@ test("Review's add, unstage and discard keep their exact git argv", async () => 
     assert.deepEqual(calls.at(-1), ["--literal-pathspecs", "restore", "--staged", "--", "file.txt"]);
     await discardFile(fake, { checkout: "/w", file: "file.txt", expect: "restore" });
     assert.deepEqual(calls.at(-1), ["--literal-pathspecs", "restore", "--worktree", "--staged", "--", "file.txt"]);
+    const cleanFake = async (_cmd: string, args: string[]) => {
+        calls.push(args);
+        if (args.includes("status")) return { code: 0, stdout: "?? scratch.txt\0", stderr: "" };
+        return { code: 0, stdout: "", stderr: "" };
+    };
+    await discardFile(cleanFake, { checkout: "/w", file: "scratch.txt", expect: "delete" });
+    assert.deepEqual(calls.at(-1), ["--literal-pathspecs", "clean", "-f", "--", "scratch.txt"]);
+    const newbornFake = async (_cmd: string, args: string[]) => {
+        calls.push(args);
+        if (args.includes("rev-parse")) return { code: 1, stdout: "", stderr: "" };
+        return { code: 0, stdout: "", stderr: "" };
+    };
+    await unstageFile(newbornFake, { checkout: "/w", file: "file.txt" });
+    assert.deepEqual(calls.at(-1), ["--literal-pathspecs", "rm", "--cached", "-q", "--", "file.txt"]);
 });
 
 test("one lock per checkout: the panel and its dialog share it, and it expires", async () => {

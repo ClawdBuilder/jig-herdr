@@ -261,3 +261,33 @@ test("run uses direct exec with cwd, on and a plain Herdr deadline when there is
     assert.equal(missing.code, 127);
     assert.equal(friendlyError(missing), "git isn't installed on this machine.");
 });
+
+test("direct exec classifies a rejection within one second of the deadline as a timeout", async () => {
+    const { run } = await import("../mods/jig-repos/refresh.js");
+    const realNow = Date.now;
+    let clock = 0;
+    Date.now = () => clock;
+    try {
+        for (const [elapsed, code] of [
+            [19_000, 124],
+            [19_999, 124],
+            [20_000, 124],
+            [500, 1],
+        ] as const) {
+            clock = 0;
+            const result = await run(
+                async () => {
+                    clock = elapsed;
+                    throw new Error("exec rejected");
+                },
+                "git",
+                ["status"],
+                { seconds: 20 },
+            );
+            assert.equal(result.code, code, `${elapsed} ms`);
+            assert.equal(result.timedOut, code === 124, `${elapsed} ms timedOut`);
+        }
+    } finally {
+        Date.now = realNow;
+    }
+});

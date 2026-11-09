@@ -63,7 +63,14 @@ import {
     stageSummary,
     terminalStateChanged,
 } from "./lib.js";
-import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds, run as runCommand } from "./refresh.js";
+import {
+    focusRegained,
+    friendlyError,
+    RefreshScheduler,
+    RefreshState,
+    refreshSeconds,
+    run as runCommand,
+} from "./refresh.js";
 
 const MTIME_MS = 3000; // while the followed session works: a cheap mtime check
 const REPO_MS = 30000; // which outputs have changes in a repository
@@ -361,7 +368,7 @@ export default class JigWork extends View {
                         seconds: 60,
                         env: { GIT_TERMINAL_PROMPT: "0", GH_PROMPT_DISABLED: "1" },
                     });
-                    if (r.code !== 0) throw new Error((r.stderr || "gh search failed").trim().split("\n")[0]);
+                    if (r.code !== 0) throw Object.assign(new Error(r.stderr || "gh search failed"), r);
                     entry.searched = JSON.parse(r.stdout || "[]");
                     urls = entry.searched.map((p) => p.url);
                 }
@@ -374,7 +381,7 @@ export default class JigWork extends View {
                     if (r.code === 0) entry.details[url] = JSON.parse(r.stdout || "{}");
                 }
             } catch (e) {
-                entry.error = String(e?.message ?? e);
+                entry.error = friendlyError(e, { what: "Reading GitHub" });
             } finally {
                 this.prs[key] = entry;
                 try {

@@ -138,6 +138,8 @@ async function gh(args, on) {
         env: { GIT_TERMINAL_PROMPT: "0", GH_PROMPT_DISABLED: "1" },
     });
     if (result.code !== 0) {
+        if (result.timedOut || result.code === 124)
+            return { err: friendlyError(result, { what: "Reading GitHub" }), auth: false, net: true, none: false };
         const failure = ghError(result.stderr);
         return {
             err: failure.message,

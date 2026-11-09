@@ -43,7 +43,7 @@ export async function run(exec, cmd, args, { cwd, on, seconds = 20, env } = {}) 
         } catch (error) {
             const message = String(error?.message ?? error);
             const elapsed = Date.now() - started;
-            const timedOut = elapsed >= budget.shellTimeoutMs;
+            const timedOut = elapsed >= budget.shellTimeoutMs - 1000;
             return {
                 code: timedOut
                     ? 124
