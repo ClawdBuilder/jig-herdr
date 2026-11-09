@@ -20,7 +20,6 @@ import {
     window,
 } from "herdr";
 import { location, readFollow, writeFollow } from "./follow.js";
-import { followReload } from "./follow-state.js";
 import {
     checkCount,
     checkSummary,
@@ -42,6 +41,7 @@ import {
     since,
     watchdog,
 } from "./lib.js";
+import { panelError, panelHeader } from "./panel-header.js";
 import {
     focusRegained,
     friendlyError,
@@ -94,33 +94,6 @@ function friendly(text) {
 function whereToLook() {
     const space = spaces().find((s) => s.active);
     return location(readFollow(space?.id));
-}
-
-/** The Terminal/Space switch: what this panel follows, per space. */
-function followButton(t, reload) {
-    const space = spaces().find((s) => s.active);
-    const follow = readFollow(space?.id);
-    return div()
-        .id("follow")
-        .ml(4)
-        .text_size(11)
-        .text_color(t.muted)
-        .cursor_pointer()
-        .hover((st) => st.text_color(t.foreground))
-        .tooltip(
-            follow
-                ? "Following the focused terminal — click to use the space folder"
-                : "Using the space folder — click to follow the focused terminal",
-        )
-        .on_click((_e, cx) => {
-            followReload(
-                follow,
-                space?.id,
-                (id, value) => writeFollow(id, value),
-                () => reload(cx),
-            );
-        })
-        .child(follow ? "Terminal" : "Space");
 }
 
 /** Links open on this computer, not on the machine that holds the repositories, so there is no `on`. */
@@ -920,23 +893,21 @@ export default class RepoPullRequests extends View {
         else if (this.single) rows = this.oneRepoRows(t);
         else rows = this.tab === "mine" ? this.mineRows(t) : this.workspaceRows(t);
 
-        const header = h_flex()
-            .h(42)
-            .flex_none()
-            .px(10)
-            .gap(4)
-            .items_center()
-            .border_b(1)
-            .border_color(t.border)
-            .child(tabChip("main", this.single ? "Open" : "Workspace"))
-            .child(tabChip("mine", "Mine"))
-            .child(div().flex_1().min_w(0).truncate().pl(6).text_size(11).text_color(t.dim).child(this.summaryText()))
-            .child(followButton(t, (cx) => this.load(cx, true)))
-            .child(
-                link(t, "prs-refresh", this.refreshState.busy ? "Reading…" : "Refresh", (_e, cx) =>
-                    this.load(cx, true),
-                ),
-            );
+        const space = spaces().find((s) => s.active);
+        const follow = readFollow(space?.id);
+        const header = panelHeader(t, {
+            title: "",
+            extra: [tabChip("main", this.single ? "Open" : "Workspace"), tabChip("mine", "Mine")],
+            follow,
+            onFollow: (cx) => {
+                writeFollow(space?.id, !follow);
+                this.load(cx, true);
+            },
+            readAt: this.loadedAt[this.tab] ?? 0,
+            busy: this.refreshState.busy,
+            onRefresh: (cx) => this.load(cx, true),
+            refreshIcon: "mods/jig-prs/refresh.svg",
+        });
         return v_flex()
             .id("jig-prs")
             .size_full()
@@ -949,9 +920,17 @@ export default class RepoPullRequests extends View {
             .text_color(t.foreground)
             .text_size(13)
             .child(header)
-            .when(Boolean(this.error), (el) =>
+            .when(Boolean(this.error), (el) => el.child(panelError(t, this.error)))
+            .when(Boolean(this.summaryText()), (el) =>
                 el.child(
-                    div().flex_none().px(12).py(4).truncate().text_size(11).text_color(t.blocked).child(this.error),
+                    div()
+                        .flex_none()
+                        .px(12)
+                        .py(2)
+                        .truncate()
+                        .text_size(10.5)
+                        .text_color(t.muted)
+                        .child(this.summaryText()),
                 ),
             )
             .when(Boolean(this.refreshProblem), (el) =>

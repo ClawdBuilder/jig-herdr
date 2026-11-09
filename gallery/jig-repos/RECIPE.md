@@ -43,6 +43,10 @@ pull and push. Nothing here creates a worktree. It opens `jig-review` with `tab.
 standalone listing therefore bundles `jig-review` (see below). Icons come from Herdr's `mods/workspace-chrome/*.svg` and this
 mod's own `*.svg`.
 
+**Header:** all git panels use one 42 px shared header: title, optional Terminal/Space switch, and a refresh icon whose
+tooltip says `Refresh · read N ago` (`Refresh` before the first read, `Reading…` while busy). Repos, History, PR & CI and
+Worktrees show the switch; Review has title and Refresh only. An error line sits under the header, above the kept rows.
+
 **Watch out:**
 
 Network commands longer than 30 s need Herdr 0.1.14 or newer: the mod passes an `exec` timeout just past its shell

@@ -23,7 +23,6 @@ import {
     window,
 } from "herdr";
 import { location, readFollow, writeFollow } from "./follow.js";
-import { followReload } from "./follow-state.js";
 import {
     colourSeed,
     commitMatches,
@@ -44,6 +43,7 @@ import {
     since,
     toggleBranchPicker,
 } from "./lib.js";
+import { panelHeader, ROW_FONT } from "./panel-header.js";
 import {
     focusRegained,
     friendlyError,
@@ -58,7 +58,7 @@ import {
 
 const onScreen = () => isOnScreen(layout(), "jig-history");
 const PAGE = 100; // commits per page
-const ROW_H = 28;
+const ROW_H = 24;
 const MID = ROW_H / 2;
 const LANE_W = 14;
 const MAX_LANES = 8;
@@ -110,33 +110,6 @@ function friendly(text) {
 function whereToLook() {
     const space = spaces().find((s) => s.active);
     return location(readFollow(space?.id));
-}
-
-/** The Terminal/Space switch: what this panel follows, per space. */
-function followButton(t, reload) {
-    const space = spaces().find((s) => s.active);
-    const follow = readFollow(space?.id);
-    return div()
-        .id("follow")
-        .ml(4)
-        .text_size(11)
-        .text_color(t.muted)
-        .cursor_pointer()
-        .hover((st) => st.text_color(t.foreground))
-        .tooltip(
-            follow
-                ? "Following the focused terminal — click to use the space folder"
-                : "Using the space folder — click to follow the focused terminal",
-        )
-        .on_click((_e, cx) => {
-            followReload(
-                follow,
-                space?.id,
-                (id, value) => writeFollow(id, value),
-                () => reload(cx),
-            );
-        })
-        .child(follow ? "Terminal" : "Space");
 }
 
 /** A pill of text: a branch, a tag, a pull request number or a commit type. */
@@ -607,6 +580,7 @@ export default class RepoHistory extends View {
             .id(`c-${commit.hash}`)
             .flex_none()
             .h(ROW_H)
+            .text_size(ROW_FONT)
             .pr(8)
             .gap(6)
             .items_center()
@@ -874,6 +848,8 @@ export default class RepoHistory extends View {
     /** The top part: the repository chooser (when there are several), the branch with the Branch/All switch and Refresh, and the filter. */
     header(t, hue, hasChooser) {
         const headBranch = this.commits?.find((c) => c.head)?.refs.find((r) => r.kind === "local")?.name;
+        const spaceId = spaces().find((s) => s.active)?.id;
+        const follow = readFollow(spaceId);
         const scopeButton = (id, label) =>
             div()
                 .id(`s-${id}`)
@@ -903,42 +879,37 @@ export default class RepoHistory extends View {
             .border_color(t.border)
             .when(hasChooser, (el) => el.child(this.chooser(t, hue)))
             .child(
+                panelHeader(t, {
+                    title: this.branchFilter ?? headBranch ?? (this.commits ? "Detached HEAD" : ""),
+                    titleTooltip: "Choose a branch",
+                    onTitleClick: (cx) => this.openBranchPicker(cx),
+                    follow,
+                    onFollow: (cx) => {
+                        writeFollow(spaceId, !follow);
+                        this.loadLog(cx, true);
+                    },
+                    readAt: this.logAt,
+                    busy: this.refreshState.busy,
+                    onRefresh: (cx) => {
+                        this.logAt = 0;
+                        this.reposAt = 0;
+                        this.loadLog(cx, true);
+                    },
+                    refreshIcon: "mods/jig-history/refresh.svg",
+                }),
+            )
+            .child(
                 h_flex()
                     .h(24)
+                    .flex_none()
+                    .px(12)
                     .gap(6)
                     .items_center()
+                    .border_b(1)
+                    .border_color(t.border)
                     .child(svg("mods/workspace-chrome/branch.svg").size(13).flex_none().text_color(t.muted))
-                    .child(
-                        div()
-                            .id("branch-name")
-                            .min_w(0)
-                            .truncate()
-                            .font_semibold()
-                            .cursor_pointer()
-                            .hover((st) => st.text_color(t.accent))
-                            .on_click((_e, cx) => this.openBranchPicker(cx))
-                            .child(this.branchFilter ?? headBranch ?? (this.commits ? "Detached HEAD" : "")),
-                    )
-                    .child(div().flex_1())
-                    .child(followButton(t, (cx) => this.loadLog(cx, true)))
                     .child(scopeButton("branch", "Branch"))
-                    .child(scopeButton("all", "All"))
-                    .child(
-                        div()
-                            .id("refresh")
-                            .ml(4)
-                            .text_size(11)
-                            .text_color(t.dim)
-                            .cursor_pointer()
-                            .hover((s) => s.text_color(t.foreground))
-                            .tooltip("Read the history again")
-                            .on_click((_e, cx) => {
-                                this.logAt = 0;
-                                this.reposAt = 0;
-                                this.loadLog(cx, true);
-                            })
-                            .child(this.refreshState.busy ? "Reading…" : "Refresh"),
-                    ),
+                    .child(scopeButton("all", "All")),
             )
             .child(
                 div()

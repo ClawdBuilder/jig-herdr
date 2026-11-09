@@ -22,7 +22,6 @@ import {
     window,
 } from "herdr";
 import { location, readFollow, writeFollow } from "./follow.js";
-import { followReload } from "./follow-state.js";
 import {
     cancelPrune,
     dangerousIgnored,
@@ -42,6 +41,7 @@ import {
     since,
     terminalsInsideWorktree,
 } from "./lib.js";
+import { panelError, panelHeader } from "./panel-header.js";
 import {
     focusRegained,
     friendlyError,
@@ -71,33 +71,6 @@ function friendly(text) {
 function whereToLook() {
     const space = spaces().find((s) => s.active);
     return location(readFollow(space?.id));
-}
-
-/** The Terminal/Space switch: what this panel follows, per space. */
-function followButton(t, reload) {
-    const space = spaces().find((s) => s.active);
-    const follow = readFollow(space?.id);
-    return div()
-        .id("follow")
-        .ml(4)
-        .text_size(11)
-        .text_color(t.muted)
-        .cursor_pointer()
-        .hover((st) => st.text_color(t.foreground))
-        .tooltip(
-            follow
-                ? "Following the focused terminal — click to use the space folder"
-                : "Using the space folder — click to follow the focused terminal",
-        )
-        .on_click((_e, cx) => {
-            followReload(
-                follow,
-                space?.id,
-                (id, value) => writeFollow(id, value),
-                () => reload(cx),
-            );
-        })
-        .child(follow ? "Terminal" : "Space");
 }
 
 /** Who is at a checkout: the space that was opened on it, any other space with a terminal in it, and whether an agent
@@ -577,56 +550,40 @@ export default class RepoWorktrees extends View {
         const firstName = rows[0] ? nameOf(rows[0].main) : null;
         const title = this.single && firstName ? firstName : "Worktrees";
         const count = `${rows.length} worktree${rows.length === 1 ? "" : "s"}`;
-        const header = h_flex()
-            .h(42)
-            .flex_none()
-            .px(12)
-            .gap(8)
-            .items_center()
-            .border_b(1)
-            .border_color(t.border)
-            .child(div().flex_1().min_w(0).truncate().font_semibold().child(`${title} · ${count}`))
-            .when(this.tookMs !== null && !this.loading, (el) =>
-                el.child(
-                    div()
-                        .flex_none()
-                        .text_size(10.5)
-                        .text_color(t.dim)
-                        .child(`${(this.tookMs / 1000).toFixed(1)}s`),
-                ),
-            )
-            .child(followButton(t, (cx) => this.load(cx, true)))
-            .when(this.rows().filter((row) => row.ready && row.path !== row.main).length > 0, (el) =>
-                el.child(
-                    div()
-                        .id("wt-prune")
-                        .flex_none()
-                        .text_size(11)
-                        .text_color(t.dim)
-                        .cursor_pointer()
-                        .hover((st) => st.text_color(t.foreground))
-                        .on_click((_e, cx) => {
-                            this.pruning = this.rows()
-                                .filter((row) => row.ready && row.path !== row.main)
-                                .map((tree) => ({ tree, on: this.where.on, contextKey: this.contextKey }));
-                            cx.notify();
-                        })
-                        .child(
-                            `Prune merged (${this.rows().filter((row) => row.ready && row.path !== row.main).length})`,
-                        ),
-                ),
-            )
-            .child(
-                div()
-                    .id("wt-refresh")
-                    .flex_none()
-                    .text_size(11)
-                    .text_color(t.dim)
-                    .cursor_pointer()
-                    .hover((s) => s.text_color(t.foreground))
-                    .on_click((_e, cx) => this.load(cx, true))
-                    .child(this.refreshState.busy ? "Reading…" : "Refresh"),
-            );
+        const space = spaces().find((s) => s.active);
+        const follow = readFollow(space?.id);
+        const header = panelHeader(t, {
+            title: `${title} · ${count}`,
+            follow,
+            onFollow: (cx) => {
+                writeFollow(space?.id, !follow);
+                this.load(cx, true);
+            },
+            readAt: this.loadedAt,
+            busy: this.refreshState.busy,
+            onRefresh: (cx) => this.load(cx, true),
+            refreshIcon: "mods/jig-worktrees/refresh.svg",
+            extra: [
+                this.rows().filter((row) => row.ready && row.path !== row.main).length > 0
+                    ? div()
+                          .id("wt-prune")
+                          .flex_none()
+                          .text_size(11)
+                          .text_color(t.dim)
+                          .cursor_pointer()
+                          .hover((st) => st.text_color(t.foreground))
+                          .on_click((_e, cx) => {
+                              this.pruning = this.rows()
+                                  .filter((row) => row.ready && row.path !== row.main)
+                                  .map((tree) => ({ tree, on: this.where.on, contextKey: this.contextKey }));
+                              cx.notify();
+                          })
+                          .child(
+                              `Prune merged (${this.rows().filter((row) => row.ready && row.path !== row.main).length})`,
+                          )
+                    : null,
+            ].filter(Boolean),
+        });
         const pruneBanner = this.pruning
             ? v_flex()
                   .id("prune-confirm")
@@ -710,7 +667,7 @@ export default class RepoWorktrees extends View {
                     .p(6)
                     .overflow_y_scrollbar()
                     .children(notices)
-                    .when(Boolean(this.error), (el) => el.child(message(this.error)))
+                    .when(Boolean(this.error), (el) => el.child(panelError(t, this.error)))
                     .when(Boolean(this.refreshProblem), (el) => el.child(message(this.refreshProblem, t.muted)))
                     .when(!this.error && !this.trees, (el) =>
                         el.child(message(this.where?.root ? "Reading…" : "No folder.")),
