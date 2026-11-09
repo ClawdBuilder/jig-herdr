@@ -7,14 +7,15 @@
     "license": "MIT",
     "scripts": {
         "check": "tsc -p tsconfig.json && biome ci . && node scripts/scan-company-strings.mjs && node scripts/check-commit-emails.mjs && node scripts/build-share.ts && node scripts/check-gallery.mjs",
-        "test": "node --import ./test/support/git-env.mjs --test \"test/*.test.ts\"",
+        "test": "node --import ./test/support/git-env.mjs --test --test-timeout=120000 \"test/*.test.ts\"",
         "build:themes": "node scripts/build-themes.ts",
         "scan": "node scripts/scan-company-strings.mjs",
         "check:emails": "node scripts/check-commit-emails.mjs",
         "build:share": "node scripts/build-share.ts",
         "check:share": "node scripts/build-share.ts --check",
         "check:gallery": "node scripts/check-gallery.mjs",
-        "check:gallery:publish": "node scripts/check-gallery.mjs --publish"
+        "check:gallery:publish": "node scripts/check-gallery.mjs --publish",
+        "test:ci": "timeout -k 10 900 npm test"
     },
     "devDependencies": {
         "@biomejs/biome": "2.6.4",

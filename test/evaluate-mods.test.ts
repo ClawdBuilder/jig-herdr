@@ -22,7 +22,7 @@ const mods = [
 ];
 
 for (const name of mods) {
-    test(`${name}/main.js loads and initialises without JS timers or Node APIs`, async () => {
+    test(`${name}/main.js loads and initialises without JS timers or Node APIs`, { timeout: 30_000 }, async () => {
         const child = spawn(process.execPath, ["test/support/evaluate-one.mjs", name], {
             cwd: new URL("..", import.meta.url),
             stdio: ["ignore", "pipe", "pipe"],
@@ -40,6 +40,7 @@ for (const name of mods) {
             assert.equal(code, 0, `${name}: ${stdout}${stderr}`);
         } finally {
             clearTimeout(timeout);
+            if (child.exitCode === null) child.kill("SIGKILL");
         }
     });
 }

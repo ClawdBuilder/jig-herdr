@@ -26,6 +26,7 @@ type Changes = {
 
 const git = (cwd: string, ...args: string[]) =>
     execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", ...args], {
+        timeout: 30_000,
         cwd,
         encoding: "utf8",
     });
@@ -55,7 +56,7 @@ test("jig-git lists every repository under a folder, nested ones too, with their
         writeFileSync(path.join(orders, "src/a.ts"), "two\n");
         writeFileSync(path.join(orders, "new.ts"), "new\n");
 
-        const out = execFileSync("sh", ["-c", SCRIPT, "sh", root], { encoding: "utf8" });
+        const out = execFileSync("sh", ["-c", SCRIPT, "sh", root], { timeout: 30_000, encoding: "utf8" });
         const repos = parseRepos(out, root);
         assert.deepEqual(repos.map((r) => r.name).sort(), ["orders-api", "worktrees/PROJ-123/billing"]);
         const changed = repos.find((r) => r.name === "orders-api");
@@ -66,7 +67,7 @@ test("jig-git lists every repository under a folder, nested ones too, with their
 
         // Inside a repository, only that repository is listed.
         const inside = parseRepos(
-            execFileSync("sh", ["-c", SCRIPT, "sh", path.join(orders, "src")], { encoding: "utf8" }),
+            execFileSync("sh", ["-c", SCRIPT, "sh", path.join(orders, "src")], { timeout: 30_000, encoding: "utf8" }),
             orders,
         );
         assert.deepEqual(
@@ -329,7 +330,7 @@ test("jig-work's script reads the status files and says which Pi still runs", as
         writeFileSync(path.join(dir, "b.json"), JSON.stringify(status("b", { pid: 999_999_991 }), null, 2));
         writeFileSync(path.join(dir, "c.json"), "half a fi");
         writeFileSync(path.join(dir, "d.json.123.ab.tmp"), "{}");
-        const out = execFileSync("sh", ["-c", lib.SCRIPT, "sh", root], { encoding: "utf8" });
+        const out = execFileSync("sh", ["-c", lib.SCRIPT, "sh", root], { timeout: 30_000, encoding: "utf8" });
         const sessions = lib.parseSessions(out);
         assert.deepEqual(
             sessions.map((s) => [s.status.session, s.alive]),
@@ -341,6 +342,7 @@ test("jig-work's script reads the status files and says which Pi still runs", as
         assert.equal(sessions[0]?.file, path.join(dir, "a.json"));
         // With no folder, jig-core's rule: $JIG_STATE_DIR/sessions.
         const viaEnv = execFileSync("sh", ["-c", lib.SCRIPT, "sh", ""], {
+            timeout: 30_000,
             encoding: "utf8",
             env: { ...process.env, JIG_STATE_DIR: root },
         });
@@ -348,6 +350,7 @@ test("jig-work's script reads the status files and says which Pi still runs", as
         assert.match(viaEnv, new RegExp(`^@@dir ${dir}$`, "m"));
         // A folder from config.json may start at the home folder.
         const viaHome = execFileSync("sh", ["-c", lib.SCRIPT, "sh", "~/"], {
+            timeout: 30_000,
             encoding: "utf8",
             env: { ...process.env, HOME: root },
         });
@@ -458,9 +461,12 @@ test("jig-work finds which outputs are in a repository with changes, for the Rev
         writeFileSync(loose, "x\n");
         const files = [path.join(orders, "src/a.ts"), path.join(orders, "b.ts"), loose];
         const info = lib.parseRepoInfo(
-            execFileSync("sh", ["-c", lib.REPO_SCRIPT, "sh", ...files], { encoding: "utf8" }),
+            execFileSync("sh", ["-c", lib.REPO_SCRIPT, "sh", ...files], { timeout: 30_000, encoding: "utf8" }),
         );
-        const real = execFileSync("git", ["-C", orders, "rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
+        const real = execFileSync("git", ["-C", orders, "rev-parse", "--show-toplevel"], {
+            timeout: 30_000,
+            encoding: "utf8",
+        }).trim();
         assert.deepEqual(info[files[0] ?? ""], { repo: real, status: "M" });
         assert.deepEqual(info[files[1] ?? ""], { repo: real, status: "" });
         assert.deepEqual(info[loose], { repo: null, status: "" });

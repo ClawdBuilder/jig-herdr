@@ -174,7 +174,7 @@ test("jig-files credits Herdr's files mod and its licence, and opens files as ji
 
 test("no mod tracks the editor files the Herdr app writes into every mod folder", () => {
     // They stay on disk, ignored, for the editor; only the index must not carry them.
-    const found = execFileSync("git", ["ls-files", "mods"], { cwd: HERDR, encoding: "utf8" })
+    const found = execFileSync("git", ["ls-files", "mods"], { timeout: 30_000, cwd: HERDR, encoding: "utf8" })
         .split("\n")
         .filter((f) => /gpui-kit\.d\.ts$|jsconfig\.json$/.test(f));
     assert.deepEqual(found, []);

@@ -150,7 +150,7 @@ test("the helper starts hidden and detached on Windows, and in the background on
     assert.match(linux.args[1], /'jig-keep-awake'/, "and carries a marker the mod can recognise");
     assert.match(startCommand("linux", { ...where, ownerPid: 99, display: true }).args[1], /--what=sleep:idle'/);
     // The loop, stop check and quoting are real shell: sh -n must accept the whole command line.
-    execFileSync("sh", ["-n", "-c", linux.args[1]], { encoding: "utf8" });
+    execFileSync("sh", ["-n", "-c", linux.args[1]], { timeout: 30_000, encoding: "utf8" });
 });
 
 test("every process question has one command per platform", async () => {

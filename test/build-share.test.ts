@@ -61,10 +61,16 @@ test("check-gallery accepts the built tree and refuses a broken listing", () => 
     const out = mkdtempSync(path.join(tmpdir(), "jig-gallery-test-"));
     try {
         buildShare(out);
-        execFileSync(process.execPath, [path.join(root, "scripts", "check-gallery.mjs"), out], { stdio: "pipe" });
+        execFileSync(process.execPath, [path.join(root, "scripts", "check-gallery.mjs"), out], {
+            timeout: 30_000,
+            stdio: "pipe",
+        });
         rmSync(path.join(out, "jig-git", "RECIPE.md"));
         assert.throws(() =>
-            execFileSync(process.execPath, [path.join(root, "scripts", "check-gallery.mjs"), out], { stdio: "pipe" }),
+            execFileSync(process.execPath, [path.join(root, "scripts", "check-gallery.mjs"), out], {
+                timeout: 30_000,
+                stdio: "pipe",
+            }),
         );
     } finally {
         rmSync(out, { recursive: true, force: true });

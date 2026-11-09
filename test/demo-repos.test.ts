@@ -12,6 +12,7 @@ test("demo-repos makes the four repos, branches and worktree with fixed identiti
     const dir = mkdtempSync(path.join(tmpdir(), "jig-demo-test-"));
     try {
         execFileSync("sh", [path.join(root, "scripts", "demo-repos.sh")], {
+            timeout: 30_000,
             env: { ...process.env, JIG_DEMO_ROOT: dir },
             stdio: "pipe",
         });
@@ -19,24 +20,31 @@ test("demo-repos makes the four repos, branches and worktree with fixed identiti
             assert.ok(existsSync(path.join(dir, name)), name);
         }
         const branch = execFileSync("git", ["-C", path.join(dir, "orders-api"), "branch", "--show-current"], {
+            timeout: 30_000,
             encoding: "utf8",
         }).trim();
         assert.equal(branch, "feature/PROJ-123");
         const log = execFileSync("git", ["-C", path.join(dir, "orders-api"), "log", "-1", "--format=%an <%ae>"], {
+            timeout: 30_000,
             encoding: "utf8",
         }).trim();
         assert.equal(log, "Demo Dev <demo@example.com>");
         const status = execFileSync("git", ["-C", path.join(dir, "orders-api"), "status", "--short"], {
+            timeout: 30_000,
             encoding: "utf8",
         });
         assert.match(status, /^A {2}staged\.txt/m);
         assert.match(status, /^\?\? scratch\.txt/m);
         assert.match(
-            execFileSync("git", ["-C", path.join(dir, "billing-web"), "status", "-sb"], { encoding: "utf8" }),
+            execFileSync("git", ["-C", path.join(dir, "billing-web"), "status", "-sb"], {
+                timeout: 30_000,
+                encoding: "utf8",
+            }),
             /behind 1/,
         );
         assert.match(
             execFileSync("git", ["-C", path.join(dir, "orders-api-worktree"), "rev-parse", "--show-toplevel"], {
+                timeout: 30_000,
                 encoding: "utf8",
             }),
             /orders-api-worktree/,

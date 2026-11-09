@@ -57,7 +57,7 @@ test("Work and Context share one session reader (the same file), and its three s
         "identical copies",
     );
     for (const script of [work.SCRIPT, work.MTIMES, work.READ]) {
-        execFileSync("sh", ["-n", "-c", script], { encoding: "utf8" });
+        execFileSync("sh", ["-n", "-c", script], { timeout: 30_000, encoding: "utf8" });
     }
     assert.equal(work.SCRIPT, ctx.SCRIPT);
 });
@@ -68,7 +68,7 @@ test("the mtime check finds only the files that moved, and merges their sessions
     const root = temp(t);
     const dir = path.join(root, "sessions");
     const sh = (script: string, ...args: string[]) =>
-        execFileSync("sh", ["-c", script, "sh", ...args], { encoding: "utf8" });
+        execFileSync("sh", ["-c", script, "sh", ...args], { timeout: 30_000, encoding: "utf8" });
     // the scripts want a state folder; make one with two session files
     execFileSync("mkdir", ["-p", dir]);
     writeFileSync(path.join(dir, "a.json"), status("a"));
@@ -125,7 +125,7 @@ test("the new config files parse refreshSeconds, and Files knows deleted and fil
         assert.match(lib.parseConfig("{").problems[0], /not valid JSON/);
     }
     assert.match(files.FIND, /-name \.git/);
-    execFileSync("sh", ["-n", "-c", files.FIND], { encoding: "utf8" });
+    execFileSync("sh", ["-n", "-c", files.FIND], { timeout: 30_000, encoding: "utf8" });
     assert.deepEqual(files.deletedPaths(" D src/a.ts\0 M src/b.ts\0D  old.ts\0", "/w"), ["/w/src/a.ts", "/w/old.ts"]);
     const listing = ["/w/src/a.ts", "/w/docs/plan.md", "/w/src/deep/b.ts", "/w/other.txt", "/elsewhere/x.ts"];
     assert.deepEqual(files.filterPaths(listing.join("\n"), "/w", "src"), ["src/a.ts", "src/deep/b.ts"]);
