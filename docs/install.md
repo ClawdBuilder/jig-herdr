@@ -51,8 +51,8 @@ bound to something else is kept and listed, and `--force` takes it over. A `keys
 `--dry-run` prints what would happen and writes nothing, not even the record. `--remove-old` deletes an old renamed mod
 folder after every key in its `config.json` has been carried over; it is off by default.
 
-Two old names can lead to one new one: `jig-repos` and then `repo-changes` both become `jig-git`. The migration lists the
-newest old name first, so its values win and the older file only fills keys it did not set.
+Two old names can lead to one new one (`repo-changes` is the older name for `jig-git`). The migration lists the newest old
+name first, so its values win and the older file only fills keys it did not set.
 
 ## What the layout needs from Herdr
 
