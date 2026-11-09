@@ -38,7 +38,7 @@ Worktrees show the switch; Review has title and Refresh only. An error line sits
 
 **Watch out:**
 
-Herdr's 30 s cap; `git` and POSIX `sh` are required, so Windows-local without WSL is unsupported. The mode is **not
+Reads pass a 20 s timeout; Herdr's deadline is 25 s, and Herdr 0.1.13 or older cuts at its own 30 s default. `git` and POSIX `sh` are required, so Windows-local without WSL is unsupported. The mode is **not
 read-only**: stage, unstage and discard write. Branch mode needs one of the base candidates above; without one it says so.
 Very large diffs are capped and say when cut. Binary files show a notice, not content. This mod is opened by `jig-git` via
 `tab.new`; the standalone listing has `"place": "none"`, so a layout block with `content.mod = "jig-review"` (or the tab

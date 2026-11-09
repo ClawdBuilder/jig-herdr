@@ -39,7 +39,7 @@ Worktrees show the switch; Review has title and Refresh only. An error line sits
 
 **Watch out:**
 
-Herdr's 30 s cap; `git` and POSIX `sh` are required, so Windows-local without WSL is unsupported. Readiness is
+Reads pass a 20 s timeout; Herdr's deadline is 25 s, and Herdr 0.1.13 or older cuts at its own 30 s default. `git` and POSIX `sh` are required, so Windows-local without WSL is unsupported. Readiness is
 conservative: an unmerged branch, uncommitted data, a lock, a terminal or an agent keeps a row in progress. **Every ignored
 path is refused, except a top-level `node_modules/`, `dist/`, `build/` or `target/` directory; `.env*` is always refused.**
 The main checkout is never offered. There is no configured root: a row opens the space at that path (or a new tab) wherever

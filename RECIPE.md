@@ -66,12 +66,13 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
 - **Agent states.** Herdr's agents list shows them: `blocked` in amber, `done` in lime, `working` in cyan. The Work panel's
   header says `working` or `idle` for the Pi session it shows.
 - **Keys.** `Ctrl+Shift+R` toggles the side panel (`layout.toggle:panel`).
-- **Work.** Every 2 seconds while it is on screen, one `sh` on the machine where Pi runs reads the status files the Pi
-  extension writes and checks that each Pi still runs. The session shown is the focused terminal's, else the one picked in
+- **Work.** A 1 s tick notices focus, session and window changes; while the followed session works, a 3 s check reads
+  only the status files whose mtime moved, and the `refreshSeconds` backstop (default 60 s) does a full read. The read is
+  one `sh` on the machine where Pi runs, checking that each Pi still runs. The session shown is the focused terminal's, else the one picked in
   the list, else the one updated last. A click on the ticket key or a pull request opens the browser; on an output, a file
   tab (`jig-file-view`, selected again if open); on its diff button, the `Review` tab. Pull requests are read with `gh` at most
   every 5 minutes per ticket; `Refresh` reads them now. Nothing in the panel approves or changes anything.
-- **Context.** Read with Work's script every 2 seconds while shown. A switch or `Reload` writes the session's request file
+- **Context.** Uses the same 1 s tick, 3 s changed-file check and `refreshSeconds` backstop as Work, with Work's script. A switch or `Reload` writes the session's request file
   through a temporary file and a rename, carrying every switch not answered yet, and shows dimmed until the session's
   answer comes. A tool switch applies from the model's next request and a skill switch from the next prompt; Reload waits until the agent is idle.
 - **Panel and Jig.** `Panel` shows or hides the side panel on its last section; `Jig` shows the Work section, and hides the
@@ -276,5 +277,5 @@ Work panel needs Jig's Pi plugin `jig-session` loaded in Pi: it writes the statu
 - Setting `theme` to `jig-signal` in Pi's `settings.json` makes the window take the cyan palette within 5 seconds.
 - `Ctrl+Shift+R` hides and shows the side panel, and switching to another layout and back keeps everything working.
 - With Pi and the Jig plugins running in a terminal of the window, `/ticket PROJ-123` and a file written by the agent: the
-  `Jig` button shows that session's ticket, its stages, the file under `OUTPUTS` and the `write` call under `RECENT`, within
-  2 seconds; a click on the file opens it in a tab.
+  `Jig` button shows that session's ticket, its stages, the file under `OUTPUTS` and the `write` call under `RECENT`,
+  within a few seconds; a click on the file opens it in a tab.

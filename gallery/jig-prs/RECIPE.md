@@ -45,7 +45,7 @@ Worktrees show the switch; Review has title and Refresh only. An error line sits
 
 Requires `gh` on PATH and signed in; missing auth/rate limits are reported, not retried. **Mine** searches all of GitHub for
 PRs authored by `@me`, not only the demo folder, so the standalone preview is demo data; it makes a network call to GitHub's
-search API. The 30 s exec cap can end a slow
+search API. Discovery reads pass a 20 s timeout and `gh` calls 60 s; Herdr's deadline is 5 s later (600 s at most on 0.1.14+), while 0.1.13 or older cuts at 30 s default. A slow
 GitHub call. No write actions: no comment, approve, merge or rerun. A Windows-local space without WSL has no POSIX `sh`.
 The API's own limits apply; a very large PR list is capped and says so. Link opening depends on the desktop opener.
 

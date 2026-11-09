@@ -38,7 +38,7 @@ headers:
   changing, the window regaining focus, the followed terminal's Herdr status changing (working ↔ idle/done), its own
   actions and the refresh button. While the followed session works, every 3 s one tiny `sh` prints only the status files'
   mtimes and sizes, and only the files that moved are read; while it is idle, nothing but events and the `refreshSeconds`
-  backstop (60 s by default, never under 15). Herdr caps every command at 30 s; the 2 s full read is gone. On the machine (config `machine`, else the shown space's machine); for listed outputs of an older
+  backstop (60 s by default, never under 15). Reads pass a 20 s timeout, network calls 60 s, and Herdr's deadline is 5 s later (up to 600 s on 0.1.14+). On the machine (config `machine`, else the shown space's machine); for listed outputs of an older
   status file one `git rev-parse`/`git status` script when the list changes and every 30 s; pull requests through `gh`,
   cached 5 minutes per ticket in `localStorage`. Background runs are silent; a clicked refresh shows its busy state only
   after 400 ms and queues one more click instead of blocking.
@@ -68,7 +68,7 @@ folder, picker, `Reload` and refresh; a second line carries the model, thinking,
   the model; jig-core still decides each call.
 - **When it reads:** the same reader and events as Work (a first read on mount, shown/shown again, focus/session change,
   window focus, the followed terminal's status, its own actions, a manual read), the same 3 s mtime-only check while the
-  session works and the same `refreshSeconds` backstop from `mods/jig-work/config.json`; no 2 s full read. `Reload` says `Reload when idle` while the
+  session works and the same `refreshSeconds` backstop from `mods/jig-work/config.json`. `Reload` says `Reload when idle` while the
   agent works.
 - **Props:** none. **Files:** `main.js`, `lib.js` (a copy of Work's session finding, the bar, the request).
 

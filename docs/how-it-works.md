@@ -27,7 +27,7 @@ as `div()`, `h_flex()` and `v_flex()`: there is no DOM and no HTML; the script d
 
 ## Reaching the agent's machine
 
-![On the agent's machine, Pi tells jig-session about its events and jig-session writes sessions/<id>.json by a rename; on your computer, the Herdr app's Work and Context panels run one sh script on that machine through Herdr's exec every 2 seconds while shown](https://github.com/ClawdBuilder/jig/blob/main/docs/img/session-file.svg)
+![On the agent's machine, Pi tells jig-session about its events and jig-session writes sessions/<id>.json by a rename; on your computer, the Herdr app's Work and Context panels run one sh script on that machine through Herdr's exec on an event or the refreshSeconds backstop](https://github.com/ClawdBuilder/jig/blob/main/docs/img/session-file.svg)
 
 _The app and Pi may run on different machines. The panels run their scripts where the files are._
 
@@ -38,7 +38,8 @@ runs the call there through herdr-core.
    `{ code, stdout, stderr }`. The Jig mods mostly run `sh -c '<script>' sh <arguments>`: the script is a fixed string from
    `lib.js`, and every path or value is an argument, never pasted into the script.
 2. **`readTextFile(path, { on })`** reads one text file there, or gives `null` when it is missing. `jig-file-view` uses it.
-3. **Work's read.** Every 2 seconds while shown, `jig-work` runs `SCRIPT` from its `lib.js`: it finds the state dir, lists
+3. **Work's read.** While shown, `jig-work` ticks once a second, checks mtimes every 3 s while the followed session works,
+   and runs `SCRIPT` from its `lib.js` on an event or the `refreshSeconds` backstop: it finds the state dir, lists
    `sessions/*.json`, checks each `pid` with `kill -0` and prints each file after a `@@file` line. `parseSessions` reads that.
 4. **Which session.** `pickSession` takes the one whose `terminal` matches `focused().terminal` (`<machine>/t7` on another
    machine), else the one you picked, else the one updated last. A session whose Pi has stopped is never shown.

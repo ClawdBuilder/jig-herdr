@@ -46,7 +46,7 @@ Worktrees show the switch; Review has title and Refresh only. An error line sits
 
 **Watch out:**
 
-The 30 s `exec` cap; `git` and a POSIX `sh` are required, so Windows-local without WSL is unsupported. A very large
+Reads pass a 20 s timeout; Herdr's deadline is 25 s, and Herdr 0.1.13 or older cuts at its own 30 s default. `git` and a POSIX `sh` are required, so Windows-local without WSL is unsupported. A very large
 history is paged, not all loaded; the lane gutter is a compact indication, not a full graph layout engine. Detached HEAD and unborn branches get a plain notice. No writes, no fetch, no network.
 
 **Done when:**
