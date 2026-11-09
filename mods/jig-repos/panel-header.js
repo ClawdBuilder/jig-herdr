@@ -81,6 +81,7 @@ export function panelHeader(t, options) {
     const {
         title,
         titleTooltip,
+        lead,
         extra = [],
         follow,
         onFollow,
@@ -100,19 +101,21 @@ export function panelHeader(t, options) {
         .border_b(1)
         .border_color(t.border)
         .child(
-            div()
-                .flex_1()
-                .min_w(0)
-                .truncate()
-                .font_semibold()
-                .tooltip(titleTooltip ?? title)
-                .when(onTitleClick !== undefined, (el) =>
-                    el
-                        .cursor_pointer()
-                        .hover((style) => style.text_color(t.accent))
-                        .on_click((_e, cx) => onTitleClick(cx)),
-                )
-                .child(title),
+            lead !== undefined
+                ? div().flex_1().min_w(0).child(lead)
+                : div()
+                      .flex_1()
+                      .min_w(0)
+                      .truncate()
+                      .font_semibold()
+                      .tooltip(titleTooltip ?? title)
+                      .when(onTitleClick !== undefined, (el) =>
+                          el
+                              .cursor_pointer()
+                              .hover((style) => style.text_color(t.accent))
+                              .on_click((_e, cx) => onTitleClick(cx)),
+                      )
+                      .child(title),
         )
         .children(extra.map((child) => div().flex_none().child(child)))
         .when(follow !== undefined, (el) => el.child(followSwitch(t, follow, onFollow)))

@@ -875,6 +875,7 @@ export default class RepoPullRequests extends View {
             const active = this.tab === id;
             return div()
                 .id(`tab-${id}`)
+                .flex_none()
                 .h(24)
                 .px(9)
                 .flex()
@@ -896,8 +897,11 @@ export default class RepoPullRequests extends View {
         const space = spaces().find((s) => s.active);
         const follow = readFollow(space?.id);
         const header = panelHeader(t, {
-            title: "",
-            extra: [tabChip("main", this.single ? "Open" : "Workspace"), tabChip("mine", "Mine")],
+            lead: h_flex()
+                .gap(4)
+                .items_center()
+                .child(tabChip("main", this.single ? "Open" : "Workspace"))
+                .child(tabChip("mine", "Mine")),
             follow,
             onFollow: (cx) => {
                 writeFollow(space?.id, !follow);

@@ -54,3 +54,10 @@ test("follow is only on Repos, History, PR & CI and Worktrees", () => {
     for (const mod of ["jig-review", "jig-files", "jig-file-view"])
         assert.doesNotMatch(source(path.join(mods, mod, "main.js")), /follow:/, mod);
 });
+
+test("PR & CI puts its tabs in the header's lead slot", () => {
+    const pr = source(path.join(mods, "jig-prs/main.js"));
+    assert.match(pr, /lead: h_flex\(\)[\s\S]{0,200}tabChip\("main"/);
+    assert.doesNotMatch(pr, /extra: \[tabChip/);
+    assert.match(source(path.join(mods, "jig-prs/panel-header.js")), /lead !== undefined/);
+});
