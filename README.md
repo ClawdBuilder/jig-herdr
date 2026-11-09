@@ -60,8 +60,9 @@ npm run check
 npm test
 ```
 
-`npm run check` includes the commit-email guard. It checks author and committer emails against the private word list in
-`JIG_SCAN_WORDS` or `~/.config/jig/scan-words.txt` (or `JIG_SCAN_WORDS_TEXT`); with no list, as in public CI, it skips.
+`npm run check` includes the commit-email guard. It reads the private word list from `JIG_SCAN_WORDS_TEXT`; if that is
+unset, from the file named by `JIG_SCAN_WORDS`; if that is unset too, from `~/.config/jig/scan-words.txt`. With no list, as
+in public CI, it skips.
 
 ## Licence
 
