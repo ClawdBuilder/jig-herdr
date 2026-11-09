@@ -192,9 +192,9 @@
                                         {
                                             "id": "changes",
                                             "type": "block",
-                                            "title": "Changes",
+                                            "title": "Git",
                                             "content": {
-                                                "mod": "jig-repos",
+                                                "mod": "jig-git",
                                                 "props": {
                                                     "activity": {
                                                         "icon": "mods/workspace-chrome/git-compare.svg"

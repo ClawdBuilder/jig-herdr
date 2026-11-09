@@ -5,8 +5,8 @@ together. Back to the [Herdr app overview](../README.md); [How it works](how-it-
 the agent's machine first.
 
 All of them are trusted code that runs inside the Herdr app, so this page says what each reaches. `jig-work` and `jig-prs`
-reach the network through `gh`, and `jig-repos` fetches, pulls and pushes with git (after a confirm), on the machine where the folders are.
-Three mods write with git: `jig-repos` and `jig-review` with [the git actions](#the-git-actions), and `jig-worktrees`
+reach the network through `gh`, and `jig-git` fetches, pulls and pushes with git (after a confirm), on the machine where the folders are.
+Three mods write with git: `jig-git` and `jig-review` with [the git actions](#the-git-actions), and `jig-worktrees`
 with its `Remove`. Each is a `main.js` with the helper files named below; the pure parts are in `lib.js` files, which the
 tests load.
 
@@ -25,7 +25,7 @@ headers:
 - **Outputs:** the files the session created (`A`) or changed (`M`) outside any git repository, such as ticket notes, plans
   and reports, newest first (`No ticket files yet` when none), each with its short folder (the last two segments; full path
   on hover). A click opens a `jig-file-view` tab, or selects the one already open. Files inside repositories are not listed:
-  under the list a dim line, `N files changed in repositories → Changes`, shows the side panel on the Changes section. The
+  under the list a dim line, `N files changed in repositories → Git`, shows the side panel on the Git section. The
   status file's `repo` field says which is which; a session of an older `jig-session` has none, so all its outputs are
   listed, with the diff button on those that have changes in a repository.
 - **Recent:** the last 15 tool calls: time, tool and its short target, the outcome (`ok`, `error`, `blocked`, `running`) and,
@@ -74,7 +74,7 @@ folder, picker, `Reload` and refresh; a second line carries the model, thinking,
 
 ## jig-tabs: the tab bar
 
-Herdr's shipped `tabs` mod (Apache-2.0; the file says so at its top), with the Files and Changes buttons replaced by two:
+Herdr's shipped `tabs` mod (Apache-2.0; the file says so at its top), with the Files and Git buttons replaced by two:
 
 - **`Panel`** shows or hides the side panel (`layout.show` or `layout.hide` on `panel`); the stack keeps its last section.
 - **`Jig`** selects the `jig-work` child of `panel-body` and shows the panel; a second click hides it. Lit while it shows.
@@ -144,7 +144,7 @@ config. A binary or missing file says so, and a tab without props says to open o
 A Markdown file (`.md`, `.markdown`, `.mdx`) opens rendered: headings, lists, tables, code blocks and links. `Source` in
 the header shows its text with syntax colours, and `Preview` goes back.
 
-## jig-repos: the Changes panel
+## jig-git: the Git panel
 
 Every git checkout under the folder the focused terminal is in, changed ones first, then a `Clean (N)` group; a filter box
 matches checkout names and file paths. A click on a file opens it in a `Review` tab. A checkout with commits its base
@@ -169,7 +169,7 @@ checkboxes and the buttons that appear on hover run [the git actions](#the-git-a
   commit line under every row.
 - **Worktrees fold under their main checkout.** Checkouts are grouped by their git common folder: a chevron on the main row
   hides or shows its worktrees (`▸`/`▾`; a folded one shows their count and a dot when one has changes or is ahead/behind, so
-  nothing hides). The choice is kept per repo path in `shared("jig-repos.folded")`, so it survives a reload and a folder
+  nothing hides). The choice is kept per repo path in `shared("jig-git.folded")`, so it survives a reload and a folder
   switch; a repo no one has touched starts folded unless a worktree is the focused folder or has changes. The header's chevron
   folds or unfolds every repo. A worktree whose main checkout is not listed stands as a row of its own, and a main checkout
   that is clean, with every worktree clean, folds into `Clean (N)`.
@@ -206,9 +206,9 @@ checkboxes and the buttons that appear on hover run [the git actions](#the-git-a
   terminal inside the panel's folder goes working to idle or done, at once after an action, and on Refresh. Triggers are
   debounced for 500 ms; a backstop reads every `refreshSeconds` (60 by default, at least 15) while shown. Folded
   repositories are read when unfolded and by that backstop.
-- **Sets** `shared("badge.jig-repos")`: the number of checkouts (main or worktree) with changes, each counted once;
-  `shared("jig-repos.done")` after a branch switch or a push, so the panel says so and reads again; and
-  `shared("jig-repos.running")`, one `{ what, at }` entry per checkout, so the panel and its dialog never run two actions
+- **Sets** `shared("badge.jig-git")`: the number of checkouts (main or worktree) with changes, each counted once;
+  `shared("jig-git.done")` after a branch switch or a push, so the panel says so and reads again; and
+  `shared("jig-git.running")`, one `{ what, at }` entry per checkout, so the panel and its dialog never run two actions
   in the same checkout (an entry older than 15 minutes is stale).
 - **Settings:** `refreshSeconds` in `config.json` sets the backstop (60 by default, at least 15). `exec` caps one read at
   30 s.
@@ -436,7 +436,7 @@ the first follows Pi's palette and the second holds the awake request. The theme
 | ------------------------------------------------------------ | --------------- | ---------------------------- |
 | `jig-work` (open first)                                      | `jig-work`      | `jig.svg`, ours              |
 | `jig-context` (a line under its button closes the Jig group) | `jig-context`   | `context.svg`, a gauge, ours |
-| `changes`                                                    | `jig-repos`     | `git-compare.svg`, Herdr's   |
+| `changes`                                                    | `jig-git`       | `git-compare.svg`, Herdr's   |
 | `history`                                                    | `jig-history`   | `clock.svg`, Herdr's         |
 | `pr`                                                         | `jig-prs`       | `pr.svg`, ours               |
 | `worktrees`                                                  | `jig-worktrees` | `worktree.svg`, ours         |

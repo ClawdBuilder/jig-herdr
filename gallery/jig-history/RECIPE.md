@@ -7,7 +7,8 @@ beside. Read-only. From Jig (https://github.com/ClawdBuilder/jig). No Jig requir
 
 **What you see:**
 
-A header with the repository or folder name, a scope switch (`branch` or `all` branches/remotes/tags), and Refresh. The
+A header with the repository or folder name, the Terminal/Space switch and Refresh; a second 24 px row holds the scope
+switch (`branch` or `all` branches/remotes/tags). The
 graph lists commit rows with a narrow coloured lane gutter, a short hash, subject, author and age; a type word (`feat`, `fix`, `docs`,
 `refactor`, `perf`, `test`, `build`, `ci`, `revert`) gets a hue. A commit opens a detail pane with its message and files;
 a file row or **Open diff** opens the diff in a terminal to the right. On a folder with many repositories, a list of
@@ -39,7 +40,7 @@ The header's branch control opens the branch picker (`Find a branch`), which ran
 A layout block with `content.mod = "jig-history"` is required (`"place": "none"`).
 
 **Header:** all git panels use one 42 px shared header: title, optional Terminal/Space switch, and a refresh icon whose
-tooltip says `Refresh · read N ago` (`Refresh` before the first read, `Reading…` while busy). Repos, History, PR & CI and
+tooltip says `Refresh · read N ago` (`Refresh` before the first read, `Reading…` while busy). Git, History, PR & CI and
 Worktrees show the switch; Review has title and Refresh only. An error line sits under the header, above the kept rows.
 
 **Watch out:**

@@ -24,7 +24,7 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
   padding with an 8 px gap: the terminals, and the side panel.
 - **Terminals** as cards: radius 10, 8 px gap, 1 px `border`, a 1 px `accent` border on the focused one, and a 30 px header
   (`pane`) always shown. A single terminal is framed too (`lone: true`).
-- **Side panel, 420 px (300 to 900),** a row of a stack and a bar. The stack shows one panel: Jig · Work, Changes, History,
+- **Side panel, 420 px (300 to 900),** a row of a stack and a bar. The stack shows one panel: Jig · Work, Git, History,
   PR & CI, Worktrees or Files. Work is the one shown first.
 - **Icon bar, 40 px,** background `chrome`, a 1 px `border` on its left. One 18 px icon for each panel, 40 px square, with a
   2 px `accent` bar on the left of the active one and the `foreground` colour; the others are `dim`. The Jig icon and the
@@ -44,8 +44,9 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
   `ansi6`, System prompt `foreground`, Skills `ansi5`, Context files `ansi3`, Compaction buffer `dim`, Free space `raised`.
   Under it the last answer (`✓` in `done`, `✗` in `blocked`), then folded sections `▸ TOOLS N of M on`, `▸ SKILLS N` and `▸
   CONTEXT FILES N`: 24 px rows with the name, the size and a 28×16 switch (`accent` when on, a 10 px knob).
-- **Changes panel.** A 42 px header with the folder's name (full path on hover), a `Terminal`/`Space` toggle, `N repos ·
-  M changed` (with the worktree count when there is room), a fetch-everything icon and a refresh icon; a filter box; then a
+- **Git panel.** A 42 px header with the folder's name (full path on hover), a `Terminal`/`Space` toggle, a fold-all
+  chevron, a fetch-everything icon and a refresh icon; a muted body line under it carries `N repos · M changed` (with the
+  worktree count when there is room); a filter box; then a
   one line for each checkout with changes (its name, a branch chip with an icon, the parent folder only on a name clash, a `2 vs main` chip
   when the branch has commits its base lacks, `↑` ahead in `foreground`, `↓` behind in `blocked`, then pull and push/publish
   icons, and a count in a small outlined box), and under it its linked worktrees as `↳ <folder>` rows, indented 18 px,
@@ -82,7 +83,7 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
   `caffeinate -i [-d] -w <herdr pid>` on macOS, or `systemd-inhibit --what=sleep[:idle] --mode=block sh -c 'while kill -0
   <herdr pid> ...' jig-keep-awake` on Linux, started on Herdr's own computer and stopped when it is no longer wanted or Herdr
   exits; its request ends with its process.
-- **Changes.** It follows the focused terminal's folder (its checkout and linked worktrees, else the repositories below it),
+- **Git.** It follows the focused terminal's folder (its checkout and linked worktrees, else the repositories below it),
   or the space's folder when the header's toggle says `Space`; the choice is kept per space in `localStorage`, and a switch
   keeps the old rows until the new ones arrive and never clears the filter. One `sh` script on the space's machine reads
   them: every 5 seconds while the panel is shown, when it is opened, when a terminal changes status or the folder changes,
@@ -118,7 +119,7 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
   tab is on screen; an unchanged diff keeps its scroll position.
 - **Theme follower.** Every 5 seconds it reads Pi's `theme` setting, makes a Herdr theme from that palette and switches to
   it. Nothing shows it: a problem comes as a notification. Dark palettes keep the black window.
-- **Badges.** `jig-repos` sets `shared("badge.jig-repos")` to the number of checkouts with changes. The icon bar
+- **Badges.** `jig-git` sets `shared("badge.jig-git")` to the number of checkouts with changes. The icon bar
   shows a badge for `shared("badge.<mod>")` on the button of that mod.
 
 ## Built from
@@ -140,7 +141,7 @@ Each child of `panel-body` is a block with a `title` and a mod, and its `content
 | ------------- | ------------- | --------------- | ---------------------------------------------------------------- |
 | `jig-work`    | Jig · Work    | `jig-work`      | `mods/jig-activity/icons/jig.svg`                                |
 | `jig-context` | Jig · Context | `jig-context`   | `mods/jig-activity/icons/context.svg` (a gauge), `divider: true` |
-| `changes`     | Changes       | `jig-repos`     | `mods/workspace-chrome/git-compare.svg`                          |
+| `changes`     | Git           | `jig-git`       | `mods/workspace-chrome/git-compare.svg`                          |
 | `history`     | History       | `jig-history`   | `mods/workspace-chrome/clock.svg`                                |
 | `pr`          | PR & CI       | `jig-prs`       | `mods/jig-activity/icons/pr.svg`                                 |
 | `worktrees`   | Worktrees     | `jig-worktrees` | `mods/jig-activity/icons/worktree.svg`                           |
@@ -170,20 +171,20 @@ The mods, all in `mods/`, each with `mod.json` `{ "place": "none", "title": "...
   `agents`. Files: `main.js`, `lib.js`, `jig-keep-awake.ps1`, `jig-keep-awake.svg`, `config.json`.
 - **`jig-file-view`** (props `{ on, path }` from `tab.new`). `readTextFile(path, { on })`, `EditorState` and `Editor` from
   `gpui-base`, read-only.
-- **`jig-repos`** (props: none; `{ picker }` for its branch popup, `{ push }` for its push dialog; settings in
+- **`jig-git`** (props: none; `{ picker }` for its branch popup, `{ push }` for its push dialog; settings in
   `config.json`: `{ newBranchPrefix, baseBranch, remote, networkTimeoutSeconds }`). Reads `spaces()`, `panes()`,
-  `focused()`, `terminals()`, `layout()`, `appHome()`, `shared("jig-repos.running")`; reads its `config.json` with
+  `focused()`, `terminals()`, `layout()`, `appHome()`, `shared("jig-git.running")`; reads its `config.json` with
   `readTextFile`; runs `exec("sh", ["-c", SCRIPT, "sh", root], { on })` with the space's machine, `exec("git", ..., { cwd,
   on })` for the actions, and the network ones through one `sh -c` that sets the environment and a `timeout` (or a
   watchdog); `openOverlay` for the picker (`kind: "popup"`) and the push dialog (`kind: "dialog"`, 440 wide); `run("tab.new", ...)` for the Review tab and terminals; `setShared` for the
-  badge and `jig-repos.done`. `InputState` and `Input` for the filter, the commit messages (made in the timer, never in
+  badge and `jig-git.done`. `InputState` and `Input` for the filter, the commit messages (made in the timer, never in
   `render`) and the picker. Icons: its own `fetch`, `pull`, `push`, `refresh`, and `mods/workspace-chrome/`
   `branch`, `check`, `chevron-down`, `chevron-right`, `folder`, `minus`, `plus`, `terminal`. Files: `main.js` (the panel),
   `picker.js`, `push.js` (the confirm dialog), `lib.js` (the script, the parsing, the grouping and the git actions, each
   taking `exec` and returning `{ ok, message }`), `layout.js`, `config.json`, `RECIPE.md`, `preview.png`.
 - **`jig-review`** (props `{ on, repo, name, file? }` from `tab.new`; read them with `props()`). `exec("git", ...)` and
   `readTextFile` with `{ on }`; `v_virtual_list` and `Scrollbar` from `gpui-base`. Its `lib.js` copies the stage, unstage
-  and discard functions of `jig-repos`.
+  and discard functions of `jig-git`.
 - **`jig-history`** (props: none). `exec("sh", ["-c", SCRIPT, "sh", root], { on })` for the repositories, `exec("git", ...,
   { cwd, on })` for `log`, `status` and `show`, `run("terminal.open", ...)` for a diff. `InputState` and `Input` from
   `gpui-base` for the filter and the picker. Files: `main.js`, `lib.js`.
@@ -232,7 +233,7 @@ Work panel needs Jig's Pi plugin `jig-session` loaded in Pi: it writes the statu
   the way showing it) before reading.
 - **A block whose mod is missing** shows `<mod> did not load` and adds an error to `herdr-app status`; the rest still works.
   `jig-activity` leaves out that panel's button.
-- **Mods cannot import each other,** so `lib.js` of `jig-review` is a cut-down copy of `jig-repos`'s, `jig-context` copies
+- **Mods cannot import each other,** so `lib.js` of `jig-review` is a cut-down copy of `jig-git`'s, `jig-context` copies
   `jig-work`'s session finding, and every panel
   has its own check that its block is on screen.
 - **Every git write is a click, with git's own safety.** No `--force`, `-D`, `reset`, `--amend`, `--no-verify` or push;
@@ -246,8 +247,8 @@ Work panel needs Jig's Pi plugin `jig-session` loaded in Pi: it writes the statu
 - `herdr-app check mods/<name>` passes for each of the twelve mods, and `herdr-app status` shows no `errors` after
   `layout.switch {"name":"jig"}`.
 - The sidebar shows Herdr's spaces and agents lists, the terminals are cards, and the right panel shows the icon bar with the
-  Changes icon active and a badge equal to the number of checkouts with changes.
-- With a space whose folder holds several git repositories, the Changes panel lists all of them, changed ones first, with
+  Git icon active and a badge equal to the number of checkouts with changes.
+- With a space whose folder holds several git repositories, the Git panel lists all of them, changed ones first, with
   branch and counts; editing a file in one shows it within 5 seconds. A terminal `cd`ed into one repository lists that one
   (the header's toggle back to `Space` lists the space's folder again), and a branch one commit ahead of its upstream shows
   `↑1`; the push icon opens the confirm with that commit and the destination it names, and Cancel sends nothing. With

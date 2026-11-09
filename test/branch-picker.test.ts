@@ -14,7 +14,7 @@ const branches = [
 ];
 
 test("Repos filters exact, prefix, last segment prefix, then substring, locals before origin-only", async () => {
-    const { filterBranches } = await load<Lib>("mods/jig-repos/lib.js");
+    const { filterBranches } = await load<Lib>("mods/jig-git/lib.js");
     assert.deepEqual(
         filterBranches(branches, "proj-1234").map((b: any) => b.name),
         ["PROJ-1234", "feature/PROJ-1234", "feature/PROJ-12345", "fix/PROJ-1234-old", "zzz/PROJ-1234"],
@@ -31,7 +31,7 @@ test("Repos filters exact, prefix, last segment prefix, then substring, locals b
 });
 
 test("Repos active defaults to the best pickable row, skips current/in-use, and clamps", async () => {
-    const { defaultActive, moveActive, branchKey } = await load<Lib>("mods/jig-repos/lib.js");
+    const { defaultActive, moveActive, branchKey } = await load<Lib>("mods/jig-git/lib.js");
     assert.equal(defaultActive(branches, ""), branchKey(branches[1]));
     assert.equal(defaultActive(branches, "proj-1234"), branchKey(branches[3]));
     let active = defaultActive(branches, "");
@@ -62,7 +62,7 @@ test("History uses the same ranking and keys, with current ticked", async () => 
 });
 
 test("locals stay before an exact origin-only match, and down reaches it last", async () => {
-    const repos = await load<Lib>("mods/jig-repos/lib.js");
+    const repos = await load<Lib>("mods/jig-git/lib.js");
     const history = await load<Lib>("mods/jig-history/lib.js");
     const rows = [
         { name: "feature/PROJ-1234", remote: false, current: false },

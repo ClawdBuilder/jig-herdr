@@ -22,7 +22,7 @@ Unstage and Discard are per file; Discard asks inline. A second request for the 
 
 **Built from:**
 
-`main.js` + `lib.js`; no `refresh.js` and no `config.json`. Props: `{ on, repo, name, file?, mode? }`. Herdr: `exec`, `run`,
+`main.js` + `lib.js` + `refresh.js` (the shared runner and `GIT_READ`) + `panel-header.js` (the shared header and error line); no `config.json`. Props: `{ on, repo, name, file?, mode? }`. Herdr: `exec`, `run`,
 `tab.new`, `shared`/`setShared`, `appHome`, `readTextFile`, `theme`, `layout`, `panes`, `spaces`, `Editor`/`TextView` from
 `gpui-base`. Shared key `jig-review.open`; localStorage stores divider width, pane choice and wrap. Base candidates, in order:
 `origin/develop`, the remote HEAD branch, `origin/main`, `origin/master`, `develop`, `main`, `master`.
@@ -32,16 +32,16 @@ Programs: `git` — `diff`, `show`, `status`, `rev-parse`, `add`, `restore --sta
 the repository's `.git` and working tree. Writes: stage, unstage, discard. No commit, fetch or push.
 
 **Header:** all git panels use one 42 px shared header: title, optional Terminal/Space switch, and a refresh icon whose
-tooltip says `Refresh · read N ago` (`Refresh` before the first read, `Reading…` while busy). Repos, History, PR & CI and
+tooltip says `Refresh · read N ago` (`Refresh` before the first read, `Reading…` while busy). Git, History, PR & CI and
 Worktrees show the switch; Review has title and Refresh only. An error line sits under the header, above the kept rows.
 
 **Watch out:**
 
 Herdr's 30 s cap; `git` and POSIX `sh` are required, so Windows-local without WSL is unsupported. The mode is **not
 read-only**: stage, unstage and discard write. Branch mode needs one of the base candidates above; without one it says so.
-Very large diffs are capped and say when cut. Binary files show a notice, not content. This mod is opened by `jig-repos` via
+Very large diffs are capped and say when cut. Binary files show a notice, not content. This mod is opened by `jig-git` via
 `tab.new`; the standalone listing has `"place": "none"`, so a layout block with `content.mod = "jig-review"` (or the tab
-opened by jig-repos) is required. It needs a layout block for the file list; a tab is the normal host. The header buttons are
+opened by jig-git) is required. It needs a layout block for the file list; a tab is the normal host. The header buttons are
 the only write path. Copy needs a selection.
 
 **Done when:**

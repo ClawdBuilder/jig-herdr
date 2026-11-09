@@ -38,7 +38,7 @@ activity bar there is no badge. The panel has the **Terminal / Space** switch (p
 terminal's folder, Space uses the space's folder. Built from Herdr's `mods/workspace-chrome/*.svg` icons.
 
 **Header:** all git panels use one 42 px shared header: title, optional Terminal/Space switch, and a refresh icon whose
-tooltip says `Refresh · read N ago` (`Refresh` before the first read, `Reading…` while busy). Repos, History, PR & CI and
+tooltip says `Refresh · read N ago` (`Refresh` before the first read, `Reading…` while busy). Git, History, PR & CI and
 Worktrees show the switch; Review has title and Refresh only. An error line sits under the header, above the kept rows.
 
 **Watch out:**

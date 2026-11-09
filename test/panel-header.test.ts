@@ -8,7 +8,7 @@ const mods = path.join(HERDR, "mods");
 const source = (file: string) => readFileSync(file, "utf8");
 
 test("every panel-header.js is byte-identical, and every copy is imported", () => {
-    const reference = path.join(mods, "jig-repos/panel-header.js");
+    const reference = path.join(mods, "jig-git/panel-header.js");
     const expected = source(reference);
     const users = readdirSync(mods).filter((mod) => existsSync(path.join(mods, mod, "panel-header.js")));
     assert.ok(users.length >= 5);
@@ -27,10 +27,10 @@ test("every panel-header.js is byte-identical, and every copy is imported", () =
 });
 
 test("the header constants and readAgo match the spec", async () => {
-    const text = source(path.join(mods, "jig-repos/panel-header.js"));
+    const text = source(path.join(mods, "jig-git/panel-header.js"));
     for (const line of ["HEADER_HEIGHT = 42", "ROW_HEIGHT = 24", "ROW_FONT = 11.5", "META_FONT = 10.5"])
         assert.match(text, new RegExp(line), line);
-    const { readAgo } = await import(`../mods/jig-repos/refresh.js`);
+    const { readAgo } = await import(`../mods/jig-git/refresh.js`);
     assert.equal(readAgo(10_000, 0), "");
     assert.equal(readAgo(14_000, 10_000), "just now");
     assert.equal(readAgo(75_000, 10_000), "1m");
@@ -39,7 +39,7 @@ test("the header constants and readAgo match the spec", async () => {
 });
 
 test("only the five header panels import panelHeader; Files and File view do not", () => {
-    for (const mod of ["jig-repos", "jig-history", "jig-prs", "jig-worktrees", "jig-review"])
+    for (const mod of ["jig-git", "jig-history", "jig-prs", "jig-worktrees", "jig-review"])
         assert.match(source(path.join(mods, mod, "main.js")), /panelHeader\(/, mod);
     for (const mod of ["jig-files", "jig-file-view"]) {
         const text = source(path.join(mods, mod, "main.js"));
@@ -49,7 +49,7 @@ test("only the five header panels import panelHeader; Files and File view do not
 });
 
 test("follow is only on Repos, History, PR & CI and Worktrees", () => {
-    for (const mod of ["jig-repos", "jig-history", "jig-prs", "jig-worktrees"])
+    for (const mod of ["jig-git", "jig-history", "jig-prs", "jig-worktrees"])
         assert.match(source(path.join(mods, mod, "main.js")), /follow:/, mod);
     for (const mod of ["jig-review", "jig-files", "jig-file-view"])
         assert.doesNotMatch(source(path.join(mods, mod, "main.js")), /follow:/, mod);

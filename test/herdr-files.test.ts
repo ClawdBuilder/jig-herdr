@@ -36,10 +36,10 @@ test("the mods are the thirteen this folder ships", () => {
         "jig-context",
         "jig-file-view",
         "jig-files",
+        "jig-git",
         "jig-history",
         "jig-keep-awake",
         "jig-prs",
-        "jig-repos",
         "jig-review",
         "jig-tabs",
         "jig-theme-sync",
@@ -82,7 +82,7 @@ test("the layout's side panel gives each child an icon that exists, and ids are 
         [
             ["jig-work", "jig-work"],
             ["jig-context", "jig-context"],
-            ["changes", "jig-repos"],
+            ["changes", "jig-git"],
             ["history", "jig-history"],
             ["pr", "jig-prs"],
             ["worktrees", "jig-worktrees"],
@@ -249,7 +249,7 @@ test("the shipped config.json files name no machine, folder or palette of anyone
         prOwners: [],
         refreshSeconds: 60,
     });
-    const changes = JSON.parse(readFileSync(path.join(HERDR, "mods/jig-repos/config.json"), "utf8")) as unknown;
+    const changes = JSON.parse(readFileSync(path.join(HERDR, "mods/jig-git/config.json"), "utf8")) as unknown;
     assert.deepEqual(changes, {
         newBranchPrefix: "feature/",
         baseBranch: null,
@@ -266,7 +266,7 @@ test("jig-tabs credits Herdr's tabs mod and its licence, and has the Panel and J
     assert.match(text.slice(0, 1200), /Apache License, Version 2\.0/);
     assert.match(text, /"Panel"/);
     assert.match(text, /"Jig"/);
-    assert.doesNotMatch(text, /"Files"|"Changes"/);
+    assert.doesNotMatch(text, /"Files"|"Git"/);
     assert.ok(existsSync(path.join(HERDR, "mods/jig-tabs/jig.svg")));
 });
 

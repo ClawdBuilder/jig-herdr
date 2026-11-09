@@ -1,5 +1,5 @@
 // A full-size review tab for one repo: its changed files on the left, the selected file's diff
-// on the right. jig-repos opens it (tab.new, or setShared("jig-review.open") on a tab that
+// on the right. jig-git opens it (tab.new, or setShared("jig-review.open") on a tab that
 // already shows the repo). The diff's header can stage or unstage the shown file, and discard it after
 // an inline confirm (lib.js); nothing else is written, and nothing is committed or fetched here.
 // The file list's width is a draggable divider, remembered in the mod's localStorage. Code is copied by clicking a line
@@ -59,7 +59,7 @@ const SIDE_MAX = 720;
 const MAX = 400000; // most characters the File and Patch editors show; more is cut with a note
 const PANE_LABEL = { diff: "Diff", file: "File", patch: "Patch" };
 const ICON = (name) => `mods/workspace-chrome/${name}.svg`;
-// Reads write nothing under .git (same flags as jig-repos).
+// Reads write nothing under .git (same flags as jig-git).
 const READ = [...GIT_READ, "-c", "diff.autoRefreshIndex=false"];
 
 // The file list's width, remembered in the mod's own storage (every Review tab shares it, and a restart keeps it).

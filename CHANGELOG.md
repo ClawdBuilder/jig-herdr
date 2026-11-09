@@ -11,6 +11,11 @@
 
 ### Changed
 
+- The main git panel is now **Git** everywhere: module id and folder `jig-git`, title **Git**, shared keys
+  `badge.jig-git`, `jig-git.done`, `jig-git.folded` and `jig-git.running`, config path
+  `mods/jig-git/config.json`, listing `gallery/jig-git`, and the Review references. The installer carries a
+  `repo-changes` or `jig-repos` config and any old action binding to `jig-git` once, never overwriting a new file.
+
 - Worktrees' header title is its count (`15 worktrees`, `1 worktree`, `Worktrees` before the first read), with the full
   repo · count in the tooltip. PR & CI puts its tabs in the shared header's lead slot, and folds repositories without a PR
   into one `No PR (N)` group. Biome ignores Herdr's generated `gpui-kit.d.ts` and `jsconfig.json`.

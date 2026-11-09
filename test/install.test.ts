@@ -4,6 +4,9 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
+
+const OLD_REPOS = "jig-" + "repos";
+
 import { install } from "../scripts/install.ts";
 import { HERDR } from "./support.ts";
 
@@ -33,7 +36,7 @@ test("a first install copies the layout, the mods and the themes, and adds the k
         "mods/jig-keep-awake/main.js",
         "mods/jig-keep-awake/config.json",
         "mods/jig-file-view/main.js",
-        "mods/jig-repos/main.js",
+        "mods/jig-git/main.js",
         "mods/jig-review/main.js",
         "mods/jig-prs/main.js",
         "mods/jig-worktrees/main.js",
@@ -57,7 +60,7 @@ test("a mod's mod.json is written before its other files, so Herdr never docks a
         "jig-tabs",
         "jig-keep-awake",
         "jig-file-view",
-        "jig-repos",
+        "jig-git",
         "jig-review",
         "jig-prs",
         "jig-worktrees",
@@ -108,18 +111,16 @@ test("a file it installed is updated, unless you changed it", (t) => {
 
 test("a file that was already there is left alone, and replaced only with force", (t) => {
     const target = folder(t);
-    mkdirSync(path.join(target, "mods/jig-repos"), { recursive: true });
-    writeFileSync(path.join(target, "mods/jig-repos/main.js"), "// my own");
+    mkdirSync(path.join(target, "mods/jig-git"), { recursive: true });
+    writeFileSync(path.join(target, "mods/jig-git/main.js"), "// my own");
     const report = install(target);
-    assert.deepEqual(report.skipped, [
-        { file: "mods/jig-repos/main.js", reason: "it was not installed by this script" },
-    ]);
-    assert.equal(read(target, "mods/jig-repos/main.js"), "// my own");
+    assert.deepEqual(report.skipped, [{ file: "mods/jig-git/main.js", reason: "it was not installed by this script" }]);
+    assert.equal(read(target, "mods/jig-git/main.js"), "// my own");
     assert.ok(report.added.length > 10, "everything else was installed");
 
     const forced = install(target, { force: true });
-    assert.deepEqual(forced.replaced, ["mods/jig-repos/main.js"]);
-    assert.notEqual(read(target, "mods/jig-repos/main.js"), "// my own");
+    assert.deepEqual(forced.replaced, ["mods/jig-git/main.js"]);
+    assert.notEqual(read(target, "mods/jig-git/main.js"), "// my own");
 });
 
 test("the old keep-awake helper file is kept for a running helper", (t) => {
@@ -256,11 +257,11 @@ test("an old mod's config.json moves to its new name, and the old folder is kept
         JSON.stringify({ newBranchPrefix: "old/", rowDetail: "full" }),
     );
     const report = install(target);
-    const moved = JSON.parse(read(target, "mods/jig-repos/config.json")) as Record<string, unknown>;
+    const moved = JSON.parse(read(target, "mods/jig-git/config.json")) as Record<string, unknown>;
     assert.equal(moved.newBranchPrefix, "old/");
     assert.equal(moved.rowDetail, "full");
     assert.deepEqual(report.migrated, [
-        "mods/repo-changes/config.json -> mods/jig-repos/config.json (newBranchPrefix, rowDetail)",
+        "mods/repo-changes/config.json -> mods/jig-git/config.json (newBranchPrefix, rowDetail)",
     ]);
     assert.deepEqual(report.oldKept, ["mods/repo-changes"]);
     assert.ok(existsSync(path.join(target, "mods/repo-changes/config.json")), "the old file stays");
@@ -269,10 +270,24 @@ test("an old mod's config.json moves to its new name, and the old folder is kept
     assert.deepEqual(again.oldKept, []);
 });
 
+test(`a ${OLD_REPOS} config migrates directly to jig-git`, (t) => {
+    const target = folder(t);
+    mkdirSync(path.join(target, "mods", OLD_REPOS), { recursive: true });
+    writeFileSync(path.join(target, "mods", OLD_REPOS, "config.json"), JSON.stringify({ baseBranch: "release" }));
+    const report = install(target);
+    assert.equal(readJson(target, "mods/jig-git/config.json").baseBranch, "release");
+    assert.deepEqual(report.migrated, [`mods/${OLD_REPOS}/config.json -> mods/jig-git/config.json (baseBranch)`]);
+    install(target);
+    // The old file does not overwrite an existing new file either.
+    writeFileSync(path.join(target, "mods/jig-git/config.json"), JSON.stringify({ baseBranch: "main" }));
+    install(target);
+    assert.equal(readJson(target, "mods/jig-git/config.json").baseBranch, "main");
+});
+
 test("a partial old config migrates only the missing keys", (t) => {
     const target = folder(t);
     install(target);
-    const newFile = path.join(target, "mods/jig-repos/config.json");
+    const newFile = path.join(target, "mods/jig-git/config.json");
     const before = JSON.parse(readFileSync(newFile, "utf8")) as Record<string, unknown>;
     mkdirSync(path.join(target, "mods/repo-changes"), { recursive: true });
     writeFileSync(
@@ -283,7 +298,7 @@ test("a partial old config migrates only the missing keys", (t) => {
     const after = JSON.parse(readFileSync(newFile, "utf8")) as Record<string, unknown>;
     assert.equal(after.onlyOld, "kept");
     assert.equal(after.newBranchPrefix, before.newBranchPrefix, "the new file's value wins");
-    assert.deepEqual(report.migrated, ["mods/repo-changes/config.json -> mods/jig-repos/config.json (onlyOld)"]);
+    assert.deepEqual(report.migrated, ["mods/repo-changes/config.json -> mods/jig-git/config.json (onlyOld)"]);
 });
 
 test("--remove-old removes only a fully carried-over old folder", (t) => {
@@ -294,7 +309,7 @@ test("--remove-old removes only a fully carried-over old folder", (t) => {
     const report = install(target, { removeOld: true });
     assert.deepEqual(report.oldRemoved, ["mods/repo-changes"]);
     assert.ok(!existsSync(path.join(target, "mods/repo-changes")));
-    assert.equal(readJson(target, "mods/jig-repos/config.json").onlyOld, "carried");
+    assert.equal(readJson(target, "mods/jig-git/config.json").onlyOld, "carried");
 
     // A second run has no old folder to report.
     assert.deepEqual(install(target, { removeOld: true }).oldRemoved, []);
@@ -304,7 +319,7 @@ test("an existing new config wins over the old file, which only fills gaps", (t)
     const target = folder(t);
     install(target);
     writeFileSync(
-        path.join(target, "mods/jig-repos/config.json"),
+        path.join(target, "mods/jig-git/config.json"),
         JSON.stringify({ newBranchPrefix: "new/", rowDetail: "compact" }),
     );
     mkdirSync(path.join(target, "mods/repo-changes"), { recursive: true });
@@ -313,7 +328,7 @@ test("an existing new config wins over the old file, which only fills gaps", (t)
         JSON.stringify({ newBranchPrefix: "old/", baseBranch: "develop" }),
     );
     install(target);
-    const merged = JSON.parse(read(target, "mods/jig-repos/config.json")) as Record<string, unknown>;
+    const merged = JSON.parse(read(target, "mods/jig-git/config.json")) as Record<string, unknown>;
     assert.equal(merged.newBranchPrefix, "new/");
     assert.equal(merged.rowDetail, "compact");
     assert.equal(merged.baseBranch, "develop");

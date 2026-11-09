@@ -7,9 +7,9 @@ import path from "node:path";
 const ROOT = path.resolve(import.meta.dirname, "..");
 const LAYOUT = "jig-workbench";
 const DEPENDENCIES: Record<string, string[]> = {
-    "jig-repos": ["jig-review"],
+    "jig-git": ["jig-review"],
     "jig-workbench": [
-        "jig-repos",
+        "jig-git",
         "jig-history",
         "jig-prs",
         "jig-worktrees",
@@ -22,7 +22,7 @@ const DEPENDENCIES: Record<string, string[]> = {
 };
 const LISTINGS = [
     "jig-workbench",
-    "jig-repos",
+    "jig-git",
     "jig-history",
     "jig-prs",
     "jig-worktrees",
@@ -49,7 +49,7 @@ function copy(source: string, target: string): void {
                 if (EXCLUDED.has(path.basename(file))) return false;
                 // The follow helpers are source-level copies shared with the other panels; the Repos panel keeps its own
                 // per-space choice in localStorage and does not import them.
-                return !file.endsWith(`/mods/jig-repos/follow.js`) && !file.endsWith(`/mods/jig-repos/follow-state.js`);
+                return !file.endsWith(`/mods/jig-git/follow.js`) && !file.endsWith(`/mods/jig-git/follow-state.js`);
             },
         });
     } else cpSync(source, target);

@@ -1,8 +1,8 @@
-# Changes
+# Git
 
-A source-control panel for the terminal you are in: it lists every git checkout under the focused terminal's folder, with
-who is ahead or behind on origin, the last commit and every changed file, and it stages, commits, fetches, pulls and pushes
-without leaving the window. ![Changes](preview.png)
+Git for every repo in the focused space's folder: stage, commit, push, fetch and pull, branch switching, and each file's diff in Review.
+
+![Git](preview.png)
 
 ## What you see
 
@@ -89,7 +89,7 @@ without leaving the window. ![Changes](preview.png)
   shared lock, re-checks the refusals, and passes `expect` (the branch and destination it showed) so the action refuses when
   git has moved on.
 - `picker.js`: `BranchPicker`, the branch popup (openOverlay with props `picker`), and the shared key
-  `jig-repos.done` (`DONE`) that tells the panel a switch or a push happened.
+  `jig-git.done` (`DONE`) that tells the panel a switch or a push happened.
 - `layout.js`: `shown(root, mod)`, whether the panel's block is on screen, so it does not poll while hidden.
 - `config.json`: `{ "newBranchPrefix": "feature/", "baseBranch": null, "remote": "origin", "networkTimeoutSeconds": 60,
   "rowDetail": "compact" }` (`"full"` shows a commit line under every row).
@@ -100,8 +100,8 @@ without leaving the window. ![Changes](preview.png)
   `focused().pane`/`terminal`/`cwd`.
 - **Icons:** `push.svg`, `pull.svg`, `fetch.svg`, `refresh.svg` in this folder, drawn in the theme's text
   colour; branch, chevron, check, plus, minus and terminal glyphs come from Herdr's `workspace-chrome` mod.
-- **Shared state:** `shared("badge.jig-repos")` = `{ count, tone }`, the number of checkouts with changes, for an
-  activity bar that wants it; `shared("jig-repos.done")` = `{ path, message, at }` after a switch or a push.
+- **Shared state:** `shared("badge.jig-git")` = `{ count, tone }`, the number of checkouts with changes, for an
+  activity bar that wants it; `shared("jig-git.done")` = `{ path, message, at }` after a switch or a push.
 
 ## Watch out
 
