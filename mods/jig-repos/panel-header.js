@@ -15,7 +15,6 @@ const ICON = (name) => `mods/workspace-chrome/${name}.svg`;
 
 /** The follow switch: same widget and place in Repos, History, PR & CI and Worktrees. */
 function followSwitch(t, follow, onFollow) {
-    const narrow = false;
     return h_flex()
         .id("panel-follow")
         .flex_none()
@@ -47,7 +46,7 @@ function followSwitch(t, follow, onFollow) {
                 .flex_none()
                 .text_color(follow ? t.accent : t.muted),
         )
-        .when(!narrow, (el) => el.child(div().child(follow ? "Terminal" : "Space")));
+        .child(div().child(follow ? "Terminal" : "Space"));
 }
 
 function refreshButton(t, busy, readAt, onRefresh, icon) {
@@ -89,7 +88,7 @@ export function panelHeader(t, options) {
         busy = false,
         onRefresh,
         onTitleClick,
-        refreshIcon = "mods/jig-repos/refresh.svg",
+        refreshIcon,
     } = options;
     return h_flex()
         .id("panel-header")
@@ -115,7 +114,7 @@ export function panelHeader(t, options) {
                 )
                 .child(title),
         )
-        .children(extra)
+        .children(extra.map((child) => div().flex_none().child(child)))
         .when(follow !== undefined, (el) => el.child(followSwitch(t, follow, onFollow)))
         .when(onRefresh !== undefined, (el) => el.child(refreshButton(t, busy, readAt, onRefresh, refreshIcon)));
 }

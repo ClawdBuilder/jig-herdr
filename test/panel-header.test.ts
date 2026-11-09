@@ -10,7 +10,8 @@ const source = (file: string) => readFileSync(file, "utf8");
 test("every panel-header.js is byte-identical, and every copy is imported", () => {
     const reference = path.join(mods, "jig-repos/panel-header.js");
     const expected = source(reference);
-    const users = ["jig-repos", "jig-history", "jig-prs", "jig-worktrees", "jig-review"];
+    const users = readdirSync(mods).filter((mod) => existsSync(path.join(mods, mod, "panel-header.js")));
+    assert.ok(users.length >= 5);
     for (const mod of users)
         assert.equal(source(path.join(mods, mod, "panel-header.js")), expected, `${mod}/panel-header.js differs`);
     for (const mod of readdirSync(mods)) {
@@ -40,8 +41,11 @@ test("the header constants and readAgo match the spec", async () => {
 test("only the five header panels import panelHeader; Files and File view do not", () => {
     for (const mod of ["jig-repos", "jig-history", "jig-prs", "jig-worktrees", "jig-review"])
         assert.match(source(path.join(mods, mod, "main.js")), /panelHeader\(/, mod);
-    for (const mod of ["jig-files", "jig-file-view"])
-        assert.doesNotMatch(source(path.join(mods, mod, "main.js")), /panelHeader\(/, mod);
+    for (const mod of ["jig-files", "jig-file-view"]) {
+        const text = source(path.join(mods, mod, "main.js"));
+        assert.doesNotMatch(text, /panelHeader\(/, mod);
+        assert.doesNotMatch(text, /panel-refresh|onRefresh:/, mod);
+    }
 });
 
 test("follow is only on Repos, History, PR & CI and Worktrees", () => {

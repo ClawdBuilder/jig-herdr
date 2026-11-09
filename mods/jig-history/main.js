@@ -43,7 +43,7 @@ import {
     since,
     toggleBranchPicker,
 } from "./lib.js";
-import { panelHeader, ROW_FONT } from "./panel-header.js";
+import { panelError, panelHeader, ROW_FONT } from "./panel-header.js";
 import {
     focusRegained,
     friendlyError,
@@ -974,7 +974,7 @@ export default class RepoHistory extends View {
             .min_h(0)
             .p(6)
             .overflow_y_scrollbar()
-            .when(Boolean(this.error), (el) => el.child(message(this.error)))
+            .when(Boolean(this.error), (el) => el.child(panelError(t, this.error)))
             .when(Boolean(this.refreshProblem), (el) => el.child(message(this.refreshProblem, t.muted)))
             .when(waiting && Boolean(this.reposError) && !this.repo, (el) => el.child(message(this.reposError)))
             .when(waiting && !this.reposError, (el) => el.child(message(waitingText)))
