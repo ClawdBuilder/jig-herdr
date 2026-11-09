@@ -397,30 +397,39 @@ export default class RepoHistory extends View {
             .when(rows.length > 0, (el) =>
                 el.child(div().px(2).text_size(11).text_color(t.dim).child("↑↓ to choose · Enter to show")),
             )
-            .children(
-                rows.map((b) =>
-                    h_flex()
-                        .id(`br-${b.remote ? "r" : "l"}-${b.name}`)
-                        .h(22)
-                        .px(6)
-                        .gap(6)
-                        .items_center()
-                        .rounded(5)
-                        .cursor_pointer()
-                        .hover((s) => s.bg(t.hover))
-                        .when(branchKey(b) === this.branchActive, (el) =>
-                            el.bg(t.hover).border_l(2).border_color(t.accent),
-                        )
-                        .on_click((_e, cx) => choose(b.name, cx))
-                        .child(
-                            div()
-                                .w(10)
-                                .text_color(t.done)
-                                .child(b.current ? "✓" : ""),
-                        )
-                        .child(div().flex_1().min_w(0).truncate().child(b.name))
-                        .when(b.remote, (el) => el.child(div().text_size(9.5).text_color(t.dim).child("remote"))),
-                ),
+            .child(
+                v_flex()
+                    .id("branch-list-rows")
+                    .flex_none()
+                    .max_h(200)
+                    .overflow_y_scrollbar()
+                    .children(
+                        rows.map((b) =>
+                            h_flex()
+                                .id(`br-${b.remote ? "r" : "l"}-${b.name}`)
+                                .h(22)
+                                .px(6)
+                                .gap(6)
+                                .items_center()
+                                .rounded(5)
+                                .cursor_pointer()
+                                .hover((s) => s.bg(t.hover))
+                                .when(branchKey(b) === this.branchActive, (el) =>
+                                    el.bg(t.hover).border_l(2).border_color(t.accent),
+                                )
+                                .on_click((_e, cx) => choose(b.name, cx))
+                                .child(
+                                    div()
+                                        .w(10)
+                                        .text_color(t.done)
+                                        .child(b.current ? "✓" : ""),
+                                )
+                                .child(div().flex_1().min_w(0).truncate().child(b.name))
+                                .when(b.remote, (el) =>
+                                    el.child(div().text_size(9.5).text_color(t.dim).child("remote")),
+                                ),
+                        ),
+                    ),
             );
     }
 

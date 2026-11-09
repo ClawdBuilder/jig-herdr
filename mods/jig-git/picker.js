@@ -329,7 +329,7 @@ export class BranchPicker {
                     div().flex_none().px(2).text_size(11).text_color(t.dim).child("↑↓ to choose · Enter to switch"),
                 ),
             )
-            .child(v_flex().id("branch-list").flex_1().min_h(0).overflow_y_scrollbar().children(this.list(t)))
+            .child(v_flex().id("branch-list").flex_none().max_h(260).overflow_y_scrollbar().children(this.list(t)))
             .when(Boolean(this.message), (el) =>
                 el.child(div().flex_none().text_size(11.5).text_color(t.blocked).child(this.message)),
             )
