@@ -46,11 +46,14 @@ import {
 } from "./lib.js";
 import {
     focusRegained,
+    friendlyError,
+    GIT_READ,
+    parseRefreshConfig,
     RefreshScheduler,
     RefreshState,
     refreshSeconds,
+    run as runCommand,
     terminalFinished,
-    timedCommand,
 } from "./refresh.js";
 
 const onScreen = () => isOnScreen(layout(), "jig-history");
@@ -97,9 +100,9 @@ function friendly(text) {
     const line = String(text ?? "")
         .trim()
         .split("\n")[0];
-    if (/does not have any commits yet/i.test(line))
-        return "This repository has no commits yet — make the first commit.";
-    if (/not a git repository/i.test(line)) return "Not a git repository here — cd into one, or pick another folder.";
+    if (/does not have any commits yet/i.test(line)) return "This repo has no commits yet — make the first commit.";
+    if (/not a git repository/i.test(line))
+        return "No git repo in this folder. Open a terminal in one, or switch to Space.";
     return line;
 }
 
@@ -296,10 +299,9 @@ export default class RepoHistory extends View {
         this.loadingRepos = true;
         this.reposAt = Date.now();
         const run = ++this.reposGeneration;
-        const command = `if command -v timeout >/dev/null 2>&1; then exec timeout 20 sh -c "$1" sh "$2"; elif command -v gtimeout >/dev/null 2>&1; then exec gtimeout 20 sh -c "$1" sh "$2"; fi; exec sh -c "$1" sh "$2"`;
         cx.spawn(async (cx) => {
             try {
-                const result = await exec("sh", ["-c", command, "sh", SCRIPT, root], { on });
+                const result = await runCommand(exec, "sh", ["-c", SCRIPT, "sh", root], { on });
                 if (run !== this.reposGeneration) return;
                 if (contextKey !== this.contextKey) return;
                 if (result.code !== 0) throw new Error((result.stderr || `exit ${result.code}`).trim().split("\n")[0]);
@@ -346,7 +348,8 @@ export default class RepoHistory extends View {
         this.branchOpen = toggleBranchPicker(this.branchOpen);
         if (this.branchOpen && !this.branches) {
             cx.spawn(async (cx) => {
-                const result = await exec(
+                const result = await runCommand(
+                    exec,
                     "git",
                     [
                         "--no-optional-locks",
@@ -420,7 +423,8 @@ export default class RepoHistory extends View {
             return;
         }
         cx.spawn(async (cx) => {
-            const result = await exec(
+            const result = await runCommand(
+                exec,
                 "git",
                 [
                     "--no-optional-locks",
@@ -442,12 +446,16 @@ export default class RepoHistory extends View {
         this.configAt = Date.now();
         cx.spawn(async (cx) => {
             const text = await readTextFile(`${appHome()}/mods/jig-history/config.json`).catch(() => null);
-            try {
-                this.config = text ? JSON.parse(text) : {};
-            } catch {
-                this.config = {};
-            }
-            this.refreshScheduler.setSeconds(refreshSeconds(this.config));
+            const refresh = parseRefreshConfig(text ?? "", 60);
+            this.config = (() => {
+                try {
+                    return text ? JSON.parse(text) : {};
+                } catch {
+                    return {};
+                }
+            })();
+            this.refreshProblem = refresh.problems[0] ?? null;
+            this.refreshScheduler.setSeconds(refresh.seconds);
             cx.notify();
         });
     }
@@ -467,7 +475,7 @@ export default class RepoHistory extends View {
             ...(this.branchFilter ? ["--end-of-options", this.branchFilter] : []),
             ...SCOPE_ARGS[this.scope],
         ];
-        const statusArgs = ["--no-optional-locks", "-c", "core.fsmonitor=false", "status", "--porcelain"];
+        const statusArgs = [...GIT_READ, "status", "--porcelain"];
         if (!this.refreshState.start({ user, first: this.commits === null, notify: () => cx.notify() })) return;
         this.refreshScheduler.sweep();
         this.loading = true;
@@ -476,14 +484,13 @@ export default class RepoHistory extends View {
         cx.spawn(async (cx) => {
             try {
                 const [log, status] = await Promise.all([
-                    exec(...timedCommand("git", logArgs), { cwd, on }),
-                    exec(...timedCommand("git", statusArgs), { cwd, on }),
+                    runCommand(exec, "git", logArgs, { cwd, on }),
+                    runCommand(exec, "git", statusArgs, { cwd, on }),
                 ]);
                 if (run !== this.logGeneration) return;
                 if (key !== this.logKey()) return;
                 if (log.code !== 0) {
-                    this.commits = null;
-                    this.error = friendly(log.stderr) || "git log failed.";
+                    this.error = friendlyError(log, { what: "Reading", follow: true }) || "git log failed.";
                     return;
                 }
                 this.error = null;
@@ -519,7 +526,8 @@ export default class RepoHistory extends View {
         const cwd = this.repo;
         const on = this.where.on;
         cx.spawn(async (cx) => {
-            const result = await exec(
+            const result = await runCommand(
+                exec,
                 "git",
                 ["--no-optional-locks", "show", "--numstat", "--find-renames", "--format=%B%x1e", commit.hash],
                 { cwd, on },
@@ -727,7 +735,7 @@ export default class RepoHistory extends View {
             )
             .child(div().text_color(t.foreground).child(commit.subject))
             .when(Boolean(detail?.body), (el) => el.child(div().text_size(11.5).text_color(t.muted).child(detail.body)))
-            .when(!detail, (el) => el.child(div().text_color(t.dim).child("Loading…")))
+            .when(!detail, (el) => el.child(div().text_color(t.dim).child("Reading…")))
             .when(files.length > 0, (el) =>
                 el.child(
                     v_flex()
@@ -929,7 +937,7 @@ export default class RepoHistory extends View {
                                 this.reposAt = 0;
                                 this.loadLog(cx, true);
                             })
-                            .child(this.refreshState.busy ? "Loading…" : "Refresh"),
+                            .child(this.refreshState.busy ? "Reading…" : "Refresh"),
                     ),
             )
             .child(
@@ -976,9 +984,10 @@ export default class RepoHistory extends View {
             .map((commit, i) => [commit, this.rows[i]])
             .filter(([commit]) => commitMatches(commit, query));
         const waiting = !this.error && !this.commits;
-        let waitingText = "Loading…";
+        let waitingText = "Reading…";
         if (!this.where.root) waitingText = "No folder.";
-        else if (this.repos && !this.repo) waitingText = "No git repository found here.";
+        else if (this.repos && !this.repo)
+            waitingText = "No git repo in this folder. Open a terminal in one, or switch to Space.";
         // The filter matched no commit: repos and worktrees whose folder or branch has the text (a ticket number).
         const other =
             this.single || !query.trim() || (this.repos?.length ?? 0) < 2
@@ -995,6 +1004,7 @@ export default class RepoHistory extends View {
             .p(6)
             .overflow_y_scrollbar()
             .when(Boolean(this.error), (el) => el.child(message(this.error)))
+            .when(Boolean(this.refreshProblem), (el) => el.child(message(this.refreshProblem, t.muted)))
             .when(waiting && Boolean(this.reposError) && !this.repo, (el) => el.child(message(this.reposError)))
             .when(waiting && !this.reposError, (el) => el.child(message(waitingText)))
             .when(Boolean(this.commits), (el) =>
@@ -1031,7 +1041,7 @@ export default class RepoHistory extends View {
                                     this.limit += PAGE;
                                     this.loadLog(cx, true);
                                 })
-                                .child(this.refreshState.busy ? "Loading…" : "Load more"),
+                                .child(this.refreshState.busy ? "Reading…" : "Load more"),
                         ),
                     ),
             );

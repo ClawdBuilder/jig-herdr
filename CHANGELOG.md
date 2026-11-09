@@ -23,6 +23,10 @@
 
 ### Fixed
 
+- Panels now share one command runner, git read flags, error sentences, refresh-config parser and last-good-data rule.
+  Every git/gh read runs under `timeout`/`gtimeout` with `GIT_TERMINAL_PROMPT=0`, `GH_PROMPT_DISABLED=1` and a Herdr
+  deadline five seconds later; History keeps its rows on a failed read. Visible text uses "repo", "folder" and "Reading…".
+
 - The commit-email guard also runs in CI: the workflow passes the private word list as `JIG_SCAN_WORDS_TEXT`, scoped to
   that step. Forks still get no secret and only see warnings for non-public addresses, never a failure.
 

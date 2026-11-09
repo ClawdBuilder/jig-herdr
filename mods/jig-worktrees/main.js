@@ -44,11 +44,14 @@ import {
 } from "./lib.js";
 import {
     focusRegained,
+    friendlyError,
+    GIT_READ,
+    parseRefreshConfig,
     RefreshScheduler,
     RefreshState,
     refreshSeconds,
+    run as runCommand,
     terminalFinished,
-    timedCommand,
 } from "./refresh.js";
 
 const onScreen = () => isOnScreen(layout(), "jig-worktrees");
@@ -59,7 +62,8 @@ function friendly(text) {
     const line = String(text ?? "")
         .trim()
         .split("\n")[0];
-    if (/not a git repository/i.test(line)) return "Not a git repository here — cd into one.";
+    if (/not a git repository/i.test(line))
+        return "No git repo in this folder. Open a terminal in one, or switch to Space.";
     return line;
 }
 
@@ -221,12 +225,16 @@ export default class RepoWorktrees extends View {
         this.configAt = Date.now();
         cx.spawn(async (cx) => {
             const text = await readTextFile(`${appHome()}/mods/jig-worktrees/config.json`).catch(() => null);
-            try {
-                this.config = text ? JSON.parse(text) : {};
-            } catch {
-                this.config = {};
-            }
-            this.refreshScheduler.setSeconds(refreshSeconds(this.config));
+            const refresh = parseRefreshConfig(text ?? "", 60);
+            this.config = (() => {
+                try {
+                    return text ? JSON.parse(text) : {};
+                } catch {
+                    return {};
+                }
+            })();
+            this.refreshProblem = refresh.problems[0] ?? null;
+            this.refreshScheduler.setSeconds(refresh.seconds);
             cx.notify();
         });
     }
@@ -245,13 +253,10 @@ export default class RepoWorktrees extends View {
         cx.spawn(async (cx) => {
             try {
                 const work = (async () => {
-                    const result = await exec(...timedCommand("sh", ["-c", SCRIPT, "sh", root]), {
-                        on,
-                        timeout: 25000,
-                    });
+                    const result = await runCommand(exec, "sh", ["-c", SCRIPT, "sh", root], { on });
                     if (run !== this.readGeneration || contextKey !== this.contextKey) return;
                     if (result.code !== 0)
-                        throw new Error((result.stderr || `exit ${result.code}`).trim().split("\n")[0]);
+                        throw Object.assign(new Error(result.stderr || `exit ${result.code}`), result);
                     const parsed = parseTrees(result.stdout);
                     this.single = parsed.single;
                     this.trees = parsed.trees;
@@ -262,7 +267,7 @@ export default class RepoWorktrees extends View {
                 await work;
             } catch (e) {
                 if (run === this.readGeneration && contextKey === this.contextKey)
-                    this.error = friendly(e?.message ?? e);
+                    this.error = friendlyError(e, { what: "Reading", follow: true });
             } finally {
                 if (run === this.readGeneration) {
                     this.loading = false;
@@ -317,21 +322,21 @@ export default class RepoWorktrees extends View {
         const contextKey = ctx?.contextKey ?? this.contextKey;
         cx.spawn(async (cx) => {
             try {
-                const git = (args, cwd) => exec("git", args, { cwd, on });
+                const git = (args, cwd) => runCommand(exec, "git", args, { cwd, on });
                 const cwds = panes().map((p) => p.cwd);
                 if (
                     await terminalsInsideWorktree(
-                        (cmd, args, opts) => exec(cmd, args, { ...opts, on }),
+                        (cmd, args, opts) => runCommand(exec, cmd, args, { ...opts, on }),
                         tree.path,
                         cwds,
                     )
                 )
                     throw new Error("A terminal is inside this worktree. Nothing was removed.");
-                const list = await git(["worktree", "list", "--porcelain", "-z"], tree.main);
+                const list = await git([...GIT_READ, "worktree", "list", "--porcelain", "-z"], tree.main);
                 const refusal = removalRefusal(tree, parseWorktreeListZ(list.stdout ?? ""));
                 if (list.code !== 0 || refusal)
                     throw new Error(`${refusal ?? "the worktree list failed"}. Nothing was removed.`);
-                const status = await git(["--no-optional-locks", "status", "--porcelain", "--ignored"], tree.path);
+                const status = await git([...GIT_READ, "status", "--porcelain", "--ignored"], tree.path);
                 const changed = (status.stdout ?? "").split("\n").filter((line) => line && !line.startsWith("!! "));
                 const ignored = dangerousIgnored(status.stdout);
                 if (status.code !== 0 || changed.length > 0 || ignored.length > 0)
@@ -342,10 +347,10 @@ export default class RepoWorktrees extends View {
                     );
                 const ref = tree.branch || "HEAD";
                 const [ahead, unpushed, upstream, created] = await Promise.all([
-                    git(["rev-list", "--count", `${tree.base ?? "HEAD"}..${ref}`], tree.path),
-                    git(["rev-list", "--count", ref, "--not", "--remotes"], tree.path),
-                    git(["for-each-ref", "--format=%(upstream:short)", `refs/heads/${ref}`], tree.path),
-                    git(["reflog", "show", "--format=%H", ref], tree.path),
+                    git([...GIT_READ, "rev-list", "--count", `${tree.base ?? "HEAD"}..${ref}`], tree.path),
+                    git([...GIT_READ, "rev-list", "--count", ref, "--not", "--remotes"], tree.path),
+                    git([...GIT_READ, "for-each-ref", "--format=%(upstream:short)", `refs/heads/${ref}`], tree.path),
+                    git([...GIT_READ, "reflog", "show", "--format=%H", ref], tree.path),
                 ]);
                 const live = parseWorktreeListZ(list.stdout ?? "").find((entry) => entry.path === tree.path);
                 const facts = {
@@ -620,7 +625,7 @@ export default class RepoWorktrees extends View {
                     .cursor_pointer()
                     .hover((s) => s.text_color(t.foreground))
                     .on_click((_e, cx) => this.load(cx, true))
-                    .child(this.refreshState.busy ? "Loading…" : "Refresh"),
+                    .child(this.refreshState.busy ? "Reading…" : "Refresh"),
             );
         const pruneBanner = this.pruning
             ? v_flex()
@@ -706,8 +711,9 @@ export default class RepoWorktrees extends View {
                     .overflow_y_scrollbar()
                     .children(notices)
                     .when(Boolean(this.error), (el) => el.child(message(this.error)))
+                    .when(Boolean(this.refreshProblem), (el) => el.child(message(this.refreshProblem, t.muted)))
                     .when(!this.error && !this.trees, (el) =>
-                        el.child(message(this.where?.root ? "Loading…" : "No folder.")),
+                        el.child(message(this.where?.root ? "Reading…" : "No folder.")),
                     )
                     .when(Boolean(this.trees) && rows.length === 0, (el) =>
                         el.child(message("No linked worktrees found.")),

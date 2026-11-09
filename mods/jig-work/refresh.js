@@ -6,13 +6,107 @@ export const DEBOUNCE_MS = 500;
 export const MIN_REFRESH_SECONDS = 15;
 export const DEFAULT_REFRESH_SECONDS = 60;
 
-/** A shell argv for a command under coreutils `timeout`, GNU `gtimeout` on macOS, or with no wrapper. */
-export function timedCommand(program, args, seconds = 20) {
-    const wrapper =
-        `if command -v timeout >/dev/null 2>&1; then exec timeout ${seconds} "$@"; ` +
-        `elif command -v gtimeout >/dev/null 2>&1; then exec gtimeout ${seconds} "$@"; fi; exec "$@"`;
-    return ["sh", ["-c", wrapper, "sh", program, ...args]];
+/** Flags every read-only git command uses: no optional locks and no fsmonitor side effects. */
+export const GIT_READ = ["--no-optional-locks", "-c", "core.fsmonitor=false"];
+
+/** Herdr 0.1.14 caps exec at 10 minutes; keep the shell below it and the outer deadline just after, so the shell's own
+ *  timeout fires first and the result can say what happened. */
+export function execBudget(timeoutMs) {
+    const shellSeconds = Math.min(Math.max(1, Math.round((timeoutMs ?? 20_000) / 1000)), 595);
+    const shellTimeoutMs = shellSeconds * 1000;
+    return { shellSeconds, shellTimeoutMs, herdrTimeoutMs: Math.min(600_000, shellTimeoutMs + 5000) };
 }
+
+/** Quote one POSIX shell word. */
+function quoteOne(value) {
+    return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+/** The shell wrapper: the caller's variables, then timeout/gtimeout, then the command. */
+function runnerScript(env, seconds) {
+    const exports = Object.entries({ GIT_TERMINAL_PROMPT: "0", GH_PROMPT_DISABLED: "1", ...(env ?? {}) })
+        .filter(([key]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key))
+        .map(([key, value]) => `export ${key}=${quoteOne(value)}`)
+        .join("; ");
+    return `${exports}; if command -v timeout >/dev/null 2>&1; then exec timeout ${seconds} "$@"; elif command -v gtimeout >/dev/null 2>&1; then exec gtimeout ${seconds} "$@"; fi; exec "$@"`;
+}
+
+/** Run one command for a panel. Without env, git is run directly; with env, a shell wrapper supplies the variables and
+ *  timeout/gtimeout. A timeout is returned as code 124 and every result carries the command name. */
+export async function run(exec, cmd, args, { cwd, on, seconds = 20, env } = {}) {
+    const budget = execBudget(seconds * 1000);
+    const started = Date.now();
+    if (!env) {
+        try {
+            const result = await exec(cmd, args, { cwd, on, timeout: budget.shellTimeoutMs });
+            return { ...result, cmd, seconds: budget.shellSeconds, timedOut: result.code === 124 };
+        } catch (error) {
+            const message = String(error?.message ?? error);
+            const elapsed = Date.now() - started;
+            const timedOut = elapsed >= budget.shellTimeoutMs - 1000;
+            return {
+                code: timedOut
+                    ? 124
+                    : /could not (?:start|find)|not found|no such file|ENOENT|not installed/i.test(message)
+                      ? 127
+                      : 1,
+                cmd,
+                stdout: "",
+                stderr: message,
+                seconds: budget.shellSeconds,
+                timedOut,
+            };
+        }
+    }
+    const script = runnerScript(env, budget.shellSeconds);
+    try {
+        const result = await exec("sh", ["-c", script, "sh", cmd, ...args], {
+            cwd,
+            on,
+            timeout: budget.herdrTimeoutMs,
+        });
+        return { ...result, cmd, seconds: budget.shellSeconds, timedOut: result.code === 124 };
+    } catch (error) {
+        const message = String(error?.message ?? error);
+        const timedOut = /tim(e|ed) out|timeout|took too long|abort|cancel/i.test(message);
+        return {
+            code: timedOut ? 124 : /spawn sh ENOENT|sh: (?:command )?not found/i.test(message) ? 127 : 1,
+            cmd,
+            stdout: "",
+            stderr: message,
+            seconds: budget.shellSeconds,
+            timedOut,
+        };
+    }
+}
+
+/** Parse refreshSeconds from raw config JSON with a 15 s minimum and no maximum. */
+export function parseRefreshConfig(raw, fallback = DEFAULT_REFRESH_SECONDS) {
+    let value = raw;
+    let problems = [];
+    if (typeof raw === "string") {
+        try {
+            const parsed = JSON.parse(raw);
+            value = parsed && typeof parsed === "object" ? parsed.refreshSeconds : undefined;
+        } catch (error) {
+            return {
+                seconds: Math.max(MIN_REFRESH_SECONDS, fallback),
+                problems: [`config.json is not valid JSON: ${error.message}`],
+            };
+        }
+    } else if (raw && typeof raw === "object") value = raw.refreshSeconds;
+    if (value === undefined || value === null) {
+        return { seconds: Math.max(MIN_REFRESH_SECONDS, fallback), problems };
+    }
+    const seconds = Number(value);
+    if (!Number.isFinite(seconds) || !Number.isInteger(seconds)) {
+        problems = ['"refreshSeconds" must be a whole number'];
+        return { seconds: Math.max(MIN_REFRESH_SECONDS, fallback), problems };
+    }
+    if (seconds < MIN_REFRESH_SECONDS) problems = ["refreshSeconds must be at least 15"];
+    return { seconds: Math.max(MIN_REFRESH_SECONDS, seconds), problems };
+}
+
 /** `refreshSeconds` from a config object or number, clamped to at least 15 s. */
 export function refreshSeconds(value, fallback = DEFAULT_REFRESH_SECONDS) {
     const wanted = typeof value === "object" && value !== null ? value.refreshSeconds : value;
@@ -101,6 +195,36 @@ export class RefreshScheduler {
         this.backstopAt = at + seconds * 1000;
         if (this.pendingUntil) this.pendingUntil = Math.min(this.pendingUntil, at + DEBOUNCE_MS);
     }
+}
+
+/** One sentence for a failed git/gh read. `follow` adds the folder-panel switch hint. */
+export function friendlyError(result, { what = "Reading", follow = false } = {}) {
+    const text = String(result?.stderr ?? result?.stdout ?? result?.message ?? result ?? "").trim();
+    const first = text.split("\n").find(Boolean) ?? "";
+    const seconds = Number(result?.seconds) || 20;
+    const cmd = result?.cmd;
+    if (result?.timedOut || result?.code === 124)
+        return `${what} took too long and was stopped (${seconds} s). Check the connection, or try in a terminal.`;
+    if (result?.code === 127 && cmd === "git") return "git isn't installed on this machine.";
+    if (result?.code === 127 && cmd === "gh")
+        return "The GitHub CLI (gh) isn't installed here. Install it, then run gh auth login.";
+    if (result?.code === 127 && cmd) return `${cmd} isn't installed on this machine.`;
+    if (/not a git repository|not a git repo/i.test(text))
+        return follow
+            ? "No git repo in this folder. Open a terminal in one, or switch to Space."
+            : "No git repo in this folder.";
+    if (cmd === "gh" && /gh auth login|not logged in|authentication|HTTP 401|bad credentials/i.test(text))
+        return "gh is not logged in on this machine (run gh auth login).";
+    if (cmd === "git" && /authentication|HTTP 401|bad credentials/i.test(text))
+        return "Sign-in to the remote failed. Check your credentials in a terminal.";
+    if (cmd === "gh" && /rate limit/i.test(text)) return "GitHub rate limit reached; try again later.";
+    if (
+        /could not resolve host|dial tcp|timed out|timeout|network is unreachable|connection (refused|reset)|TLS handshake/i.test(
+            text,
+        )
+    )
+        return `Network error: ${first}`;
+    return first;
 }
 
 /** Whether `path` is the folder `root` or inside it. */

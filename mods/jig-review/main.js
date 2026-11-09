@@ -48,6 +48,7 @@ import {
     stageFile,
     unstageFile,
 } from "./lib.js";
+import { friendlyError, GIT_READ, run as runCommand } from "./refresh.js";
 
 const EVERY = 5000; // re-list the files this often while the tab is shown
 const BASE_EVERY = 60000; // find the base branch again this often even when HEAD stays (origin may have been fetched)
@@ -58,7 +59,7 @@ const MAX = 400000; // most characters the File and Patch editors show; more is 
 const PANE_LABEL = { diff: "Diff", file: "File", patch: "Patch" };
 const ICON = (name) => `mods/workspace-chrome/${name}.svg`;
 // Reads write nothing under .git (same flags as jig-repos).
-const READ = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "diff.autoRefreshIndex=false"];
+const READ = [...GIT_READ, "-c", "diff.autoRefreshIndex=false"];
 
 // The file list's width, remembered in the mod's own storage (every Review tab shares it, and a restart keeps it).
 function readSideWidth() {
@@ -179,17 +180,18 @@ export default class RepoReview extends View {
         this.loading = true;
         cx.spawn(async (cx) => {
             try {
-                const r = await exec(
+                const r = await runCommand(
+                    exec,
                     "git",
                     [...READ, "-c", "core.quotePath=false", "status", "--porcelain=v1", "-b", "--no-renames"],
                     { cwd: this.repo, on: this.on },
                 );
-                if (r.code !== 0) throw new Error((r.stderr || `exit ${r.code}`).trim().split("\n")[0]);
+                if (r.code !== 0) throw Object.assign(new Error(r.stderr || `exit ${r.code}`), r);
                 const s = parseStatus(r.stdout);
                 // The base costs a dozen git calls: find it again only when HEAD moves, or after a minute (a fetch).
                 const head = s.unborn
                     ? null
-                    : await exec("git", [...READ, "rev-parse", "HEAD"], { cwd: this.repo, on: this.on });
+                    : await runCommand(exec, "git", [...READ, "rev-parse", "HEAD"], { cwd: this.repo, on: this.on });
                 const key = head?.code === 0 ? head.stdout.trim() : null;
                 if (!key) this.baseFor = null;
                 else if (key !== this.baseFor?.key || Date.now() - this.baseFor.at >= BASE_EVERY)
@@ -197,7 +199,8 @@ export default class RepoReview extends View {
                 const base = this.baseFor?.base ?? null;
                 let committed = [];
                 if (base) {
-                    const d = await exec(
+                    const d = await runCommand(
+                        exec,
                         "git",
                         [
                             ...READ,
@@ -228,7 +231,7 @@ export default class RepoReview extends View {
                 this.fixSelection();
                 await this.loadDiff();
             } catch (e) {
-                this.error = String(e?.message ?? e).split("\n")[0];
+                this.error = friendlyError(e, { what: "Reading" });
             } finally {
                 this.loading = false;
                 this.last = this.again ? 0 : Date.now();
@@ -241,7 +244,7 @@ export default class RepoReview extends View {
 
     /** Herdr's exec on the tab's machine, as lib.js takes it. */
     git() {
-        return (cmd, args, options) => exec(cmd, args, { ...options, on: this.on });
+        return (cmd, args, options) => runCommand(exec, cmd, args, { ...options, on: this.on });
     }
 
     // Which list to draw: the asked-for mode if it has anything, else the other.
@@ -291,12 +294,13 @@ export default class RepoReview extends View {
     async diffLines(file) {
         if (!(file.fresh || this.unborn)) {
             const from = this.view === "branch" && this.base ? this.base.mergeBase : "HEAD";
-            const r = await exec(
+            const r = await runCommand(
+                exec,
                 "git",
                 [...READ, "diff", from, "--no-ext-diff", "--no-textconv", "--no-color", "--", file.path],
                 { cwd: this.repo, on: this.on },
             );
-            if (r.code !== 0) throw new Error(r.stderr);
+            if (r.code !== 0) throw Object.assign(new Error(r.stderr), r);
             const all = r.stdout.replace(/\n$/, "").split("\n"),
                 first = all.findIndex((l) => l.startsWith("@@"));
             return first < 0 ? ["No text diff available"] : all.slice(first);
@@ -348,8 +352,11 @@ export default class RepoReview extends View {
     async fileText(file) {
         if (file.status === "D") {
             const from = this.view === "branch" && this.base ? this.base.mergeBase : "HEAD";
-            const r = await exec("git", [...READ, "show", `${from}:${file.path}`], { cwd: this.repo, on: this.on });
-            if (r.code !== 0) throw new Error(r.stderr);
+            const r = await runCommand(exec, "git", [...READ, "show", `${from}:${file.path}`], {
+                cwd: this.repo,
+                on: this.on,
+            });
+            if (r.code !== 0) throw Object.assign(new Error(r.stderr), r);
             return r.stdout;
         }
         return readTextFile(`${this.repo}/${file.path}`, { on: this.on });
@@ -434,7 +441,7 @@ export default class RepoReview extends View {
         this.acting = true;
         this.confirming = null;
         const on = this.on;
-        const git = (cmd, args, options) => exec(cmd, args, { ...options, on });
+        const git = (cmd, args, options) => runCommand(exec, cmd, args, { ...options, on });
         cx.spawn(async (cx) => {
             try {
                 this.note = await fn(git);
@@ -711,7 +718,7 @@ export default class RepoReview extends View {
                             .cursor_pointer()
                             .hover((s) => s.text_color(t.foreground))
                             .on_click((_e, cx) => this.refresh(cx))
-                            .child(this.loading ? "Loading…" : "Refresh"),
+                            .child(this.loading ? "Reading…" : "Refresh"),
                     ),
             )
             .child(
@@ -757,7 +764,7 @@ export default class RepoReview extends View {
                     .when(this.loaded && !this.files.length, (el) =>
                         el.child(div().p(8).text_color(t.dim).child("No changes")),
                     )
-                    .when(!this.loaded && !this.error, (el) => el.child(div().p(8).text_color(t.dim).child("Loading…")))
+                    .when(!this.loaded && !this.error, (el) => el.child(div().p(8).text_color(t.dim).child("Reading…")))
                     .children(this.files.map((f) => this.fileRow(t, f)))
                     .when(more > 0, (el) =>
                         el.child(
@@ -887,7 +894,7 @@ export default class RepoReview extends View {
             .min_h(0)
             .p(12)
             .text_color(t.dim)
-            .child(this.editorNote ?? "Loading…");
+            .child(this.editorNote ?? "Reading…");
     }
 
     // Right side: a 32 px header (path, +added −removed, prev/next), then the diff at full size.
@@ -900,7 +907,7 @@ export default class RepoReview extends View {
                 .items_center()
                 .justify_center()
                 .text_color(t.dim)
-                .child(this.loaded ? "No changes" : "Loading…");
+                .child(this.loaded ? "No changes" : "Reading…");
         const add = this.rows.filter((r) => r.kind === "+").length,
             del = this.rows.filter((r) => r.kind === "-").length;
         const { dir, name } = splitPath(file.path),

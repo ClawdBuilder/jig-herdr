@@ -81,7 +81,15 @@ import {
 } from "./lib.js";
 import { BranchPicker, DONE } from "./picker.js";
 import { PushConfirm } from "./push.js";
-import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds, terminalFinished } from "./refresh.js";
+import {
+    focusRegained,
+    friendlyError,
+    RefreshScheduler,
+    RefreshState,
+    refreshSeconds,
+    run as runCommand,
+    terminalFinished,
+} from "./refresh.js";
 
 // Herdr can only watch folders on this computer, so a space on another machine is polled. All repos
 // take well under a second, so poll often, and at once when a terminal or agent changes state
@@ -206,8 +214,8 @@ export default class RepoChanges extends View {
         this.hover = null; // the checkout row under the pointer
         this.hoverFile = null; // the file row under the pointer
         this.confirm = null; // { key, repo, file, kind }: a discard waiting for its second click
-        this.fetching = false; // the header's Fetch every checkout
-        this.fetchNote = null; // { text, at }: the last Fetch every checkout
+        this.fetching = false; // the header's Fetch every repo
+        this.fetchNote = null; // { text, at }: the last Fetch every repo
         this.notes = {}; // path -> { ok, message, at }: the last action's result there
         this.commits = new Map(); // path -> InputState of its commit message
         this.config = parseConfig(null);
@@ -391,12 +399,11 @@ export default class RepoChanges extends View {
         this.loading = true;
         const run = ++this.readGeneration;
         const targets = full ? "" : this.visibleTargets();
-        const command = `if command -v timeout >/dev/null 2>&1; then exec timeout 20 sh -c "$1" sh "$2" "$3"; elif command -v gtimeout >/dev/null 2>&1; then exec gtimeout 20 sh -c "$1" sh "$2" "$3"; fi; exec sh -c "$1" sh "$2" "$3"`;
         cx.spawn(async (cx) => {
             try {
-                const r = await exec("sh", ["-c", command, "sh", SCRIPT, root, targets], { on });
+                const r = await runCommand(exec, "sh", ["-c", SCRIPT, "sh", root, targets], { on });
                 if (run !== this.readGeneration || context !== this.context) return;
-                if (r.code !== 0) throw new Error((r.stderr || `exit ${r.code}`).trim().split("\n")[0]);
+                if (r.code !== 0) throw Object.assign(new Error(r.stderr || `exit ${r.code}`), r);
                 this.repos = parseRepos(r.stdout, root);
                 this.error = null;
                 this.loaded = true;
@@ -404,7 +411,7 @@ export default class RepoChanges extends View {
                 badge(this.repos.filter((x) => x.files.length).length);
             } catch (e) {
                 if (run === this.readGeneration && context === this.context)
-                    this.error = String(e?.message ?? e).split("\n")[0];
+                    this.error = friendlyError(e, { what: "Reading", follow: true });
             } finally {
                 if (run === this.readGeneration) {
                     this.loading = false;
@@ -438,10 +445,7 @@ export default class RepoChanges extends View {
 
     /** Herdr's exec failure as one line: a stopped command says it was stopped. */
     failure(e, what) {
-        const said = String(e?.message ?? e).split("\n")[0];
-        return /timed? ?out|timeout|took too long|abort|cancel/i.test(said)
-            ? `${what} took too long and was stopped. Check the connection, or use a terminal.`
-            : said;
+        return friendlyError(e, { what, follow: true });
     }
 
     /** What runs in this checkout now, from any copy of this mod (the panel and the push dialog share the lock), or null. */
@@ -1508,15 +1512,15 @@ export default class RepoChanges extends View {
      * would list: another place to look when this one holds nothing. */
     emptyState(there) {
         if (!this.loc?.root) return "No folder here: open a terminal, or pick a space with one.";
-        if (!this.loaded) return this.error ? null : "Reading checkouts…";
-        if (this.filter.trim()) return "No checkout or file matches.";
+        if (!this.loaded) return this.error ? null : "Reading repos…";
+        if (this.filter.trim()) return "No repo or file matches.";
         if (this.repos.length) return null;
         const other = there && there !== this.loc.root;
         if (this.follow)
             return other
                 ? "Not a git repository here — cd into one, or list the space's folder."
-                : "Not a git repository here — cd into one.";
-        return "No git repository under this folder — open a terminal inside one, or follow the terminal.";
+                : "No git repo in this folder. Open a terminal in one, or switch to Space.";
+        return "No git repo in this folder. Open a terminal in one, or switch to Space.";
     }
 
     render(cx) {
@@ -1611,7 +1615,7 @@ export default class RepoChanges extends View {
                                     t,
                                     "repos-fetch-all",
                                     OWN("fetch"),
-                                    "Fetch every checkout from its remote",
+                                    "Fetch every repo from its remote",
                                     (cx) => this.fetchAll(cx),
                                     this.fetching || this.switching || this.repos.some((r) => this.lock(r)),
                                 ),
@@ -1625,7 +1629,7 @@ export default class RepoChanges extends View {
                             t,
                             "repos-refresh",
                             OWN("refresh"),
-                            this.refreshState.busy ? "Reading the checkouts…" : "Read the checkouts again",
+                            this.refreshState.busy ? "Reading repos…" : "Read the repos again",
                             (cx) => {
                                 this.last = 0;
                                 this.refresh(cx, true, true);
@@ -1687,7 +1691,7 @@ export default class RepoChanges extends View {
             );
     }
 
-    /** Fetch every checkout that has the remote, one after another, and say how many moved. */
+    /** Fetch every repo that has the remote, one after another, and say how many moved. */
     fetchAll(cx) {
         if (this.fetching || this.switching) return;
         const repos = this.repos.filter((r) => r.remote);
@@ -1719,7 +1723,7 @@ export default class RepoChanges extends View {
             this.fetching = false;
             if (context === this.context) {
                 this.fetchNote = {
-                    text: failed ? `Fetched ${ok}, ${failed} failed` : `Fetched ${plural(ok, "checkout")}`,
+                    text: failed ? `Fetched ${ok}, ${failed} failed` : `Fetched ${plural(ok, "repo")}`,
                     at: Date.now(),
                 };
                 this.last = 0;

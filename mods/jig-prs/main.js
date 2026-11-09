@@ -28,7 +28,6 @@ import {
     countOf,
     currentGeneration,
     ghError,
-    ghShell,
     githubUrl,
     inParallel,
     isOnScreen,
@@ -45,11 +44,13 @@ import {
 } from "./lib.js";
 import {
     focusRegained,
+    friendlyError,
+    parseRefreshConfig,
     RefreshScheduler,
     RefreshState,
     refreshSeconds,
+    run as runCommand,
     terminalFinished,
-    timedCommand,
 } from "./refresh.js";
 
 const onScreen = () => isOnScreen(layout(), "jig-prs");
@@ -83,7 +84,8 @@ function friendly(text) {
     const line = String(text ?? "")
         .trim()
         .split("\n")[0];
-    if (/not a git repository/i.test(line)) return "Not a git repository here — cd into one.";
+    if (/not a git repository/i.test(line))
+        return "No git repo in this folder. Open a terminal in one, or switch to Space.";
     if (/does not have any commits yet/i.test(line)) return "This repository has no commits yet.";
     return line;
 }
@@ -131,9 +133,13 @@ function openLink(url) {
 
 /** `gh` with json output: `{ data }` or `{ err, auth, net, none }`. "No pull request for this branch" is `none`. */
 async function gh(args, on) {
-    const shell = ghShell(args);
-    const result = await exec(shell.cmd, shell.args, { on, timeout: 25000 });
+    const result = await runCommand(exec, "gh", args, {
+        on,
+        env: { GIT_TERMINAL_PROMPT: "0", GH_PROMPT_DISABLED: "1" },
+    });
     if (result.code !== 0) {
+        if (result.timedOut || result.code === 124)
+            return { err: friendlyError(result, { what: "Reading GitHub" }), auth: false, net: true, none: false };
         const failure = ghError(result.stderr);
         return {
             err: failure.message,
@@ -262,12 +268,16 @@ export default class RepoPullRequests extends View {
         this.configAt = Date.now();
         cx.spawn(async (cx) => {
             const text = await readTextFile(`${appHome()}/mods/jig-prs/config.json`).catch(() => null);
-            try {
-                this.config = text ? JSON.parse(text) : {};
-            } catch {
-                this.config = {};
-            }
-            this.refreshScheduler.setSeconds(refreshSeconds(this.config, 180));
+            const refresh = parseRefreshConfig(text ?? "", 180);
+            this.config = (() => {
+                try {
+                    return text ? JSON.parse(text) : {};
+                } catch {
+                    return {};
+                }
+            })();
+            this.refreshProblem = refresh.problems[0] ?? null;
+            this.refreshScheduler.setSeconds(refresh.seconds);
             cx.notify();
         });
     }
@@ -287,9 +297,9 @@ export default class RepoPullRequests extends View {
         cx.spawn(async (cx) => {
             try {
                 const work = (async () => {
-                    const found = await exec(...timedCommand("sh", ["-c", SCRIPT, "sh", root]), { on, timeout: 25000 });
+                    const found = await runCommand(exec, "sh", ["-c", SCRIPT, "sh", root], { on });
                     if (run !== this.readGeneration) return;
-                    if (found.code !== 0) throw new Error((found.stderr || `exit ${found.code}`).trim().split("\n")[0]);
+                    if (found.code !== 0) throw Object.assign(new Error(found.stderr || `exit ${found.code}`), found);
                     if (contextKey !== this.contextKey) return;
                     const discovery = parseRepos(found.stdout);
                     this.single = discovery.single;
@@ -307,7 +317,7 @@ export default class RepoPullRequests extends View {
                 })();
             } catch (e) {
                 if (run === this.readGeneration && contextKey === this.contextKey)
-                    this.error = friendly(e?.message ?? e);
+                    this.error = friendlyError(e, { what: "Reading", follow: true });
             } finally {
                 if (run === this.readGeneration) {
                     this.loading = false;
@@ -805,7 +815,7 @@ export default class RepoPullRequests extends View {
     /** Inside one repository: this branch's pull request, then the others. */
     oneRepoRows(t) {
         const data = this.data[this.tab];
-        if (!data) return [this.note(t, this.error ? "" : "Loading…")];
+        if (!data) return [this.note(t, this.error ? "" : "Reading…")];
         const rows = [];
         if (data.here)
             rows.push(
@@ -923,7 +933,7 @@ export default class RepoPullRequests extends View {
             .child(div().flex_1().min_w(0).truncate().pl(6).text_size(11).text_color(t.dim).child(this.summaryText()))
             .child(followButton(t, (cx) => this.load(cx, true)))
             .child(
-                link(t, "prs-refresh", this.refreshState.busy ? "Loading…" : "Refresh", (_e, cx) =>
+                link(t, "prs-refresh", this.refreshState.busy ? "Reading…" : "Refresh", (_e, cx) =>
                     this.load(cx, true),
                 ),
             );
@@ -942,6 +952,18 @@ export default class RepoPullRequests extends View {
             .when(Boolean(this.error), (el) =>
                 el.child(
                     div().flex_none().px(12).py(4).truncate().text_size(11).text_color(t.blocked).child(this.error),
+                ),
+            )
+            .when(Boolean(this.refreshProblem), (el) =>
+                el.child(
+                    div()
+                        .flex_none()
+                        .px(12)
+                        .py(2)
+                        .truncate()
+                        .text_size(10.5)
+                        .text_color(t.muted)
+                        .child(this.refreshProblem),
                 ),
             )
             .child(v_flex().id("prs-list").flex_1().min_h(0).p(6).overflow_y_scrollbar().children(rows));

@@ -183,7 +183,6 @@ export default class JigContext extends View {
         this.loading = true;
         const run = ++this.readGeneration;
         cx.spawn(async (cx) => {
-            let timedOut = false;
             try {
                 const text = await readTextFile(`${appHome()}/mods/jig-work/config.json`, { on: null });
                 if (run !== this.readGeneration) return;
@@ -207,11 +206,9 @@ export default class JigContext extends View {
                 }
             } catch (e) {
                 if (run !== this.readGeneration) return;
-                timedOut = String(e?.message ?? e).includes("Reading timed out");
-                if (timedOut) this.readGeneration++;
-                else this.error = String(e?.message ?? e).split("\n")[0];
+                this.error = String(e?.message ?? e).split("\n")[0];
             } finally {
-                if (run === this.readGeneration || timedOut) {
+                if (run === this.readGeneration) {
                     this.loading = false;
                     const again = this.refreshState.finish();
                     if (again) this.refreshScheduler.trigger();

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
     BUSY_AFTER_MS,
@@ -11,7 +11,6 @@ import {
     RefreshState,
     refreshSeconds,
     terminalFinished,
-    timedCommand,
 } from "../mods/jig-repos/refresh.js";
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -57,12 +56,6 @@ test("a click during a refresh queues exactly one more run", () => {
     assert.equal(state.finish(), false);
 });
 
-test("timedCommand runs without timeout or gtimeout", () => {
-    const [program, args] = timedCommand("/bin/echo", ["portable"]);
-    const output = execFileSync("/bin/sh", args, { encoding: "utf8", env: { PATH: "/definitely/missing" } });
-    assert.equal(output.trim(), "portable");
-});
-
 test("every panel calls the shared refresh helper, with no inline copy", () => {
     const root = new URL("../mods/", import.meta.url);
     for (const mod of ["jig-repos", "jig-history", "jig-prs", "jig-worktrees"]) {
@@ -75,7 +68,7 @@ test("every panel calls the shared refresh helper, with no inline copy", () => {
         assert.match(source, /this\.refreshScheduler\.trigger\(/, `${mod}: trigger`);
         assert.match(source, /this\.refreshScheduler\.due\(/, `${mod}: due`);
         assert.match(source, /refreshSeconds\(this\.config/, `${mod}: config`);
-        assert.match(source, /timeout|timedCommand/, `${mod}: shell timeout`);
+        assert.match(source, /timeout|timedCommand|runCommand/, `${mod}: shell timeout`);
         assert.match(source, /refreshState\.finish\(\)/, `${mod}: finish`);
         const finish = source.indexOf("refreshState.finish()");
         assert.ok(source.indexOf("refreshScheduler.trigger()", finish) > finish, `${mod}: queued trigger`);
@@ -103,12 +96,21 @@ test("every panel starts its first read from the constructor, not the timer", ()
             return false;
         }
     });
-    for (const mod of mods)
+    for (const mod of mods) {
         assert.equal(
             readFileSync(new URL(`${mod}/refresh.js`, root), "utf8"),
             source,
             `${mod}/refresh.js is the odd one out`,
         );
+        assert.match(
+            readFileSync(new URL(`${mod}/main.js`, root), "utf8"),
+            /from "\.\/refresh\.js"/,
+            `${mod}/main.js does not import its refresh copy`,
+        );
+    }
+    for (const mod of readdirSync(root))
+        if (!readFileSync(new URL(`${mod}/main.js`, root), "utf8").includes('from "./refresh.js"'))
+            assert.equal(existsSync(new URL(`${mod}/refresh.js`, root)), false, `${mod}/refresh.js is unused`);
 });
 
 test("no sweep happens without a trigger before the backstop, and the backstop sweeps once", () => {
@@ -157,4 +159,135 @@ test("refreshSeconds clamps at 15 and reads the config object", () => {
     assert.equal(refreshSeconds({ refreshSeconds: 20 }), 20);
     assert.equal(refreshSeconds({}), 60);
     assert.equal(refreshSeconds({ refreshSeconds: 1 }, 180), 15);
+});
+
+test("run passes env, a shell timeout and a later Herdr timeout, and recognises 124", async () => {
+    const { run } = await import("../mods/jig-repos/refresh.js");
+    const calls: Array<{ args: string[]; options: any }> = [];
+    const fake = async (_cmd: string, args: string[], options: any) => {
+        calls.push({ args, options });
+        return { code: 0, stdout: "", stderr: "" };
+    };
+    const result = await run(fake, "git", ["status"], { on: "box", seconds: 60, env: { FOO: "bar" } });
+    assert.equal(result.timedOut, false);
+    assert.equal(result.cmd, "git");
+    assert.equal(calls[0].options.timeout, 65000);
+    assert.match(calls[0].args[1], /export GIT_TERMINAL_PROMPT='0'/);
+    assert.match(calls[0].args[1], /export GH_PROMPT_DISABLED='1'/);
+    assert.match(calls[0].args[1], /export FOO='bar'/);
+    assert.match(calls[0].args[1], /timeout 60/);
+    assert.deepEqual(calls[0].args.slice(-2), ["git", "status"]);
+    const timed = await run(async () => ({ code: 124, stdout: "", stderr: "" }), "git", ["fetch"]);
+    assert.equal(timed.timedOut, true);
+    const rejected = await run(
+        async () => {
+            throw new Error("exec timed out");
+        },
+        "git",
+        ["fetch"],
+        { env: {} },
+    );
+    assert.equal(rejected.code, 124);
+    assert.equal(rejected.timedOut, true);
+});
+
+test("friendlyError maps timeout, no repo, missing tools and gh classes", async () => {
+    const { friendlyError } = await import("../mods/jig-repos/refresh.js");
+    assert.equal(
+        friendlyError({ code: 124, seconds: 60 }),
+        "Reading took too long and was stopped (60 s). Check the connection, or try in a terminal.",
+    );
+    assert.equal(
+        friendlyError({ stderr: "fatal: not a git repository (or any of the parent directories)" }, { follow: true }),
+        "No git repo in this folder. Open a terminal in one, or switch to Space.",
+    );
+    assert.equal(friendlyError({ code: 127, cmd: "git" }), "git isn't installed on this machine.");
+    assert.equal(
+        friendlyError({ code: 127, cmd: "gh" }),
+        "The GitHub CLI (gh) isn't installed here. Install it, then run gh auth login.",
+    );
+    assert.equal(friendlyError({ code: 127, cmd: "rg" }), "rg isn't installed on this machine.");
+    assert.equal(
+        friendlyError({ cmd: "git", stderr: "fatal: repository 'https://github.com/x/y' not found" }),
+        "fatal: repository 'https://github.com/x/y' not found",
+    );
+    assert.equal(
+        friendlyError({ cmd: "git", stderr: "ssh: connect to host example.com port 22: Connection timed out" }),
+        "Network error: ssh: connect to host example.com port 22: Connection timed out",
+    );
+    assert.equal(
+        friendlyError({ cmd: "git", stderr: "fatal: Authentication failed for 'https://example.com/x/y'" }),
+        "Sign-in to the remote failed. Check your credentials in a terminal.",
+    );
+    assert.equal(
+        friendlyError({ cmd: "gh", stderr: "gh auth login required" }),
+        "gh is not logged in on this machine (run gh auth login).",
+    );
+    assert.equal(
+        friendlyError({ cmd: "gh", stderr: "API rate limit exceeded" }),
+        "GitHub rate limit reached; try again later.",
+    );
+    assert.match(friendlyError({ stderr: "could not resolve host: github.com" }), /^Network error: /);
+    assert.equal(friendlyError({ stderr: "fatal: bad revision" }), "fatal: bad revision");
+});
+
+test("parseRefreshConfig has a 15 s minimum and no maximum", async () => {
+    const { parseRefreshConfig } = await import("../mods/jig-repos/refresh.js");
+    assert.deepEqual(parseRefreshConfig('{ "refreshSeconds": 10 }', 60).seconds, 15);
+    assert.match(parseRefreshConfig('{ "refreshSeconds": 10 }', 60).problems[0], /15/);
+    assert.equal(parseRefreshConfig('{ "refreshSeconds": 1000000 }', 60).seconds, 1000000);
+    assert.equal(parseRefreshConfig("{", 60).seconds, 60);
+    assert.match(parseRefreshConfig("{", 60).problems[0], /not valid JSON/);
+});
+
+test("run uses direct exec with cwd, on and a plain Herdr deadline when there is no env", async () => {
+    const { run, friendlyError } = await import("../mods/jig-repos/refresh.js");
+    const calls: Array<{ cmd: string; args: string[]; options: any }> = [];
+    const fake = async (cmd: string, args: string[], options: any) => {
+        calls.push({ cmd, args, options });
+        return { code: 0, stdout: "ok", stderr: "" };
+    };
+    const result = await run(fake, "git", ["status"], { cwd: "/repo", on: "box", seconds: 60 });
+    assert.deepEqual(calls, [{ cmd: "git", args: ["status"], options: { cwd: "/repo", on: "box", timeout: 60000 } }]);
+    assert.equal(result.cmd, "git");
+    const missing = await run(
+        async () => {
+            throw new Error("spawn git ENOENT");
+        },
+        "git",
+        ["status"],
+        { cwd: "/repo", on: "box" },
+    );
+    assert.equal(missing.code, 127);
+    assert.equal(friendlyError(missing), "git isn't installed on this machine.");
+});
+
+test("direct exec classifies a rejection within one second of the deadline as a timeout", async () => {
+    const { run } = await import("../mods/jig-repos/refresh.js");
+    const realNow = Date.now;
+    let clock = 0;
+    Date.now = () => clock;
+    try {
+        for (const [elapsed, code] of [
+            [19_000, 124],
+            [19_999, 124],
+            [20_000, 124],
+            [500, 1],
+        ] as const) {
+            clock = 0;
+            const result = await run(
+                async () => {
+                    clock = elapsed;
+                    throw new Error("exec rejected");
+                },
+                "git",
+                ["status"],
+                { seconds: 20 },
+            );
+            assert.equal(result.code, code, `${elapsed} ms`);
+            assert.equal(result.timedOut, code === 124, `${elapsed} ms timedOut`);
+        }
+    } finally {
+        Date.now = realNow;
+    }
 });

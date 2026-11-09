@@ -63,7 +63,14 @@ import {
     stageSummary,
     terminalStateChanged,
 } from "./lib.js";
-import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds } from "./refresh.js";
+import {
+    focusRegained,
+    friendlyError,
+    RefreshScheduler,
+    RefreshState,
+    refreshSeconds,
+    run as runCommand,
+} from "./refresh.js";
 
 const MTIME_MS = 3000; // while the followed session works: a cheap mtime check
 const REPO_MS = 30000; // which outputs have changes in a repository
@@ -245,7 +252,6 @@ export default class JigWork extends View {
         this.loading = true;
         const run = ++this.readGeneration;
         cx.spawn(async (cx) => {
-            let timedOut = false;
             try {
                 const config = parseConfig(await readTextFile(`${appHome()}/mods/jig-work/config.json`));
                 if (run !== this.readGeneration) return;
@@ -270,11 +276,9 @@ export default class JigWork extends View {
                 }
             } catch (e) {
                 if (run !== this.readGeneration) return;
-                timedOut = String(e?.message ?? e).includes("Reading timed out");
-                if (timedOut) this.readGeneration++;
-                else this.error = String(e?.message ?? e).split("\n")[0];
+                this.error = String(e?.message ?? e).split("\n")[0];
             } finally {
-                if (run === this.readGeneration || timedOut) {
+                if (run === this.readGeneration) {
                     this.loading = false;
                     const again = this.refreshState.finish();
                     if (again) this.refreshScheduler.trigger();
@@ -330,7 +334,7 @@ export default class JigWork extends View {
         this.repoKey = key;
         cx.spawn(async (cx) => {
             try {
-                const r = await exec("sh", ["-c", REPO_SCRIPT, "sh", ...files], { on: this.machine() });
+                const r = await runCommand(exec, "sh", ["-c", REPO_SCRIPT, "sh", ...files], { on: this.machine() });
                 this.repoInfo = { ...this.repoInfo, ...parseRepoInfo(r.stdout) };
                 cx.notify();
             } catch {
@@ -359,17 +363,25 @@ export default class JigWork extends View {
             try {
                 let urls = known;
                 if (urls.length === 0) {
-                    const r = await exec("gh", search, { on, timeout: 60000 });
-                    if (r.code !== 0) throw new Error((r.stderr || "gh search failed").trim().split("\n")[0]);
+                    const r = await runCommand(exec, "gh", search, {
+                        on,
+                        seconds: 60,
+                        env: { GIT_TERMINAL_PROMPT: "0", GH_PROMPT_DISABLED: "1" },
+                    });
+                    if (r.code !== 0) throw Object.assign(new Error(r.stderr || "gh search failed"), r);
                     entry.searched = JSON.parse(r.stdout || "[]");
                     urls = entry.searched.map((p) => p.url);
                 }
                 for (const url of urls.slice(0, 4)) {
-                    const r = await exec("gh", ["pr", "view", url, "--json", VIEW], { on, timeout: 60000 });
+                    const r = await runCommand(exec, "gh", ["pr", "view", url, "--json", VIEW], {
+                        on,
+                        seconds: 60,
+                        env: { GIT_TERMINAL_PROMPT: "0", GH_PROMPT_DISABLED: "1" },
+                    });
                     if (r.code === 0) entry.details[url] = JSON.parse(r.stdout || "{}");
                 }
             } catch (e) {
-                entry.error = String(e?.message ?? e);
+                entry.error = friendlyError(e, { what: "Reading GitHub" });
             } finally {
                 this.prs[key] = entry;
                 try {

@@ -1,3 +1,7 @@
+import { execBudget, friendlyError, parseRefreshConfig } from "./refresh.js";
+
+export { execBudget };
+
 // Helpers of the Changes panel that need no Herdr: the read script and its parsing, how checkouts nest, and the git
 // actions. They live apart from main.js so the tests can load them outside Herdr and run the actions on real repositories.
 
@@ -523,11 +527,9 @@ export function parseConfig(text) {
         if (raw.rowDetail === "compact" || raw.rowDetail === "full") config.rowDetail = raw.rowDetail;
         else config.problems.push('"rowDetail" must be "compact" or "full"');
     }
-    if (raw.refreshSeconds != null) {
-        if (Number.isInteger(raw.refreshSeconds) && raw.refreshSeconds >= 15 && raw.refreshSeconds <= 86_400)
-            config.refreshSeconds = raw.refreshSeconds;
-        else config.problems.push('"refreshSeconds" must be a whole number from 15 to 86400');
-    }
+    const refresh = parseRefreshConfig(raw, DEFAULTS.refreshSeconds);
+    config.refreshSeconds = refresh.seconds;
+    config.problems.push(...refresh.problems);
     if (raw.networkTimeoutSeconds != null) {
         if (
             Number.isInteger(raw.networkTimeoutSeconds) &&
@@ -836,20 +838,9 @@ export function networkExec(exec, on) {
     };
 }
 
-/** The seconds a timeout stands for, at least one. */
-const timeoutSeconds = (timeout) => Math.max(1, Math.round((timeout ?? NETWORK_TIMEOUT) / 1000));
-
-/** Herdr 0.1.14 caps exec at 10 minutes. Keep the shell just below it, and the outer Herdr deadline 5 s later, so the
- *  wrapper's own watchdog fires first and reports our timeout message. */
-export function execBudget(timeout = NETWORK_TIMEOUT) {
-    const shellSeconds = Math.min(timeoutSeconds(timeout), 595);
-    const shellTimeoutMs = shellSeconds * 1000;
-    return { shellSeconds, shellTimeoutMs, herdrTimeoutMs: Math.min(600000, shellTimeoutMs + 5000) };
-}
-
 /** What a stopped command says: never git's bare exit code. */
-export const timeoutMessage = (timeout = NETWORK_TIMEOUT) =>
-    `Timed out after ${execBudget(timeout).shellSeconds} s — check your network or sign-in, then try in a terminal.`;
+export const timeoutMessage = (timeout = NETWORK_TIMEOUT, what = "Command") =>
+    friendlyError({ code: 124, seconds: execBudget(timeout).shellSeconds }, { what });
 
 /** `value` as one POSIX shell word. */
 export function shQuote(value) {
@@ -905,7 +896,10 @@ export function wrapperScript(env, timeout = NETWORK_TIMEOUT) {
 const networkOptions = ({ env, timeout }) => ({ env: networkEnv(env), timeout: timeout ?? NETWORK_TIMEOUT });
 
 /** A failed network command as one line: a timeout says so instead of exposing exit code 124. */
-const networkFailure = (r, timeout, what) => (r.code === 124 ? timeoutMessage(timeout) : `${what}: ${firstLine(r)}`);
+const networkFailure = (r, timeout, what) =>
+    r.code === 124
+        ? timeoutMessage(timeout, what.replace(/ failed$/, ""))
+        : friendlyError({ ...r, cmd: "git" }, { what });
 
 /** The reason not to touch a branch now, or null: an agent working or blocked in the checkout, or a detached HEAD. */
 export async function branchRefusal(exec, checkout, busy) {

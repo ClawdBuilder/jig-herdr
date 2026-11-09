@@ -881,16 +881,6 @@ test("jig-worktrees refuses ignored data files but allows build output", async (
     ]);
 });
 
-test("jig-prs wraps gh with no prompts and a timeout", async () => {
-    const { ghShell } = await load<Lib>("mods/jig-prs/lib.js");
-    const shell = ghShell(["pr", "list"]);
-    assert.equal(shell.cmd, "sh");
-    assert.match(shell.args[1], /GIT_TERMINAL_PROMPT=0/);
-    assert.match(shell.args[1], /GH_PROMPT_DISABLED=1/);
-    assert.match(shell.args[1], /timeout 20 gh/);
-    assert.deepEqual(shell.args.slice(2), ["sh", "pr", "list"]);
-});
-
 test("jig-prs opens only GitHub links", async () => {
     const { githubUrl } = await load<Lib>("mods/jig-prs/lib.js");
     assert.equal(githubUrl("https://github.com/a/b/pull/1"), "https://github.com/a/b/pull/1");
@@ -1012,7 +1002,26 @@ test("the live panel files call the tested seams, not inline copies", () => {
     ])
         assert.ok(wt.includes(seam), seam);
     assert.doesNotMatch(wt, /list\.some\(\s*\(entry\)\s*=>\s*entry\.contextKey/);
-    assert.match(read("jig-prs"), /timedCommand\(/);
+    assert.match(read("jig-prs"), /runCommand\(/);
+});
+
+test("the changed read and destructive commands keep their exact argv", () => {
+    const repo = readFileSync(new URL("../mods/jig-repos/main.js", import.meta.url), "utf8");
+    assert.match(repo, /runCommand\(exec, "sh", \["-c", SCRIPT, "sh", root, targets\]/);
+    const pr = readFileSync(new URL("../mods/jig-prs/main.js", import.meta.url), "utf8");
+    assert.match(pr, /runCommand\(exec, "sh", \["-c", SCRIPT, "sh", root\]/);
+    const wt = readFileSync(new URL("../mods/jig-worktrees/main.js", import.meta.url), "utf8");
+    assert.match(wt, /"worktree", "remove"/);
+    assert.match(wt, /"branch", "-d", tree\.branch/);
+    const hist = readFileSync(new URL("../mods/jig-history/main.js", import.meta.url), "utf8");
+    assert.match(hist, /runCommand\(exec, "git", logArgs/);
+    assert.match(hist, /runCommand\(exec, "git", statusArgs/);
+});
+
+test("History keeps its last good rows when a log read fails", () => {
+    const source = readFileSync(new URL("../mods/jig-history/main.js", import.meta.url), "utf8");
+    assert.doesNotMatch(source, /log\.code !== 0[\s\S]{0,120}this\.commits = null/);
+    assert.match(source, /this\.error = friendlyError\(log/);
 });
 
 test("a fresh branch from base and one from origin/develop are not ready; a merged one is", async () => {

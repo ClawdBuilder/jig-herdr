@@ -617,7 +617,7 @@ test("network exec gives Herdr a deadline after the shell's own, including the 6
     assert.deepEqual(execBudget(600000), { shellSeconds: 595, shellTimeoutMs: 595000, herdrTimeoutMs: 600000 });
     assert.equal(
         timeoutMessage(600000),
-        "Timed out after 595 s — check your network or sign-in, then try in a terminal.",
+        "Command took too long and was stopped (595 s). Check the connection, or try in a terminal.",
     );
 });
 
@@ -879,14 +879,14 @@ test("a timed-out command says so, never `git exited with 124`", async () => {
         args.includes("get-url") ? { code: 0, stdout: "", stderr: "" } : { code, stdout: "", stderr: "" };
     const fetched: Result = await fetchRemote(fake(124), { checkout: "/w/a" });
     assert.equal(fetched.ok, false);
-    assert.equal(fetched.message, timeoutMessage(NETWORK_TIMEOUT));
+    assert.equal(fetched.message, timeoutMessage(NETWORK_TIMEOUT, "Fetch"));
     assert.equal(
         timeoutMessage(NETWORK_TIMEOUT),
-        "Timed out after 60 s — check your network or sign-in, then try in a terminal.",
+        "Command took too long and was stopped (60 s). Check the connection, or try in a terminal.",
     );
     assert.equal(
         timeoutMessage(30000),
-        "Timed out after 30 s — check your network or sign-in, then try in a terminal.",
+        "Command took too long and was stopped (30 s). Check the connection, or try in a terminal.",
     );
     // A pull that timed out: the same answer instead of git's exit code.
     const upstreamFake = async (_cmd: string, args: string[]) => {
@@ -896,7 +896,38 @@ test("a timed-out command says so, never `git exited with 124`", async () => {
     };
     const pulled: Result = await pullFastForward(upstreamFake, { checkout: "/w/a" });
     assert.equal(pulled.ok, false);
-    assert.equal(pulled.message, timeoutMessage(NETWORK_TIMEOUT));
+    assert.equal(pulled.message, timeoutMessage(NETWORK_TIMEOUT, "Pull"));
+});
+
+test("Review's add, unstage and discard keep their exact git argv", async () => {
+    const { stageFile, unstageFile, discardFile } = await load<Record<string, any>>("mods/jig-review/lib.js");
+    const calls: string[][] = [];
+    const fake = async (_cmd: string, args: string[]) => {
+        calls.push(args);
+        if (args.includes("rev-parse")) return { code: 0, stdout: "abc\n", stderr: "" };
+        if (args.includes("status")) return { code: 0, stdout: " M file.txt\0", stderr: "" };
+        return { code: 0, stdout: "", stderr: "" };
+    };
+    await stageFile(fake, { checkout: "/w", file: "file.txt" });
+    assert.deepEqual(calls.at(-1), ["--literal-pathspecs", "add", "--", "file.txt"]);
+    await unstageFile(fake, { checkout: "/w", file: "file.txt" });
+    assert.deepEqual(calls.at(-1), ["--literal-pathspecs", "restore", "--staged", "--", "file.txt"]);
+    await discardFile(fake, { checkout: "/w", file: "file.txt", expect: "restore" });
+    assert.deepEqual(calls.at(-1), ["--literal-pathspecs", "restore", "--worktree", "--staged", "--", "file.txt"]);
+    const cleanFake = async (_cmd: string, args: string[]) => {
+        calls.push(args);
+        if (args.includes("status")) return { code: 0, stdout: "?? scratch.txt\0", stderr: "" };
+        return { code: 0, stdout: "", stderr: "" };
+    };
+    await discardFile(cleanFake, { checkout: "/w", file: "scratch.txt", expect: "delete" });
+    assert.deepEqual(calls.at(-1), ["--literal-pathspecs", "clean", "-f", "--", "scratch.txt"]);
+    const newbornFake = async (_cmd: string, args: string[]) => {
+        calls.push(args);
+        if (args.includes("rev-parse")) return { code: 1, stdout: "", stderr: "" };
+        return { code: 0, stdout: "", stderr: "" };
+    };
+    await unstageFile(newbornFake, { checkout: "/w", file: "file.txt" });
+    assert.deepEqual(calls.at(-1), ["--literal-pathspecs", "rm", "--cached", "-q", "--", "file.txt"]);
 });
 
 test("one lock per checkout: the panel and its dialog share it, and it expires", async () => {

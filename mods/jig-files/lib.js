@@ -4,7 +4,7 @@
 // Pure helpers of jig-files, kept apart from main.js so they can be tested outside Herdr: its config, the deleted paths
 // that git status knows but the folder listing does not, and the flat filter over a bounded find.
 
-import { refreshSeconds } from "./refresh.js";
+import { parseRefreshConfig } from "./refresh.js";
 
 export const DEFAULTS = { refreshSeconds: 60 };
 
@@ -23,11 +23,9 @@ export function parseConfig(text) {
         config.problems.push("config.json must hold an object");
         return config;
     }
-    if (raw.refreshSeconds != null) {
-        if (Number.isInteger(raw.refreshSeconds) && raw.refreshSeconds >= 15 && raw.refreshSeconds <= 86_400)
-            config.refreshSeconds = raw.refreshSeconds;
-        else config.problems.push('"refreshSeconds" must be a whole number from 15 to 86400');
-    }
+    const refresh = parseRefreshConfig(raw, DEFAULTS.refreshSeconds);
+    config.refreshSeconds = refresh.seconds;
+    config.problems.push(...refresh.problems);
     return config;
 }
 

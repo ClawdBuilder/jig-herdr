@@ -26,7 +26,14 @@ import {
 } from "herdr";
 
 import { deletedPaths, FIND, filterPaths, listDirectory, parseConfig, searchDue } from "./lib.js";
-import { focusRegained, RefreshScheduler, RefreshState, refreshSeconds } from "./refresh.js";
+import {
+    focusRegained,
+    GIT_READ,
+    RefreshScheduler,
+    RefreshState,
+    refreshSeconds,
+    run as runCommand,
+} from "./refresh.js";
 
 function location() {
     const space = spaces().find((s) => s.active),
@@ -235,29 +242,20 @@ export default class Files extends View {
             run = ++this.readGeneration;
         this.loading = true;
         cx.spawn(async (cx) => {
-            let timedOut = false;
             try {
                 for (const path of ["", ...this.folders]) {
                     if (!this.current(context)) return;
                     await this.loadFolder(path, context);
                 }
-                const top = await exec("git", ["rev-parse", "--show-toplevel"], { cwd, on }).catch(() => null);
+                const top = await runCommand(exec, "git", [...GIT_READ, "rev-parse", "--show-toplevel"], { cwd, on });
                 const marks = {};
                 let deleted = [];
                 if (top?.code === 0) {
                     // Writes nothing under .git (index lock, fsmonitor cookie): the folder watch would refresh again.
-                    const status = await exec(
+                    const status = await runCommand(
+                        exec,
                         "git",
-                        [
-                            "--no-optional-locks",
-                            "-c",
-                            "core.fsmonitor=false",
-                            "status",
-                            "--porcelain=v1",
-                            "-z",
-                            "--no-renames",
-                            "--untracked-files=normal",
-                        ],
+                        [...GIT_READ, "status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=normal"],
                         { cwd, on },
                     ).catch(() => null);
                     if (status?.code === 0) {
@@ -282,11 +280,9 @@ export default class Files extends View {
                 this.watch(cwd, cx);
             } catch (e) {
                 if (run !== this.readGeneration) return;
-                timedOut = String(e?.message ?? e).includes("Reading timed out");
-                if (timedOut) this.readGeneration++;
-                else if (this.current(context)) this.error = String(e);
+                if (this.current(context)) this.error = String(e);
             } finally {
-                if (run === this.readGeneration || timedOut) {
+                if (run === this.readGeneration) {
                     this.loading = false;
                     const again = this.refreshState.finish();
                     if (again) this.refreshScheduler.trigger();
