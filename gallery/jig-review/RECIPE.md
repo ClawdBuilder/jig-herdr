@@ -7,8 +7,9 @@ unstage and discard actions. From Jig (https://github.com/ClawdBuilder/jig). No 
 
 **What you see:**
 
-A header with the repository name, **Copy file**, **Copy path**, a **Diff | File | Patch** switch and Refresh. A draggable
-divider (width remembered in the mod's localStorage) separates the file list from the right side. The left side has two mode
+A 42 px header with the repository name and Refresh. A draggable divider (width remembered in the mod's localStorage)
+separates the file list from the right side; the right side's own row carries the file path, the **Diff | File | Patch**
+switch, **Copy file** and **Copy path**. The left side has two mode
 buttons, **Working changes** and **Branch vs <base>**, shown when both have something to show. The right side is tinted diff
 rows, the whole file, or the raw patch in a read-only code editor; the footer says how many lines are selected.
 
@@ -41,8 +42,8 @@ Herdr's 30 s cap; `git` and POSIX `sh` are required, so Windows-local without WS
 read-only**: stage, unstage and discard write. Branch mode needs one of the base candidates above; without one it says so.
 Very large diffs are capped and say when cut. Binary files show a notice, not content. This mod is opened by `jig-git` via
 `tab.new`; the standalone listing has `"place": "none"`, so a layout block with `content.mod = "jig-review"` (or the tab
-opened by jig-git) is required. It needs a layout block for the file list; a tab is the normal host. The header buttons are
-the only write path. Copy needs a selection.
+opened by jig-git) is required. It needs a layout block for the file list; a tab is the normal host. Stage/Unstage and Discard are
+the only write controls; Copy needs a selection.
 
 **Done when:**
 

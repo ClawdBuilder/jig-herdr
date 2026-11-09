@@ -1,7 +1,7 @@
 {
     "name": "@clawdbuilder/jig-herdr",
     "version": "0.1.0",
-    "description": "Herdr layouts, mods and themes for Jig: Work, Context, Changes and Keep awake panels. A front-end that never approves.",
+    "description": "Herdr layouts, mods and themes: Git, History, PR & CI, Worktrees, Review, Files and Keep awake panels, the Jig Workbench layout, and Jig's Work and Context panels. A front-end that never approves.",
     "private": true,
     "type": "module",
     "license": "MIT",

@@ -184,7 +184,7 @@ export function parseRepoInfo(stdout) {
 
 // The status file's outputs split for the Outputs list: `files` are the ones outside any git repository (`repo` null), and
 // those of an older status file that has no `repo` field at all, which keep showing as before; `inRepos` counts the ones in a
-// repository, which belong to the Changes panel.
+// repository, which belong to the Git panel.
 
 /** The ticket's workflow as one compact chip at narrow widths: "build · 3 of 5", with every stage and goal in `title`. */
 export function stageSummary(workflow, line = stageLine(workflow)) {
