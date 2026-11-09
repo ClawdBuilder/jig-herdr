@@ -11,6 +11,11 @@
 
 ### Changed
 
+- The mod-folder `RECIPE.md` and `preview.png` of `jig-git` and `jig-keep-awake` are no longer installed; the installer
+  removes files from earlier versions.
+- The root `RECIPE.md` now describes the current Jig layout, including the shared header and the Git and Keep awake recipes.
+- Docs use one header/body/error/Refresh vocabulary, current timing budgets and working links, with a test that checks
+  every relative Markdown link; the recipes share a byte-identical Header paragraph.
 - Listing titles now match what the layout shows: `Files`, `File view` and `Activity bar` for the generic mods;
   `Jig work` and `Jig theme sync` for the Jig-only ones. The package description lists the full panel set.
 
