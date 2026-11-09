@@ -431,6 +431,16 @@ export default class RepoHistory extends View {
                                 ),
                         ),
                     ),
+            )
+            .when(hiddenOriginCount(this.branches ?? [], query) > 0, (el) =>
+                el.child(
+                    div()
+                        .px(8)
+                        .pt(4)
+                        .text_size(11)
+                        .text_color(t.dim)
+                        .child(`Type to search ${hiddenOriginCount(this.branches ?? [], query)} more on origin`),
+                ),
             );
     }
 
