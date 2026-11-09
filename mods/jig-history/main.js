@@ -402,7 +402,7 @@ export default class RepoHistory extends View {
                 v_flex()
                     .id("branch-list-rows")
                     .flex_none()
-                    .max_h(200)
+                    .max_h(160)
                     .overflow_y_scrollbar()
                     .children(
                         rows.map((b) =>
