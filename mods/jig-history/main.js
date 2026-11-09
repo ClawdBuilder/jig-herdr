@@ -28,7 +28,7 @@ import {
     colourSeed,
     commitMatches,
     FORMAT,
-    filterBranches,
+    hiddenOriginCount,
     initialsOf,
     isOnScreen,
     laneColumns,
@@ -44,6 +44,7 @@ import {
     SCRIPT,
     since,
     toggleBranchPicker,
+    visibleBranches,
 } from "./lib.js";
 import { panelError, panelHeader, ROW_FONT } from "./panel-header.js";
 import {
@@ -350,7 +351,7 @@ export default class RepoHistory extends View {
     /** The branch list's Enter: the active row, if any. */
     selectActiveBranch(cx) {
         if (!this.branchOpen) return;
-        const rows = filterBranches(
+        const rows = visibleBranches(
             this.branches ?? [],
             this.branchBox.value(),
             this.branchFilter ?? this.headBranch ?? null,
@@ -366,7 +367,7 @@ export default class RepoHistory extends View {
     /** The branch list, filtered: ranked, local first, remotes marked, current ticked. */
     branchList(t) {
         const query = this.branchBox.value();
-        const rows = filterBranches(this.branches ?? [], query, this.branchFilter ?? this.headBranch ?? null);
+        const rows = visibleBranches(this.branches ?? [], query, this.branchFilter ?? this.headBranch ?? null);
         const keys = rows.map(branchKey);
         if (this.branchActive === null || !keys.includes(this.branchActive)) this.branchActive = keys[0] ?? null;
         const choose = (name, cx) => {

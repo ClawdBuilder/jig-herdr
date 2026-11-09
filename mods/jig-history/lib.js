@@ -316,6 +316,16 @@ export function filterBranches(branches, text, current) {
         .map(({ index: _index, rank: _rank, ...b }) => b);
 }
 
+/** What History draws: only locals before typing; ranked local and remote matches afterward. */
+export function visibleBranches(branches, text, current) {
+    const rows = filterBranches(branches, text, current);
+    return text.trim() === "" ? rows.filter((branch) => !branch.remote) : rows;
+}
+
+/** How many origin-only branches the empty list is hiding. */
+export const hiddenOriginCount = (branches, text) =>
+    text.trim() === "" ? branches.filter((branch) => branch.remote).length : 0;
+
 export const branchKey = (branch) => `${branch.remote ? "r" : "l"}:${branch.name}`;
 
 export function moveBranch(rows, active, delta) {

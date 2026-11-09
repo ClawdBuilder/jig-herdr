@@ -664,6 +664,17 @@ export function filterBranches(branches, text) {
         .map((row) => row.branch);
 }
 
+/** What the picker draws: only local branches before the person types; all ranked matches once text is present. */
+export function visibleBranches(branches, text) {
+    const query = text.trim();
+    if (query === "") return branches.filter((branch) => !branch.remote);
+    return filterBranches(branches, text);
+}
+
+/** How many origin-only branches the empty picker is hiding. */
+export const hiddenOriginCount = (branches, text) =>
+    text.trim() === "" ? branches.filter((branch) => branch.remote).length : 0;
+
 /** A stable key for a branch row: a local and an origin-only branch can share a name. */
 export const branchKey = (branch) => `${branch.remote ? "r" : "l"}:${branch.name}`;
 
@@ -672,13 +683,13 @@ export const pickableBranches = (branches) => branches.filter((branch) => !branc
 
 /** The active key for a filter: the best pickable row, or null. */
 export function defaultActive(branches, text) {
-    const first = pickableBranches(filterBranches(branches, text))[0];
+    const first = pickableBranches(visibleBranches(branches, text))[0];
     return first ? branchKey(first) : null;
 }
 
 /** Move the active key by `delta`, clamped at the ends. An inactive/unknown key starts at the nearest end. */
 export function moveActive(branches, text, active, delta) {
-    const rows = pickableBranches(filterBranches(branches, text));
+    const rows = pickableBranches(visibleBranches(branches, text));
     if (rows.length === 0) return null;
     const at = rows.findIndex((branch) => branchKey(branch) === active);
     const next = at < 0 ? (delta > 0 ? 0 : rows.length - 1) : Math.min(rows.length - 1, Math.max(0, at + delta));

@@ -11,7 +11,7 @@ import {
     busyAgents,
     defaultActive,
     defaultBase,
-    filterBranches,
+    hiddenOriginCount,
     listBranches,
     moveActive,
     newBranch,
@@ -19,6 +19,7 @@ import {
     parseConfig,
     switchBranch,
     switchRefusal,
+    visibleBranches,
 } from "./lib.js";
 
 /** Shared key the picker sets after a switch, so the panel says so and reads the checkouts again at once. */
@@ -157,7 +158,7 @@ export class BranchPicker {
 
     /** Rows the filter shows and Enter can pick; resets a stale active before the row is drawn. */
     activeRows() {
-        const rows = filterBranches(this.branches ?? [], this.filter).filter(pickable);
+        const rows = visibleBranches(this.branches ?? [], this.filter).filter(pickable);
         if (this.active !== null && !rows.some((branch) => branchKey(branch) === this.active)) this.resetActive();
         return rows;
     }
@@ -238,7 +239,7 @@ export class BranchPicker {
                     .child(this.message ? "" : "Reading branches…"),
             ];
         this.activeRows();
-        const shown = filterBranches(this.branches, this.filter);
+        const shown = visibleBranches(this.branches, this.filter);
         const local = shown.filter((b) => !b.remote),
             remote = shown.filter((b) => b.remote);
         const heading = (text) =>
@@ -246,7 +247,20 @@ export class BranchPicker {
         return [
             ...local.map((b) => this.row(t, b)),
             ...(remote.length ? [heading("ON ORIGIN ONLY"), ...remote.map((b) => this.row(t, b))] : []),
-            ...(shown.length ? [] : [div().p(8).text_color(t.dim).child("No branch matches")]),
+            ...(hiddenOriginCount(this.branches, this.filter) > 0
+                ? [
+                      div()
+                          .flex_none()
+                          .px(8)
+                          .pt(6)
+                          .text_size(11)
+                          .text_color(t.dim)
+                          .child(`Type to search ${hiddenOriginCount(this.branches, this.filter)} more on origin`),
+                  ]
+                : []),
+            ...(shown.length || hiddenOriginCount(this.branches, this.filter)
+                ? []
+                : [div().p(8).text_color(t.dim).child("No branch matches")]),
         ];
     }
 
