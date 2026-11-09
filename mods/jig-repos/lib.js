@@ -1,4 +1,4 @@
-import { execBudget, friendlyError } from "./refresh.js";
+import { execBudget, friendlyError, parseRefreshConfig } from "./refresh.js";
 
 export { execBudget };
 
@@ -527,11 +527,9 @@ export function parseConfig(text) {
         if (raw.rowDetail === "compact" || raw.rowDetail === "full") config.rowDetail = raw.rowDetail;
         else config.problems.push('"rowDetail" must be "compact" or "full"');
     }
-    if (raw.refreshSeconds != null) {
-        if (Number.isInteger(raw.refreshSeconds) && raw.refreshSeconds >= 15 && raw.refreshSeconds <= 86_400)
-            config.refreshSeconds = raw.refreshSeconds;
-        else config.problems.push('"refreshSeconds" must be a whole number from 15 to 86400');
-    }
+    const refresh = parseRefreshConfig(raw, DEFAULTS.refreshSeconds);
+    config.refreshSeconds = refresh.seconds;
+    config.problems.push(...refresh.problems);
     if (raw.networkTimeoutSeconds != null) {
         if (
             Number.isInteger(raw.networkTimeoutSeconds) &&

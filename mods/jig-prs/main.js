@@ -47,6 +47,7 @@ import {
     focusRegained,
     RefreshScheduler,
     RefreshState,
+    parseRefreshConfig,
     refreshSeconds,
     run as runCommand,
     terminalFinished,
@@ -262,12 +263,16 @@ export default class RepoPullRequests extends View {
         this.configAt = Date.now();
         cx.spawn(async (cx) => {
             const text = await readTextFile(`${appHome()}/mods/jig-prs/config.json`).catch(() => null);
-            try {
-                this.config = text ? JSON.parse(text) : {};
-            } catch {
-                this.config = {};
-            }
-            this.refreshScheduler.setSeconds(refreshSeconds(this.config, 180));
+            const refresh = parseRefreshConfig(text ?? "", 180);
+            this.config = (() => {
+                try {
+                    return text ? JSON.parse(text) : {};
+                } catch {
+                    return {};
+                }
+            })();
+            this.refreshProblem = refresh.problems[0] ?? null;
+            this.refreshScheduler.setSeconds(refresh.seconds);
             cx.notify();
         });
     }

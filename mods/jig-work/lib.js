@@ -1,3 +1,5 @@
+import { parseRefreshConfig } from "./refresh.js";
+
 // Pure helpers of jig-work, kept apart from main.js so they can be tested outside Herdr.
 
 export {
@@ -46,11 +48,9 @@ export function parseConfig(text) {
         if (typeof raw[key] === "string" && raw[key].trim() !== "") config[key] = raw[key].trim();
         else config.problems.push(`"${key}" must be a non-empty string or null`);
     }
-    if (raw.refreshSeconds != null) {
-        if (Number.isInteger(raw.refreshSeconds) && raw.refreshSeconds >= 15 && raw.refreshSeconds <= 86_400)
-            config.refreshSeconds = raw.refreshSeconds;
-        else config.problems.push('"refreshSeconds" must be a whole number from 15 to 86400');
-    }
+    const refresh = parseRefreshConfig(raw, DEFAULTS.refreshSeconds);
+    config.refreshSeconds = refresh.seconds;
+    config.problems.push(...refresh.problems);
     if (raw.prOwners != null) {
         const ok =
             Array.isArray(raw.prOwners) && raw.prOwners.every((o) => typeof o === "string" && /^[\w.-]+$/.test(o));

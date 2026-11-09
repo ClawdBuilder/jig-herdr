@@ -120,7 +120,7 @@ test("the new config files parse refreshSeconds, and Files knows deleted and fil
     for (const lib of [files, view]) {
         assert.equal(lib.parseConfig(null).refreshSeconds, 60);
         assert.equal(lib.parseConfig('{ "refreshSeconds": 30 }').refreshSeconds, 30);
-        assert.equal(lib.parseConfig('{ "refreshSeconds": 10 }').refreshSeconds, 60);
+        assert.equal(lib.parseConfig('{ "refreshSeconds": 10 }').refreshSeconds, 15);
         assert.match(lib.parseConfig('{ "refreshSeconds": 10 }').problems[0], /15/);
         assert.match(lib.parseConfig("{").problems[0], /not valid JSON/);
     }
@@ -146,6 +146,6 @@ test("Work's config knows refreshSeconds, and its default is 60", async () => {
     const work = await load<{ parseConfig(text: string | null): Config }>("mods/jig-work/lib.js");
     assert.equal(work.parseConfig(null).refreshSeconds, 60);
     assert.equal(work.parseConfig('{ "refreshSeconds": 15 }').refreshSeconds, 15);
-    assert.equal(work.parseConfig('{ "refreshSeconds": 1 }').refreshSeconds, 60);
+    assert.equal(work.parseConfig('{ "refreshSeconds": 1 }').refreshSeconds, 15);
     assert.match(work.parseConfig('{ "refreshSeconds": 1 }').problems[0], /15/);
 });

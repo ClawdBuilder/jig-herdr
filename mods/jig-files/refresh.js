@@ -63,6 +63,33 @@ export async function run(exec, cmd, args, { cwd, on, seconds = 20, env } = {}) 
     }
 }
 
+/** Parse refreshSeconds from raw config JSON with a 15 s minimum and no maximum. */
+export function parseRefreshConfig(raw, fallback = DEFAULT_REFRESH_SECONDS) {
+    let value = raw;
+    let problems = [];
+    if (typeof raw === "string") {
+        try {
+            const parsed = JSON.parse(raw);
+            value = parsed && typeof parsed === "object" ? parsed.refreshSeconds : undefined;
+        } catch (error) {
+            return {
+                seconds: Math.max(MIN_REFRESH_SECONDS, fallback),
+                problems: [`config.json is not valid JSON: ${error.message}`],
+            };
+        }
+    } else if (raw && typeof raw === "object") value = raw.refreshSeconds;
+    if (value === undefined || value === null) {
+        return { seconds: Math.max(MIN_REFRESH_SECONDS, fallback), problems };
+    }
+    const seconds = Number(value);
+    if (!Number.isFinite(seconds) || !Number.isInteger(seconds)) {
+        problems = ['"refreshSeconds" must be a whole number'];
+        return { seconds: Math.max(MIN_REFRESH_SECONDS, fallback), problems };
+    }
+    if (seconds < MIN_REFRESH_SECONDS) problems = ["refreshSeconds must be at least 15"];
+    return { seconds: Math.max(MIN_REFRESH_SECONDS, seconds), problems };
+}
+
 /** `refreshSeconds` from a config object or number, clamped to at least 15 s. */
 export function refreshSeconds(value, fallback = DEFAULT_REFRESH_SECONDS) {
     const wanted = typeof value === "object" && value !== null ? value.refreshSeconds : value;

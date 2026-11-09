@@ -49,6 +49,7 @@ import {
     refreshSeconds,
     terminalFinished,
     friendlyError,
+    parseRefreshConfig,
     GIT_READ,
     run as runCommand,
 } from "./refresh.js";
@@ -223,12 +224,16 @@ export default class RepoWorktrees extends View {
         this.configAt = Date.now();
         cx.spawn(async (cx) => {
             const text = await readTextFile(`${appHome()}/mods/jig-worktrees/config.json`).catch(() => null);
-            try {
-                this.config = text ? JSON.parse(text) : {};
-            } catch {
-                this.config = {};
-            }
-            this.refreshScheduler.setSeconds(refreshSeconds(this.config));
+            const refresh = parseRefreshConfig(text ?? "", 60);
+            this.config = (() => {
+                try {
+                    return text ? JSON.parse(text) : {};
+                } catch {
+                    return {};
+                }
+            })();
+            this.refreshProblem = refresh.problems[0] ?? null;
+            this.refreshScheduler.setSeconds(refresh.seconds);
             cx.notify();
         });
     }
