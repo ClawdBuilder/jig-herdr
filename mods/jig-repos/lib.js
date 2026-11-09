@@ -637,7 +637,6 @@ export async function listBranches(exec, checkout) {
     return { ok: true, message: "", current, branches };
 }
 
-/** Branches whose name holds the text, in the same order. */
 /** The quick-pick ranking: exact name, then prefix, then the last path segment's prefix, then any substring. */
 function rankBranch(name, query) {
     const lower = name.toLowerCase();
@@ -658,8 +657,8 @@ export function filterBranches(branches, text) {
         .filter((row) => row.rank < 4)
         .sort(
             (a, b) =>
-                a.rank - b.rank ||
                 Number(Boolean(a.branch.remote)) - Number(Boolean(b.branch.remote)) ||
+                a.rank - b.rank ||
                 a.index - b.index,
         )
         .map((row) => row.branch);

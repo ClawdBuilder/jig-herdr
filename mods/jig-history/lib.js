@@ -290,7 +290,7 @@ export function laneColumns(width, row = 300, lanePx = 14, cap = 4) {
     return Math.max(0, Math.min(width, cap, Math.floor((row * 0.4) / lanePx)));
 }
 
-/** Branch names with a filter; the current branch stays in the list, local branches before remotes. */
+/** Rank one branch: exact name, then prefix, then the last path segment, then any substring. */
 function rankBranch(name, query) {
     const lower = name.toLowerCase();
     if (lower === query) return 0;
@@ -301,6 +301,7 @@ function rankBranch(name, query) {
     return 4;
 }
 
+/** Branch names with a filter; the current branch stays in the list, local branches before remotes. */
 export function filterBranches(branches, text, current) {
     const needle = (text ?? "").trim().toLowerCase();
     return branches
@@ -311,7 +312,7 @@ export function filterBranches(branches, text, current) {
             index,
             rank: needle ? rankBranch(b.name, needle) : 0,
         }))
-        .sort((a, b) => a.rank - b.rank || Number(Boolean(a.remote)) - Number(Boolean(b.remote)) || a.index - b.index)
+        .sort((a, b) => Number(Boolean(a.remote)) - Number(Boolean(b.remote)) || a.rank - b.rank || a.index - b.index)
         .map(({ index: _index, rank: _rank, ...b }) => b);
 }
 

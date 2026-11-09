@@ -349,6 +349,7 @@ export default class RepoHistory extends View {
 
     /** The branch list's Enter: the active row, if any. */
     selectActiveBranch(cx) {
+        if (!this.branchOpen) return;
         const rows = filterBranches(
             this.branches ?? [],
             this.branchBox.value(),
@@ -390,14 +391,11 @@ export default class RepoHistory extends View {
                     this.branchActive = moveBranch(rows, this.branchActive, e.keystroke === "up" ? -1 : 1);
                     cx.stop_propagation();
                     cx.notify();
-                } else if (e.keystroke === "enter" || e.keystroke === "return") {
-                    this.selectActiveBranch(cx);
-                    cx.stop_propagation();
                 }
             })
             .child(Input.new(this.branchBox).h(26).w_full().text_size(11.5))
             .when(rows.length > 0, (el) =>
-                el.child(div().px(2).text_size(11).text_color(t.dim).child("↑↓ to choose · Enter to switch")),
+                el.child(div().px(2).text_size(11).text_color(t.dim).child("↑↓ to choose · Enter to show")),
             )
             .children(
                 rows.map((b) =>

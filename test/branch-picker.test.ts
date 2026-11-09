@@ -60,3 +60,25 @@ test("History uses the same ranking and keys, with current ticked", async () => 
     assert.equal(moveBranch(branches, branchKey(branches[0]), 1), branchKey(branches[1]));
     assert.equal(moveBranch(branches, branchKey(branches[0]), -1), branchKey(branches[0]));
 });
+
+test("locals stay before an exact origin-only match, and down reaches it last", async () => {
+    const repos = await load<Lib>("mods/jig-repos/lib.js");
+    const history = await load<Lib>("mods/jig-history/lib.js");
+    const rows = [
+        { name: "feature/PROJ-1234", remote: false, current: false },
+        { name: "PROJ-1234", remote: true, current: false },
+    ];
+    assert.deepEqual(
+        repos.filterBranches(rows, "PROJ-1234").map((b: any) => b.name),
+        ["feature/PROJ-1234", "PROJ-1234"],
+    );
+    assert.equal(repos.defaultActive(rows, "PROJ-1234"), repos.branchKey(rows[0]));
+    assert.equal(
+        repos.moveActive(rows, "PROJ-1234", repos.defaultActive(rows, "PROJ-1234"), 1),
+        repos.branchKey(rows[1]),
+    );
+    assert.deepEqual(
+        history.filterBranches(rows, "PROJ-1234", null).map((b: any) => b.name),
+        ["feature/PROJ-1234", "PROJ-1234"],
+    );
+});

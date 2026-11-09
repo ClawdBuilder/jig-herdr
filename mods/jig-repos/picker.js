@@ -190,6 +190,7 @@ export class BranchPicker {
 
     row(t, b) {
         const can = pickable(b) && !this.working;
+        const isActive = branchKey(b) === this.active;
         return h_flex()
             .id(`pick-${b.remote ? "r" : "l"}-${b.name}`)
             .h(26)
@@ -200,11 +201,12 @@ export class BranchPicker {
             .rounded(6)
             .text_size(12.5)
             .text_color(b.inUse ? t.dim : t.foreground)
-            .when(branchKey(b) === this.active, (el) => el.bg(t.hover).border_l(2).border_color(t.accent))
+            .pl(isActive ? 6 : 8)
+            .when(isActive, (el) => el.border_l(2).border_color(t.accent))
             .when(can, (el) =>
                 el
                     .cursor_pointer()
-                    .hover((s) => s.bg(t.hover))
+                    .when(!isActive, (row) => row.hover((s) => s.bg(t.hover)))
                     .on_click((_e, cx) => this.pick(cx, b)),
             )
             .child(
