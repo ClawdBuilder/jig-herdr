@@ -105,8 +105,9 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
   switch is refused while an agent works in the checkout or files are uncommitted; a pull, push or publish, while an
   agent works there or on a detached HEAD; a push, when git's destination for the branch is a different branch or there is
   none. A click on a file opens or retargets the tab `Review · <repository>`.
-- **History.** A 42 px header with the branch title, the `Terminal`/`Space` switch and Refresh; a second 24 px row holds
-  `Branch`/`All`. A picker of the repositories (inside one repository, no picker), then the commit graph: 24 px rows with
+- **History.** On a folder with several repositories, a repository chooser row comes first (inside one repository there is
+  none). Then a 42 px header with the branch title, the `Terminal`/`Space` switch and Refresh; a second 24 px row holds
+  `Branch`/`All`; a filter box; then the commit graph: 24 px rows with
   lanes 14 px apart, a dot per commit (a ring for the checked-out one), the author's initials, branch and tag pills, the
   pull request number, the conventional-commit type, the subject and the age. A click opens the message and files under the
   row; a file or `Open diff` opens `git show` in a terminal beside. The branch title opens the picker; local branches come
