@@ -17,9 +17,10 @@ const MANIFEST = ".jig-herdr-install.json";
 /** The folders of herdr/ that are copied. RECIPE.md, preview.png, docs, scripts and tests are not for a Herdr folder. */
 const FOLDERS = ["themes", "mods", "layouts"];
 /** The 0.1.2 mod names and the names this version gives them. Their config.json is the person's. */
+// Precedence: the newest old name comes first, so its values win when two old folders lead to one new folder.
 const RENAMED: ReadonlyArray<[string, string]> = [
-    ["repo-changes", "jig-git"],
     ["jig-repos", "jig-git"],
+    ["repo-changes", "jig-git"],
     ["repo-history", "jig-history"],
     ["repo-prs", "jig-prs"],
     ["repo-worktrees", "jig-worktrees"],
@@ -168,6 +169,24 @@ function removeEmptiedMods(target: string, removed: readonly string[]): void {
 
 /** Copy an old mod's missing config keys to its new folder. Runs before the new mod files land. */
 function migrateConfigs(target: string, options: Options, report: Report): void {
+    // The merged state lives here, not only in the file, so a dry run reports the same second migration a real run would.
+    const merged = new Map<string, Record<string, unknown>>();
+    const currentFor = (newFile: string): Record<string, unknown> | undefined => {
+        const kept = merged.get(newFile);
+        if (kept !== undefined) return kept;
+        if (!existsSync(newFile)) {
+            merged.set(newFile, {});
+            return merged.get(newFile);
+        }
+        try {
+            const parsed = JSON.parse(readFileSync(newFile, "utf8")) as unknown;
+            if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return undefined;
+            merged.set(newFile, parsed as Record<string, unknown>);
+            return parsed as Record<string, unknown>;
+        } catch {
+            return undefined;
+        }
+    };
     for (const [oldName, newName] of RENAMED) {
         const oldFolder = path.join(target, "mods", oldName);
         const oldFile = path.join(oldFolder, "config.json");
@@ -186,22 +205,16 @@ function migrateConfigs(target: string, options: Options, report: Report): void 
             report.oldKept.push(`mods/${oldName}`);
             continue;
         }
-        let current: Record<string, unknown> = {};
-        if (existsSync(newFile)) {
-            try {
-                const parsed = JSON.parse(readFileSync(newFile, "utf8")) as unknown;
-                if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) continue;
-                current = parsed as Record<string, unknown>;
-            } catch {
-                report.skipped.push({ file: `mods/${newName}/config.json`, reason: "not valid JSON; not merged" });
-                report.oldKept.push(`mods/${oldName}`);
-                continue;
-            }
+        const current = currentFor(newFile);
+        if (current === undefined) {
+            report.skipped.push({ file: `mods/${newName}/config.json`, reason: "not valid JSON; not merged" });
+            report.oldKept.push(`mods/${oldName}`);
+            continue;
         }
         const missing = Object.keys(old as Record<string, unknown>).filter((key) => !(key in current));
         if (missing.length > 0) {
             const next = { ...(old as Record<string, unknown>), ...current };
-            current = next;
+            merged.set(newFile, next);
             if (!options.dryRun) {
                 mkdirSync(path.dirname(newFile), { recursive: true });
                 writeFileSync(newFile, `${JSON.stringify(next, null, 2)}\n`);
@@ -210,9 +223,9 @@ function migrateConfigs(target: string, options: Options, report: Report): void 
             if (!options.removeOld) report.oldKept.push(`mods/${oldName}`);
         }
         if (options.removeOld) {
-            // The old config is fully carried over only when every one of its keys is now in the new file. A key the old
-            // file has and the new one does not is still a reason to keep the folder.
-            const stillMissing = Object.keys(old as Record<string, unknown>).some((key) => !(key in current));
+            const stillMissing = Object.keys(old as Record<string, unknown>).some(
+                (key) => !(key in (merged.get(newFile) ?? current)),
+            );
             if (!stillMissing) {
                 if (!options.dryRun) rmSync(oldFolder, { recursive: true, force: true });
                 report.oldRemoved.push(`mods/${oldName}`);
