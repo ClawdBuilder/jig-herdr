@@ -9,7 +9,7 @@ It needs Node.js 22.19 or later, the same as Jig. The folder is the Herdr app's 
 first start.
 
 ```bash
-node herdr/scripts/install.ts [folder] [--force] [--dry-run]
+node scripts/install.ts [folder] [--force] [--dry-run]
 ```
 
 | Folder                                  | When                                                 |

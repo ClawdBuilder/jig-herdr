@@ -1,6 +1,6 @@
 # How it works
 
-How the files in `herdr/` work inside the Herdr app: what a mod is, how a panel reaches the machine where Pi runs, how the
+How the mods in this repository work inside the Herdr app: what a mod is, how a panel reaches the machine where Pi runs, how the
 layout puts the panels together, what the install script and the palette follower do, a reading path through the mods, and
 what they are built on. It is written for a reader new to Herdr and to TypeScript. Back to the [Herdr app overview](../README.md).
 
@@ -22,12 +22,12 @@ as `div()`, `h_flex()` and `v_flex()`: there is no DOM and no HTML; the script d
 - **Slow work** goes in `cx.spawn(async (cx) => …)`, which awaits `exec` or `readTextFile` and then calls `cx.notify()`.
 - **Timers** are `cx.timer.every(ms, …)`. Most Jig mods tick once a second and load only when their period has passed and
   `isShown(layout(), "<mod>")` says the block is on screen: no hidden ancestor, and every stack on the way shows it.
-- **Pure parts** (scripts as strings, parsing, layout maths) are in each mod's `lib.js`, which the tests in `herdr/test/` import
+- **Pure parts** (scripts as strings, parsing, layout maths) are in each mod's `lib.js`, which the tests in `test/` import
   directly. Mods cannot import each other, so a few helpers are copied, and a test runs both copies.
 
 ## Reaching the agent's machine
 
-![On the agent's machine, Pi tells jig-session about its events and jig-session writes sessions/<id>.json by a rename; on your computer, the Herdr app's Work and Context panels run one sh script on that machine through Herdr's exec every 2 seconds while shown](../../docs/img/session-file.svg)
+![On the agent's machine, Pi tells jig-session about its events and jig-session writes sessions/<id>.json by a rename; on your computer, the Herdr app's Work and Context panels run one sh script on that machine through Herdr's exec every 2 seconds while shown](https://github.com/ClawdBuilder/jig/blob/main/docs/img/session-file.svg)
 
 _The app and Pi may run on different machines. The panels run their scripts where the files are._
 
@@ -44,7 +44,7 @@ runs the call there through herdr-core.
    machine), else the one you picked, else the one updated last. A session whose Pi has stopped is never shown.
 5. **Context's write.** A switch runs `printf %s "$2" > "$1.tmp" && mv "$1.tmp" "$1"` with the request file's path and the
    JSON. The switch is drawn dimmed until the status file's `lastRequest.id` is the id sent; after 10 seconds the panel says
-   the session does not answer. The round trip is in [jig-session's How it works](../../plugins/jig-session/docs/how-it-works.md#a-switch-there-and-back).
+   the session does not answer. The round trip is in [jig-session's How it works](https://github.com/ClawdBuilder/jig/blob/main/plugins/jig-session/docs/how-it-works.md#a-switch-there-and-back).
 
 The repository panels do the same with `git` and `gh` on the space's machine: `jig-git` runs one script that reads
 every checkout's `git status`, and `jig-prs` asks `gh` and caches the answer for 5 minutes in its `localStorage`.
@@ -85,7 +85,7 @@ root (row)
 
 ## The install script
 
-`scripts/install.ts` is a Node.js script run from a clone of Jig. It copies `layouts/`, `mods/` and `themes/` into the Herdr
+`scripts/install.ts` is a Node.js script run from this repository. It copies `layouts/`, `mods/` and `themes/` into the Herdr
 folder and merges `keys.json`.
 
 1. **Order.** Each mod's `mod.json` is written first: Herdr places a new mod folder where its `mod.json` says.

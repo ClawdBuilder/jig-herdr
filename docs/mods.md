@@ -1,6 +1,6 @@
 # Mods
 
-What each mod in `herdr/mods/` shows, what it reads and runs, and the props it takes, then how the `jig` layout is put
+What each mod in `mods/` shows, what it reads and runs, and the props it takes, then how the `jig` layout is put
 together. Back to the [Herdr app overview](../README.md); [How it works](how-it-works.md) explains a mod and the link to
 the agent's machine first.
 
@@ -12,7 +12,7 @@ tests load.
 
 ## jig-work: the Work panel
 
-The Pi session in focus, from the status files the `jig-session` Pi plugin writes ([the format](../../plugins/jig-session/README.md#the-status-file)). A pinned 42 px header with the folder's
+The Pi session in focus, from the status files the `jig-session` Pi plugin writes ([the format](https://github.com/ClawdBuilder/jig/blob/main/plugins/jig-session/README.md#the-status-file)). A pinned 42 px header with the folder's
 name at the left and `working` or `idle`, the `N sessions` picker and a refresh button at the right; a pinned second line
 carries the model, thinking level, context, cost and terminal. Then four sections, Outputs and Recent folded by their
 headers:
@@ -50,7 +50,7 @@ headers:
 ## jig-context: the Context panel
 
 What fills the context of the Pi session in focus, like a coding agent's context view, from the same status files
-([how it is counted](../../plugins/jig-session/docs/context.md)). The session is chosen as in Work (the focused terminal's,
+([how it is counted](https://github.com/ClawdBuilder/jig/blob/main/plugins/jig-session/docs/context.md)). The session is chosen as in Work (the focused terminal's,
 else the one picked, else the last active) and the same `N sessions` picker switches it. A pinned 42 px header holds the
 folder, picker, `Reload` and refresh; a second line carries the model, thinking, terminal and `last active`.
 
@@ -61,7 +61,7 @@ folder, picker, `Reload` and refresh; a second line carries the model, thinking,
   and a switch (whose tooltip says what it does); `CONTEXT FILES N` with each file's size, read only. A skill Pi never lists
   says `command only`. The count note is one short line, with the full explanation in its tooltip.
 - **Switches and Reload** write one request file next to the session's status file
-  ([the contract](../../plugins/jig-session/README.md#requests)), with one `sh` on the machine:
+  ([the contract](https://github.com/ClawdBuilder/jig/blob/main/plugins/jig-session/README.md#requests)), with one `sh` on the machine:
   `printf %s "$2" > "$1.tmp" && mv "$1.tmp" "$1"`, the path and the JSON as arguments. A request carries every switch not
   answered yet. The answer (`lastRequest`) shows under the legend; a switch is drawn dimmed until it comes.
 - **What it never does:** approve a call, change jig-core's rules, or write anything else. A tool switched on is declared to
