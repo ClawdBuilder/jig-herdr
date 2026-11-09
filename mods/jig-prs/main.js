@@ -119,6 +119,7 @@ async function gh(args, on) {
             err: failure.message,
             auth: failure.auth,
             net: failure.net,
+            notgithub: failure.notgithub,
             none: /no pull requests found/i.test(result.stderr),
         };
     }
@@ -314,7 +315,9 @@ export default class RepoPullRequests extends View {
             on,
         );
         if (reply.data) return reply.data[0] ? { pr: shapePr(reply.data[0], slug) } : { none: true };
-        return reply.none ? { none: true } : { err: reply.err, auth: reply.auth, net: reply.net };
+        return reply.none
+            ? { none: true }
+            : { err: reply.err, auth: reply.auth, net: reply.net, notgithub: reply.notgithub };
     }
 
     /** Workspace tab: each repository on a feature branch gets its branch's pull request and checks. The rows appear at
@@ -339,7 +342,7 @@ export default class RepoPullRequests extends View {
             if ((found.auth || found.net) && !fatal) fatal = found.err;
             for (const repo of repos) {
                 if (repo.slug !== job.slug || repo.branch !== job.branch) continue;
-                repo.status = found.pr ? "pr" : found.none ? "nopr" : "error";
+                repo.status = found.pr ? "pr" : found.none ? "nopr" : found.notgithub ? "notgithub" : "error";
                 repo.pr = found.pr ?? null;
                 repo.err = found.err ?? null;
             }
@@ -751,8 +754,14 @@ export default class RepoPullRequests extends View {
                         .text_color(t.muted)
                         .child(this.repoName(t, repo))
                         .child(this.branchTag(t, repo.branch))
-                        .when(repo.status === "noremote", (el) =>
-                            el.child(div().flex_none().text_size(10.5).text_color(t.dim).child("no remote")),
+                        .when(repo.status === "noremote" || repo.status === "notgithub", (el) =>
+                            el.child(
+                                div()
+                                    .flex_none()
+                                    .text_size(10.5)
+                                    .text_color(t.dim)
+                                    .child(repo.status === "notgithub" ? "not on GitHub" : "no remote"),
+                            ),
                         ),
                 );
         };

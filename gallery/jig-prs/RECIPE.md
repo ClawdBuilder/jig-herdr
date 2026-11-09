@@ -43,6 +43,9 @@ Worktrees show the switch; Review has title and Refresh only. An error line sits
 
 **Watch out:**
 
+Local-path remotes and remotes on known other hosts (`gitlab.com`, `bitbucket.org`, Azure DevOps) are parked as **no
+remote**; a GitHub lookup that answers "Could not resolve to a Repository" parks as **not on GitHub**, not an error.
+
 Requires `gh` on PATH and signed in; missing auth/rate limits are reported, not retried. **Mine** searches all of GitHub for
 PRs authored by `@me`, not only the demo folder, so the standalone preview is demo data; it makes a network call to GitHub's
 search API. Discovery reads pass a 20 s timeout and `gh` calls 60 s; Herdr's deadline is 5 s later (600 s at most on 0.1.14+), while 0.1.13 or older cuts at 30 s default. A slow
