@@ -896,7 +896,10 @@ export function wrapperScript(env, timeout = NETWORK_TIMEOUT) {
 const networkOptions = ({ env, timeout }) => ({ env: networkEnv(env), timeout: timeout ?? NETWORK_TIMEOUT });
 
 /** A failed network command as one line: a timeout says so instead of exposing exit code 124. */
-const networkFailure = (r, timeout, what) => (r.code === 124 ? timeoutMessage(timeout) : `${what}: ${firstLine(r)}`);
+const networkFailure = (r, timeout, what) =>
+    r.code === 124
+        ? timeoutMessage(timeout, what.replace(/ failed$/, ""))
+        : friendlyError({ ...r, cmd: "git" }, { what });
 
 /** The reason not to touch a branch now, or null: an agent working or blocked in the checkout, or a detached HEAD. */
 export async function branchRefusal(exec, checkout, busy) {

@@ -49,12 +49,13 @@ export async function run(exec, cmd, args, { cwd, on, seconds = 20, env } = {}) 
             on,
             timeout: budget.herdrTimeoutMs,
         });
-        return { ...result, seconds: budget.shellSeconds, timedOut: result.code === 124 };
+        return { ...result, cmd, seconds: budget.shellSeconds, timedOut: result.code === 124 };
     } catch (error) {
         const message = String(error?.message ?? error);
         const timedOut = /tim(e|ed) out|timeout|took too long|abort|cancel/i.test(message);
         return {
-            code: timedOut ? 124 : /not found|no such file|cannot find|not installed/i.test(message) ? 127 : 1,
+            code: timedOut ? 124 : /spawn sh ENOENT|sh: (?:command )?not found/i.test(message) ? 127 : 1,
+            cmd,
             stdout: "",
             stderr: message,
             seconds: budget.shellSeconds,
@@ -185,19 +186,22 @@ export function friendlyError(result, { what = "Reading", follow = false } = {})
     const text = String(result?.stderr ?? result?.stdout ?? result?.message ?? result ?? "").trim();
     const first = text.split("\n").find(Boolean) ?? "";
     const seconds = Number(result?.seconds) || 20;
-    if (result?.timedOut || result?.code === 124 || /tim(e|ed) out|timeout|took too long/i.test(first))
+    const cmd = result?.cmd;
+    if (result?.timedOut || result?.code === 124)
         return `${what} took too long and was stopped (${seconds} s). Check the connection, or try in a terminal.`;
+    if (result?.code === 127 && cmd === "git") return "git isn't installed on this machine.";
+    if (result?.code === 127 && cmd === "gh")
+        return "The GitHub CLI (gh) isn't installed here. Install it, then run gh auth login.";
+    if (result?.code === 127 && cmd) return `${cmd} isn't installed on this machine.`;
     if (/not a git repository|not a git repo/i.test(text))
         return follow
             ? "No git repo in this folder. Open a terminal in one, or switch to Space."
             : "No git repo in this folder.";
-    if (/(?:git: )?(?:command )?not found|git: command not found|spawn git ENOENT/i.test(first) && /git/i.test(first))
-        return "git isn't installed on this machine.";
-    if (/(?:gh: )?(?:command )?not found|gh: command not found|spawn gh ENOENT/i.test(first) && /gh/i.test(first))
-        return "The GitHub CLI (gh) isn't installed here. Install it, then run gh auth login.";
-    if (/gh auth login|not logged in|authentication|HTTP 401|bad credentials/i.test(text))
+    if (cmd === "gh" && /gh auth login|not logged in|authentication|HTTP 401|bad credentials/i.test(text))
         return "gh is not logged in on this machine (run gh auth login).";
-    if (/rate limit/i.test(text)) return "GitHub rate limit reached; try again later.";
+    if (cmd === "git" && /authentication|HTTP 401|bad credentials/i.test(text))
+        return "Sign-in to the remote failed. Check your credentials in a terminal.";
+    if (cmd === "gh" && /rate limit/i.test(text)) return "GitHub rate limit reached; try again later.";
     if (
         /could not resolve host|dial tcp|timed out|timeout|network is unreachable|connection (refused|reset)|TLS handshake/i.test(
             text,

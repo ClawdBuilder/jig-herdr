@@ -168,6 +168,7 @@ test("run passes env, a shell timeout and a later Herdr timeout, and recognises 
     };
     const result = await run(fake, "git", ["status"], { on: "box", seconds: 60, env: { FOO: "bar" } });
     assert.equal(result.timedOut, false);
+    assert.equal(result.cmd, "git");
     assert.equal(calls[0].options.timeout, 65000);
     assert.match(calls[0].args[1], /export GIT_TERMINAL_PROMPT='0'/);
     assert.match(calls[0].args[1], /export GH_PROMPT_DISABLED='1'/);
@@ -197,19 +198,32 @@ test("friendlyError maps timeout, no repo, missing tools and gh classes", async 
         friendlyError({ stderr: "fatal: not a git repository (or any of the parent directories)" }, { follow: true }),
         "No git repo in this folder. Open a terminal in one, or switch to Space.",
     );
+    assert.equal(friendlyError({ code: 127, cmd: "git" }), "git isn't installed on this machine.");
     assert.equal(
-        friendlyError({ code: 127, stderr: "git: command not found" }),
-        "git isn't installed on this machine.",
-    );
-    assert.equal(
-        friendlyError({ code: 127, stderr: "gh: command not found" }),
+        friendlyError({ code: 127, cmd: "gh" }),
         "The GitHub CLI (gh) isn't installed here. Install it, then run gh auth login.",
     );
+    assert.equal(friendlyError({ code: 127, cmd: "rg" }), "rg isn't installed on this machine.");
     assert.equal(
-        friendlyError({ stderr: "gh auth login required" }),
+        friendlyError({ cmd: "git", stderr: "fatal: repository 'https://github.com/x/y' not found" }),
+        "fatal: repository 'https://github.com/x/y' not found",
+    );
+    assert.equal(
+        friendlyError({ cmd: "git", stderr: "ssh: connect to host example.com port 22: Connection timed out" }),
+        "Network error: ssh: connect to host example.com port 22: Connection timed out",
+    );
+    assert.equal(
+        friendlyError({ cmd: "git", stderr: "fatal: Authentication failed for 'https://example.com/x/y'" }),
+        "Sign-in to the remote failed. Check your credentials in a terminal.",
+    );
+    assert.equal(
+        friendlyError({ cmd: "gh", stderr: "gh auth login required" }),
         "gh is not logged in on this machine (run gh auth login).",
     );
-    assert.equal(friendlyError({ stderr: "API rate limit exceeded" }), "GitHub rate limit reached; try again later.");
+    assert.equal(
+        friendlyError({ cmd: "gh", stderr: "API rate limit exceeded" }),
+        "GitHub rate limit reached; try again later.",
+    );
     assert.match(friendlyError({ stderr: "could not resolve host: github.com" }), /^Network error: /);
     assert.equal(friendlyError({ stderr: "fatal: bad revision" }), "fatal: bad revision");
 });

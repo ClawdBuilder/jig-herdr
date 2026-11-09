@@ -879,7 +879,7 @@ test("a timed-out command says so, never `git exited with 124`", async () => {
         args.includes("get-url") ? { code: 0, stdout: "", stderr: "" } : { code, stdout: "", stderr: "" };
     const fetched: Result = await fetchRemote(fake(124), { checkout: "/w/a" });
     assert.equal(fetched.ok, false);
-    assert.equal(fetched.message, timeoutMessage(NETWORK_TIMEOUT));
+    assert.equal(fetched.message, timeoutMessage(NETWORK_TIMEOUT, "Fetch"));
     assert.equal(
         timeoutMessage(NETWORK_TIMEOUT),
         "Push took too long and was stopped (60 s). Check the connection, or try in a terminal.",
@@ -896,7 +896,7 @@ test("a timed-out command says so, never `git exited with 124`", async () => {
     };
     const pulled: Result = await pullFastForward(upstreamFake, { checkout: "/w/a" });
     assert.equal(pulled.ok, false);
-    assert.equal(pulled.message, timeoutMessage(NETWORK_TIMEOUT));
+    assert.equal(pulled.message, timeoutMessage(NETWORK_TIMEOUT, "Pull"));
 });
 
 test("one lock per checkout: the panel and its dialog share it, and it expires", async () => {
