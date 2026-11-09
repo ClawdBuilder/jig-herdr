@@ -9,12 +9,12 @@ page. Keep the Apache-2.0 headers on mods derived from Herdr (`jig-files`, `jig-
 - **The full layout:** read `RECIPE.md`; `docs/mods.md` explains each mod's role and shared keys.
 - **Sharing or publishing:** read the gallery recipe; `share/` is generated from `gallery/`, `mods/` and `layouts/`.
 - **Installing or renaming:** read `scripts/install.ts`; `RENAMED` is the migration order, newest old name first.
-- **A test or CI failure:** read `npm run test:ci` and `.github/workflows/ci.yml`.
+- **A test or CI failure:** run `npm run test:ci` (one suite on the machine at a time); CI runs `.github/workflows/ci.yml`.
 
 ## Gotchas
 
 - **Herdr runtime:** use `cx.timer`, never `setTimeout`/`setInterval`; module scope is shared by every copy, so per-copy
-  state goes in the class or `init`, and no `cx` is kept beyond its callback. `exec` defaults to 30 s; `{ timeout }` accepts
+  state goes in the class or `init`, and no `cx` is kept beyond its callback (Herdr's AGENTS.md). `exec` defaults to 30 s; `{ timeout }` accepts
   up to 600000 ms. It rejects on timeout or when the program cannot start.
 - **Shared files:** `refresh.js`, `follow.js`, `follow-state.js` and `panel-header.js` are byte-identical copies in every
   mod that imports them. Edit one, copy it to all; the guard test names an odd copy. Mods cannot import another mod's files.
