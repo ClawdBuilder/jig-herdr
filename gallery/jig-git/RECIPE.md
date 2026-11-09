@@ -21,7 +21,7 @@ problem states each show one short line that says what to do next.
 
 A filter box under the header matches a checkout's name or a file's path. Checkouts are 26 px rows: a fold chevron, the
 name (a worktree indented, with its repo prefix dropped), branch chip, ahead/behind chips and changed-file count; its file
-rows are 24 px. A clean group folds at the bottom, and a result line under a checkout lasts 12 seconds. Row actions appear
+rows are 24 px. A clean group folds at the bottom, and a result line under a checkout lasts 12 s. Row actions appear
 only on hover; a diverged branch labels its pull as rebase-or-merge rather than Sync, and Publish appears when the branch
 has no usable upstream.
 

@@ -473,7 +473,7 @@ export default class JigWork extends View {
             .when(extra != null, (el) => el.child(div().text_color(t.dim).font_normal().child(String(extra))));
     }
 
-    // The pinned 42 px header: title left; state, session picker and the refresh button right.
+    // The pinned 42 px header: title left; state, session picker and Refresh right.
     topBar(t, cx, s, live, by) {
         const st = s?.status ?? null,
             busy = st?.state === "busy",

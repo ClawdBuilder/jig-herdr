@@ -39,7 +39,7 @@ headers:
   actions and the Refresh. While the followed session works, every 3 s one tiny `sh` prints only the status files'
   mtimes and sizes, and only the files that moved are read; while it is idle, nothing but events and the `refreshSeconds`
   backstop (60 s by default, never under 15). Reads pass a 20 s timeout, network calls 60 s, and Herdr's deadline is 5 s later (up to 600 s on 0.1.14+). On the machine (config `machine`, else the shown space's machine); for listed outputs of an older
-  status file one `git rev-parse`/`git status` script when the list changes and every 30 s; pull requests through `gh`,
+  status file one `git rev-parse`/`git status` script when the list changes and twice a minute; pull requests through `gh`,
   cached 5 minutes per ticket in `localStorage`. Background runs are silent; a clicked refresh shows its busy state only
   after 400 ms and queues one more click instead of blocking.
 - **Opens:** links with this computer's browser (`explorer.exe`, `open` or `xdg-open`); files with `tab.new` and `jig-file-view`;
