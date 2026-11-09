@@ -24,7 +24,7 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
   padding with an 8 px gap: the terminals, and the side panel.
 - **Terminals** as cards: radius 10, 8 px gap, 1 px `border`, a 1 px `accent` border on the focused one, and a 30 px header
   (`pane`) always shown. A single terminal is framed too (`lone: true`).
-- **Side panel, 420 px (300 to 900),** a row of a stack and a bar. The stack shows one panel: Jig · Work, Changes, History,
+- **Side panel, 420 px (300 to 900),** a row of a stack and a bar. The stack shows one panel: Jig · Work, Git, History,
   PR & CI, Worktrees or Files. Work is the one shown first.
 - **Icon bar, 40 px,** background `chrome`, a 1 px `border` on its left. One 18 px icon for each panel, 40 px square, with a
   2 px `accent` bar on the left of the active one and the `foreground` colour; the others are `dim`. The Jig icon and the
@@ -44,8 +44,9 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
   `ansi6`, System prompt `foreground`, Skills `ansi5`, Context files `ansi3`, Compaction buffer `dim`, Free space `raised`.
   Under it the last answer (`✓` in `done`, `✗` in `blocked`), then folded sections `▸ TOOLS N of M on`, `▸ SKILLS N` and `▸
   CONTEXT FILES N`: 24 px rows with the name, the size and a 28×16 switch (`accent` when on, a 10 px knob).
-- **Changes panel.** A 42 px header with the folder's name (full path on hover), a `Terminal`/`Space` toggle, `N repos ·
-  M changed` (with the worktree count when there is room), a fetch-everything icon and a refresh icon; a filter box; then a
+- **Git panel.** A 42 px header with the folder's name (full path on hover), a `Terminal`/`Space` toggle, a fold-all
+  chevron, a fetch-everything icon and a refresh icon; a muted body line under it carries `N repos · M changed` (with the
+  worktree count when there is room); a filter box; then a
   one line for each checkout with changes (its name, a branch chip with an icon, the parent folder only on a name clash, a `2 vs main` chip
   when the branch has commits its base lacks, `↑` ahead in `foreground`, `↓` behind in `blocked`, then pull and push/publish
   icons, and a count in a small outlined box), and under it its linked worktrees as `↳ <folder>` rows, indented 18 px,
@@ -82,7 +83,7 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
   `caffeinate -i [-d] -w <herdr pid>` on macOS, or `systemd-inhibit --what=sleep[:idle] --mode=block sh -c 'while kill -0
   <herdr pid> ...' jig-keep-awake` on Linux, started on Herdr's own computer and stopped when it is no longer wanted or Herdr
   exits; its request ends with its process.
-- **Changes.** It follows the focused terminal's folder (its checkout and linked worktrees, else the repositories below it),
+- **Git.** It follows the focused terminal's folder (its checkout and linked worktrees, else the repositories below it),
   or the space's folder when the header's toggle says `Space`; the choice is kept per space in `localStorage`, and a switch
   keeps the old rows until the new ones arrive and never clears the filter. One `sh` script on the space's machine reads
   them: every 5 seconds while the panel is shown, when it is opened, when a terminal changes status or the folder changes,
@@ -140,7 +141,7 @@ Each child of `panel-body` is a block with a `title` and a mod, and its `content
 | ------------- | ------------- | --------------- | ---------------------------------------------------------------- |
 | `jig-work`    | Jig · Work    | `jig-work`      | `mods/jig-activity/icons/jig.svg`                                |
 | `jig-context` | Jig · Context | `jig-context`   | `mods/jig-activity/icons/context.svg` (a gauge), `divider: true` |
-| `changes`     | Changes       | `jig-git`       | `mods/workspace-chrome/git-compare.svg`                          |
+| `changes`     | Git           | `jig-git`       | `mods/workspace-chrome/git-compare.svg`                          |
 | `history`     | History       | `jig-history`   | `mods/workspace-chrome/clock.svg`                                |
 | `pr`          | PR & CI       | `jig-prs`       | `mods/jig-activity/icons/pr.svg`                                 |
 | `worktrees`   | Worktrees     | `jig-worktrees` | `mods/jig-activity/icons/worktree.svg`                           |
@@ -246,8 +247,8 @@ Work panel needs Jig's Pi plugin `jig-session` loaded in Pi: it writes the statu
 - `herdr-app check mods/<name>` passes for each of the twelve mods, and `herdr-app status` shows no `errors` after
   `layout.switch {"name":"jig"}`.
 - The sidebar shows Herdr's spaces and agents lists, the terminals are cards, and the right panel shows the icon bar with the
-  Changes icon active and a badge equal to the number of checkouts with changes.
-- With a space whose folder holds several git repositories, the Changes panel lists all of them, changed ones first, with
+  Git icon active and a badge equal to the number of checkouts with changes.
+- With a space whose folder holds several git repositories, the Git panel lists all of them, changed ones first, with
   branch and counts; editing a file in one shows it within 5 seconds. A terminal `cd`ed into one repository lists that one
   (the header's toggle back to `Space` lists the space's folder again), and a branch one commit ahead of its upstream shows
   `↑1`; the push icon opens the confirm with that commit and the destination it names, and Cancel sends nothing. With

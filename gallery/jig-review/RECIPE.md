@@ -22,7 +22,7 @@ Unstage and Discard are per file; Discard asks inline. A second request for the 
 
 **Built from:**
 
-`main.js` + `lib.js`; no `refresh.js` and no `config.json`. Props: `{ on, repo, name, file?, mode? }`. Herdr: `exec`, `run`,
+`main.js` + `lib.js` + `refresh.js` (the shared header, runner and `GIT_READ`); no `config.json`. Props: `{ on, repo, name, file?, mode? }`. Herdr: `exec`, `run`,
 `tab.new`, `shared`/`setShared`, `appHome`, `readTextFile`, `theme`, `layout`, `panes`, `spaces`, `Editor`/`TextView` from
 `gpui-base`. Shared key `jig-review.open`; localStorage stores divider width, pane choice and wrap. Base candidates, in order:
 `origin/develop`, the remote HEAD branch, `origin/main`, `origin/master`, `develop`, `main`, `master`.
@@ -32,7 +32,7 @@ Programs: `git` — `diff`, `show`, `status`, `rev-parse`, `add`, `restore --sta
 the repository's `.git` and working tree. Writes: stage, unstage, discard. No commit, fetch or push.
 
 **Header:** all git panels use one 42 px shared header: title, optional Terminal/Space switch, and a refresh icon whose
-tooltip says `Refresh · read N ago` (`Refresh` before the first read, `Reading…` while busy). Repos, History, PR & CI and
+tooltip says `Refresh · read N ago` (`Refresh` before the first read, `Reading…` while busy). Git, History, PR & CI and
 Worktrees show the switch; Review has title and Refresh only. An error line sits under the header, above the kept rows.
 
 **Watch out:**

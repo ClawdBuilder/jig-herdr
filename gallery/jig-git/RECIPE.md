@@ -6,7 +6,9 @@ Git for every repo in the focused space's folder: stage, commit, push, fetch and
 
 **What you see:**
 
-A header with the branch chip, the folder, and a refresh button; a commit message box with **Commit** and **Commit & Push**;
+A 42 px header with the folder's name (the full path on hover), the **Terminal**/**Space** switch, fold-all, fetch-all and
+Refresh; a muted body line under it carries the repo count and changed-file summary. A commit message box with **Commit**
+and **Commit & Push**;
 **Fetch** and **Pull** buttons; a list of checkouts, each with a fold arrow, name, branch, ahead/behind chips and a count of
 changed files; a **↳ <folder>** row for each linked worktree under its main checkout. A file row has a status letter
 (`A`, `M`, `D`, `R`, `U`, `??`) in a theme colour (added `ansi2`, deleted/conflict `ansi1`, renamed `ansi5`, modified
