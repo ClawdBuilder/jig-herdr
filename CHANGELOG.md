@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Listing titles now match what the layout shows: `Files`, `File view` and `Activity bar` for the generic mods;
+  `Jig work` and `Jig theme sync` for the Jig-only ones. The package description lists the full panel set.
+
+
 ### Fixed
 
 - The Git and History branch pickers draw local branches first and keep origin-only rows behind the search field, with a
