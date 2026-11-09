@@ -31,18 +31,18 @@ function quoteOne(value) {
 }
 
 /** The shell wrapper: the caller's variables, then timeout/gtimeout, then the command. */
-function runnerScript(env) {
+function runnerScript(env, seconds) {
     const exports = Object.entries({ GIT_TERMINAL_PROMPT: "0", GH_PROMPT_DISABLED: "1", ...(env ?? {}) })
         .filter(([key]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key))
         .map(([key, value]) => `export ${key}=${quoteOne(value)}`)
         .join("; ");
-    return `${exports}; if command -v timeout >/dev/null 2>&1; then exec timeout ${"$"}{SECONDS} "$@"; elif command -v gtimeout >/dev/null 2>&1; then exec gtimeout ${"$"}{SECONDS} "$@"; fi; exec "$@"`;
+    return `${exports}; if command -v timeout >/dev/null 2>&1; then exec timeout ${seconds} "$@"; elif command -v gtimeout >/dev/null 2>&1; then exec gtimeout ${seconds} "$@"; fi; exec "$@"`;
 }
 
 /** Run one command for a panel. Herdr gets a deadline after the shell's own, and a timeout is returned as code 124. */
 export async function run(exec, cmd, args, { cwd, on, seconds = 20, env } = {}) {
     const budget = execBudget(seconds * 1000);
-    const script = runnerScript(env).replaceAll("${SECONDS}", String(budget.shellSeconds));
+    const script = runnerScript(env, budget.shellSeconds);
     try {
         const result = await exec("sh", ["-c", script, "sh", cmd, ...args], {
             cwd,

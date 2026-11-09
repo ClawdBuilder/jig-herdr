@@ -46,14 +46,14 @@ import {
 } from "./lib.js";
 import {
     focusRegained,
+    friendlyError,
+    GIT_READ,
+    parseRefreshConfig,
     RefreshScheduler,
     RefreshState,
     refreshSeconds,
-    terminalFinished,
-    friendlyError,
-    parseRefreshConfig,
-    GIT_READ,
     run as runCommand,
+    terminalFinished,
 } from "./refresh.js";
 
 const onScreen = () => isOnScreen(layout(), "jig-history");

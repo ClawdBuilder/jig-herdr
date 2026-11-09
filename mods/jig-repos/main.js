@@ -83,6 +83,7 @@ import { BranchPicker, DONE } from "./picker.js";
 import { PushConfirm } from "./push.js";
 import {
     focusRegained,
+    friendlyError,
     RefreshScheduler,
     RefreshState,
     refreshSeconds,

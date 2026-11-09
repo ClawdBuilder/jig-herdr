@@ -62,7 +62,7 @@ without leaving the window. ![Changes](preview.png)
   commits from anywhere in the box, and `Commit & Push` commits and then opens the push confirm.
 - **A click** on a file opens it in a Review tab (another mod, `jig-review`, if installed); on a row with no changed file
   it opens that branch's review. The branch chip opens the branch picker.
-- **Empty states say what to do**: `Not a git repository here — cd into one, or list the space's folder.` with a
+- **Empty states say what to do**: `No git repo in this folder. Open a terminal in one, or switch to Space.` with a
   `Use Space folder` button, `No git repository under this folder — …`, and `No checkout or file matches.` for a filter.
 
 ## Built from
@@ -112,7 +112,7 @@ without leaving the window. ![Changes](preview.png)
   worktrees do not nest.
 - **Network commands longer than 30 seconds need Herdr 0.1.14 or newer.** The network wrapper gives Herdr an `exec`
   timeout 5 seconds past the shell's own (clamped so a 600-second setting runs the shell for 595 seconds and Herdr for
-  600); the shell watchdog therefore fires first, exits 124 and the dialog shows "Timed out after N s". Older Herdr
+  600); the shell watchdog therefore fires first, exits 124 and the dialog says "Push took too long and was stopped (N s)." Older Herdr
   ignores `exec`'s `timeout` option and still cuts at 30 seconds, so it cannot honour a longer setting. Without `timeout`
   (macOS), the wrapper's own `sleep`/`kill` watchdog exits 124 the same way.
 - **A push's destination is git's, not the branch's**: `branch.<b>.pushRemote` and `remote.pushDefault` can send it to

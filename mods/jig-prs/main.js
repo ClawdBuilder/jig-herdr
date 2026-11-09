@@ -45,9 +45,10 @@ import {
 } from "./lib.js";
 import {
     focusRegained,
+    friendlyError,
+    parseRefreshConfig,
     RefreshScheduler,
     RefreshState,
-    parseRefreshConfig,
     refreshSeconds,
     run as runCommand,
     terminalFinished,

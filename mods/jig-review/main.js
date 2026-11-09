@@ -26,7 +26,6 @@ import {
 } from "gpui-base";
 import { div, svg, View } from "gpui-kit";
 import { exec, props as modProps, panes, readTextFile, settings, shared, spaces, theme } from "herdr";
-import { GIT_READ, run as runCommand } from "./refresh.js";
 import {
     branchFiles,
     canWrite,
@@ -49,6 +48,7 @@ import {
     stageFile,
     unstageFile,
 } from "./lib.js";
+import { GIT_READ, run as runCommand } from "./refresh.js";
 
 const EVERY = 5000; // re-list the files this often while the tab is shown
 const BASE_EVERY = 60000; // find the base branch again this often even when HEAD stays (origin may have been fetched)
