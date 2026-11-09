@@ -27,7 +27,7 @@ function temp(t: TestContext): string {
     return dir;
 }
 const sh = (script: string, ...args: string[]) =>
-    execFileSync("sh", ["-c", script, "sh", ...args], { encoding: "utf8" });
+    execFileSync("sh", ["-c", script, "sh", ...args], { timeout: 30_000, encoding: "utf8" });
 
 test("1: a filtered Files search runs once per change, not on every tick", async () => {
     const files = await load<Files>("mods/jig-files/lib.js");

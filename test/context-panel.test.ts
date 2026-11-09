@@ -76,7 +76,7 @@ test("jig-context finds sessions as jig-work does: the same script and the same 
         JSON.stringify(status("a", { terminal: "t1", terminalFrom: "HC_TERMINAL_ID" })),
     );
     writeFileSync(path.join(dir, "b.json"), JSON.stringify(status("b", { updatedAt: "2026-01-01T00:00:09Z" })));
-    const out = execFileSync("sh", ["-c", ctx.SCRIPT, "sh", root], { encoding: "utf8" });
+    const out = execFileSync("sh", ["-c", ctx.SCRIPT, "sh", root], { timeout: 30_000, encoding: "utf8" });
     const sessions = ctx.parseSessions(out);
     assert.deepEqual(sessions, work.parseSessions(out));
     for (const o of [{ focused: "t1" }, { focused: "t9" }, { machine: "box", focused: "box/t1" }, {}]) {

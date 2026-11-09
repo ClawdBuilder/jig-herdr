@@ -36,7 +36,7 @@ test("listDirectory lists a real temp folder, with no view bound to it", async (
     const lib = await load<Lib>("mods/jig-files/lib.js");
     const run = async (cmd: string, args: string[]) => {
         try {
-            return { code: 0, stdout: execFileSync(cmd, args, { encoding: "utf8" }), stderr: "" };
+            return { code: 0, stdout: execFileSync(cmd, args, { timeout: 30_000, encoding: "utf8" }), stderr: "" };
         } catch (e) {
             const err = e as { status?: number; stdout?: string; stderr?: string };
             return { code: err.status ?? 1, stdout: err.stdout ?? "", stderr: String(err.stderr ?? e) };
@@ -55,7 +55,7 @@ test("listDirectory lists a real temp folder, with no view bound to it", async (
 test("the filter's find has a short timeout inside its script", async () => {
     const lib = await load<Lib>("mods/jig-files/lib.js");
     assert.match(lib.FIND, /timeout 10 find/);
-    execFileSync("sh", ["-n", "-c", lib.FIND], { encoding: "utf8" });
+    execFileSync("sh", ["-n", "-c", lib.FIND], { timeout: 30_000, encoding: "utf8" });
 });
 
 test("the find script runs when timeout and gtimeout are absent", async (t) => {
@@ -67,6 +67,7 @@ test("the find script runs when timeout and gtimeout are absent", async (t) => {
     writeFileSync(path.join(root, "kept.txt"), "x");
     const lib = await load<Lib>("mods/jig-files/lib.js");
     const output = execFileSync("/bin/sh", ["-c", lib.FIND, "sh", root], {
+        timeout: 30_000,
         encoding: "utf8",
         env: { ...process.env, PATH: bin },
     });

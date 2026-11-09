@@ -15,12 +15,18 @@ test("check-gallery refuses a stray top-level file and a malformed recipe", () =
         buildShare(out);
         writeFileSync(path.join(out, "stray.txt"), "x");
         assert.throws(() =>
-            execFileSync(process.execPath, [path.join(root, "scripts", "check-gallery.mjs"), out], { stdio: "pipe" }),
+            execFileSync(process.execPath, [path.join(root, "scripts", "check-gallery.mjs"), out], {
+                timeout: 30_000,
+                stdio: "pipe",
+            }),
         );
         rmSync(path.join(out, "stray.txt"));
         writeFileSync(path.join(out, "jig-git", "RECIPE.md"), "# Git\n\nTODO\n");
         assert.throws(() =>
-            execFileSync(process.execPath, [path.join(root, "scripts", "check-gallery.mjs"), out], { stdio: "pipe" }),
+            execFileSync(process.execPath, [path.join(root, "scripts", "check-gallery.mjs"), out], {
+                timeout: 30_000,
+                stdio: "pipe",
+            }),
         );
     } finally {
         rmSync(out, { recursive: true, force: true });
@@ -31,9 +37,13 @@ test("check-gallery lets placeholders pass in development and refuses them with 
     const out = mkdtempSync(path.join(tmpdir(), "jig-gallery-placeholder-"));
     try {
         buildShare(out);
-        execFileSync(process.execPath, [path.join(root, "scripts", "check-gallery.mjs"), out], { stdio: "pipe" });
+        execFileSync(process.execPath, [path.join(root, "scripts", "check-gallery.mjs"), out], {
+            timeout: 30_000,
+            stdio: "pipe",
+        });
         assert.throws(() =>
             execFileSync(process.execPath, [path.join(root, "scripts", "check-gallery.mjs"), out, "--publish"], {
+                timeout: 30_000,
                 stdio: "pipe",
             }),
         );

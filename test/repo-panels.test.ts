@@ -13,6 +13,7 @@ type Lib = Record<string, any>;
 
 const git = (cwd: string, ...args: string[]) =>
     execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", ...args], {
+        timeout: 30_000,
         cwd,
         encoding: "utf8",
     }).trim();
@@ -42,7 +43,7 @@ const commitFile = (dir: string, file: string, message: string) => {
 };
 
 const runScript = (script: string, root: string) =>
-    execFileSync("sh", ["-c", script, "sh", root], { encoding: "utf8" });
+    execFileSync("sh", ["-c", script, "sh", root], { timeout: 30_000, encoding: "utf8" });
 
 // ---- the three panels share how they see the layout ----
 

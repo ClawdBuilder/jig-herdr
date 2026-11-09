@@ -26,7 +26,7 @@ function run(log: string, list?: string, text?: string): { status: number; outpu
         try {
             return {
                 status: 0,
-                output: execFileSync(process.execPath, [script], { encoding: "utf8", env }),
+                output: execFileSync(process.execPath, [script], { timeout: 30_000, encoding: "utf8", env }),
             };
         } catch (error) {
             const failed = error as { status?: number; stdout?: string; stderr?: string };

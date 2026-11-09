@@ -38,13 +38,14 @@ const exec: Exec = (cmd, args, opts) =>
     new Promise((resolve) => {
         ran.push([cmd, ...args]);
         calls.push({ argv: [cmd, ...args], options: opts });
-        execFile(cmd, args, { cwd: opts?.cwd, encoding: "utf8" }, (error, stdout, stderr) => {
+        execFile(cmd, args, { cwd: opts?.cwd, encoding: "utf8", timeout: 30_000 }, (error, stdout, stderr) => {
             const code = error ? (typeof error.code === "number" ? error.code : 1) : 0;
             resolve({ code, stdout, stderr });
         });
     });
 
-const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+const git = (cwd: string, ...args: string[]) =>
+    execFileSync("git", args, { timeout: 30_000, cwd, encoding: "utf8" }).trim();
 
 function scratch(t: { after(fn: () => void): void }): string {
     const dir = mkdtempSync(path.join(tmpdir(), "jig-herdr-actions-"));
@@ -73,7 +74,7 @@ function cloned(root: string): { origin: string; repo: string } {
 const branchOf = (dir: string) => git(dir, "symbolic-ref", "--short", "HEAD");
 /** `git status --porcelain`, keeping the leading space of a first " M" line. */
 const porcelain = (dir: string) =>
-    execFileSync("git", ["status", "--porcelain"], { cwd: dir, encoding: "utf8" }).replace(/\n$/, "");
+    execFileSync("git", ["status", "--porcelain"], { timeout: 30_000, cwd: dir, encoding: "utf8" }).replace(/\n$/, "");
 
 test("checkouts nest under their main repository; a worktree whose main is outside the root stands alone", async (t) => {
     const { SCRIPT, parseRepos, groupRepos, isClean, checkoutsOf, filterGroups } =
@@ -94,7 +95,10 @@ test("checkouts nest under their main repository; a worktree whose main is outsi
     git(path.join(outside, "docs-site"), "commit", "-q", "--allow-empty", "-m", "first");
     git(path.join(outside, "docs-site"), "worktree", "add", "-q", "-b", "fix/typo", path.join(root, "docs-typo"));
 
-    const repos = parseRepos(execFileSync("sh", ["-c", SCRIPT, "sh", root], { encoding: "utf8" }), root);
+    const repos = parseRepos(
+        execFileSync("sh", ["-c", SCRIPT, "sh", root], { timeout: 30_000, encoding: "utf8" }),
+        root,
+    );
     const groups = groupRepos(repos);
     const shape = groups.map((g: any) => [g.main.name, g.main.linked, g.worktrees.map((w: any) => w.name)]);
     assert.deepEqual(
@@ -127,10 +131,13 @@ test("checkouts nest under their main repository; a worktree whose main is outsi
     );
 
     // Inside the main checkout: it and its worktrees. Inside a worktree: that worktree.
-    const inMain = parseRepos(execFileSync("sh", ["-c", SCRIPT, "sh", repo], { encoding: "utf8" }), repo);
+    const inMain = parseRepos(
+        execFileSync("sh", ["-c", SCRIPT, "sh", repo], { timeout: 30_000, encoding: "utf8" }),
+        repo,
+    );
     assert.equal(inMain.length, 3);
     const inTree = parseRepos(
-        execFileSync("sh", ["-c", SCRIPT, "sh", path.join(root, "docs-typo")], { encoding: "utf8" }),
+        execFileSync("sh", ["-c", SCRIPT, "sh", path.join(root, "docs-typo")], { timeout: 30_000, encoding: "utf8" }),
         root,
     );
     assert.deepEqual(
@@ -626,7 +633,10 @@ test("the scan tells a checkout's upstream, remote and last commit, and a gone u
     const root = scratch(t);
     const { repo } = cloned(root);
     writeCommit(repo, "app.ts", "fix(app): keep the last commit");
-    const [read] = parseRepos(execFileSync("sh", ["-c", SCRIPT, "sh", repo], { encoding: "utf8" }), repo);
+    const [read] = parseRepos(
+        execFileSync("sh", ["-c", SCRIPT, "sh", repo], { timeout: 30_000, encoding: "utf8" }),
+        repo,
+    );
     assert.deepEqual([read.upstream, read.detached, read.remote], ["origin/main", false, "origin"]);
     assert.deepEqual(
         [read.head.hash, read.head.subject],
@@ -635,7 +645,10 @@ test("the scan tells a checkout's upstream, remote and last commit, and a gone u
     assert.ok(read.head.at > Date.now() - 120000 && read.head.at <= Date.now(), "the commit's own time");
 
     git(repo, "checkout", "-q", "--detach", "HEAD");
-    const [detached] = parseRepos(execFileSync("sh", ["-c", SCRIPT, "sh", repo], { encoding: "utf8" }), repo);
+    const [detached] = parseRepos(
+        execFileSync("sh", ["-c", SCRIPT, "sh", repo], { timeout: 30_000, encoding: "utf8" }),
+        repo,
+    );
     assert.deepEqual([detached.branch, detached.detached, detached.upstream], ["(detached)", true, null]);
 
     const [gone] = parseRepos(
@@ -830,14 +843,17 @@ test("without `timeout`, the wrapper still stops a slow command and exits 124", 
     const bin = path.join(root, "bin");
     mkdirSync(bin);
     for (const name of ["sleep", "date", "pkill", "rm", "git"]) {
-        const pathOf = execFileSync("/bin/sh", ["-c", `command -v ${name}`], { encoding: "utf8" }).trim();
+        const pathOf = execFileSync("/bin/sh", ["-c", `command -v ${name}`], {
+            timeout: 30_000,
+            encoding: "utf8",
+        }).trim();
         symlinkSync(pathOf, path.join(bin, name));
     }
     // A real git for the wrapper's core.sshCommand check: this repository sets one, so BatchMode is not added.
     const repo = path.join(root, "repo");
     mkdirSync(repo);
     const git = (...args: string[]) =>
-        execFileSync("git", ["-c", "user.name=T", "-c", "user.email=t@e", ...args], { cwd: repo });
+        execFileSync("git", ["-c", "user.name=T", "-c", "user.email=t@e", ...args], { timeout: 30_000, cwd: repo });
     git("init", "-q", "-b", "main");
     git("config", "core.sshCommand", "ssh -i /tmp/repo-key");
     const script = wrapperScript({}, 1000);
@@ -854,6 +870,7 @@ test("without `timeout`, the wrapper still stops a slow command and exits 124", 
     );
     const started = Date.now();
     const slow = spawnSync("/bin/sh", ["-c", script, "sh", "/bin/sh", "-c", "sleep 5"], {
+        timeout: 30_000,
         cwd: repo,
         env: { PATH: bin, HOME: process.env.HOME ?? "/tmp", TMPDIR: root },
         encoding: "utf8",
@@ -866,6 +883,7 @@ test("without `timeout`, the wrapper still stops a slow command and exits 124", 
         "no flag left",
     );
     const fast = spawnSync("/bin/sh", ["-c", script, "sh", "/bin/sh", "-c", "sleep 5"], {
+        timeout: 30_000,
         cwd: repo,
         env: process.env,
         encoding: "utf8",
@@ -1198,7 +1216,8 @@ const commitIn = (dir: string, file: string, text = "x\n") => {
     gitc(dir, "add", "-A");
     gitc(dir, "commit", "-qm", `add ${file}`);
 };
-const scanRoot = (script: string, root: string) => execFileSync("sh", ["-c", script, "sh", root], { encoding: "utf8" });
+const scanRoot = (script: string, root: string) =>
+    execFileSync("sh", ["-c", script, "sh", root], { timeout: 30_000, encoding: "utf8" });
 
 /** A repository with no remote, one commit on `first` and the other branches made from it. */
 function plain(root: string, name: string, first: string, ...others: string[]): string {
