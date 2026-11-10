@@ -680,8 +680,16 @@ git -C "$1" for-each-ref --format='%(refname)%09%(worktreepath)' refs/heads refs
 printf '@@originhead %s\\n' "$(git -C "$1" symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null)"
 git -C "$1" show-ref --verify -q refs/remotes/origin/main && printf '@@has-main\\n'
 git -C "$1" show-ref --verify -q refs/remotes/origin/master && printf '@@has-master\\n'
-printf '@@dirty %s\\n' "$(git -C "$1" --no-optional-locks -c core.fsmonitor=false status --porcelain 2>/dev/null | awk 'END { print NR }')"
-if [ -n "\${2-}" ]; then git -C "$1" check-ref-format --branch "$2" >/dev/null 2>&1 && printf '@@valid-name\\n' || printf '@@invalid-name\\n'; fi`;
+status_out=$(git -C "$1" --no-optional-locks -c core.fsmonitor=false status --porcelain 2>/dev/null)
+status_code=$?
+printf '@@dirty %s\\n' "$(printf '%s\\n' "$status_out" | awk 'NF { n++ } END { print n + 0 }')"
+[ "$status_code" -eq 0 ] || printf '@@status-error\\n'
+if [ -n "\${2-}" ]; then
+  checked=$(git -C "$1" check-ref-format --branch "$2" 2>/dev/null)
+  checked_code=$?
+  printf '@@checked-name %s\\n' "$checked"
+  [ "$checked_code" -eq 0 ] && [ "$checked" = "$2" ] && printf '@@valid-name\\n' || printf '@@invalid-name\\n'
+fi`;
 
 /** The one-exec read as one state object, including the list `listBranches` used to build. */
 export function parseBranchState(stdout) {
@@ -715,6 +723,8 @@ export function parseBranchState(stdout) {
         hasMain: lines.includes("@@has-main"),
         hasMaster: lines.includes("@@has-master"),
         dirty: Number(one("dirty")) || 0,
+        statusError: lines.includes("@@status-error"),
+        checkedName: one("checked-name"),
         validName: lines.includes("@@valid-name"),
         invalidName: lines.includes("@@invalid-name"),
         branches: [
@@ -747,10 +757,22 @@ export function baseFromState(state, config = {}) {
     return "main";
 }
 
+/** Name refusals that need no git call. */
+export function branchNameRefusal(name) {
+    if (!String(name ?? "").trim()) return "Give the branch a name.";
+    if (name.startsWith("-") || name.startsWith("+") || name.includes("@{") || name === "HEAD")
+        return `"${name}" is not a valid branch name.`;
+    return null;
+}
+
 /** One switch precheck: the branch list, name validity and dirty state from one exec. */
 export async function readSwitchState(exec, checkout, branch) {
+    const bad = branchNameRefusal(branch);
+    if (bad) return { ok: false, message: bad, branches: [] };
     const state = await readBranchState(exec, checkout, branch);
     if (!state.ok) return state;
+    if (state.statusError)
+        return { ...state, ok: false, message: "Cannot read the checkout's status: git status failed." };
     if (state.invalidName) return { ...state, ok: false, message: `"${branch}" is not a valid branch name.` };
     const target = state.branches.find((b) => b.name === branch);
     if (!target) return { ...state, ok: false, message: `No branch ${branch} here or on origin.` };

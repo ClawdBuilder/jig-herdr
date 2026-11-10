@@ -12,6 +12,7 @@ import {
     PICKER_ROW_CAP,
     readBranchState,
     readSwitchState,
+    switchBranch,
     switchRefusal,
     visibleBranches,
 } from "../mods/jig-git/lib.js";
@@ -75,4 +76,27 @@ test("the picker caps 1,000 origin matches at 50 rows", () => {
     assert.equal(visibleBranches(branches, "thing").length, 1000);
     assert.equal(cappedBranches(branches, "thing").length, PICKER_ROW_CAP);
     assert.equal(PICKER_ROW_CAP, 50);
+});
+
+test("switch precheck refuses names, dirty trees and unreadable status without reaching git switch", async (t) => {
+    const dir = fixture(t);
+    const run = realExec({ n: 0 });
+    for (const name of ["", "-f", "+x", "@{-1}", "HEAD", "a..b"]) {
+        const r = await readSwitchState(run, dir, name);
+        assert.equal(r.ok, false, name);
+    }
+    writeFileSync(path.join(dir, "dirty.txt"), "x");
+    const dirty = await readSwitchState(run, dir, "local-0");
+    assert.equal(dirty.ok, false);
+    assert.match(dirty.message, /uncommitted/);
+    writeFileSync(path.join(dir, ".git/index"), "not an index");
+    const broken = await readSwitchState(run, dir, "local-0");
+    assert.equal(broken.ok, false);
+    assert.match(broken.message, /Cannot read the checkout's status/);
+    const busy = await switchBranch(run, {
+        checkout: dir,
+        branch: "local-0",
+        busy: [{ name: "A", status: "working", cwd: dir }],
+    });
+    assert.equal(busy.ok, false);
 });
