@@ -70,6 +70,7 @@ import {
     rowActions,
     rowName,
     SCRIPT,
+    shouldFoldClean,
     showsCommit,
     splitPath,
     stageAll,
@@ -81,7 +82,6 @@ import {
     withFold,
     withLock,
     withoutLock,
-    shouldFoldClean,
     worktreeSignal,
 } from "./lib.js";
 import { panelError, panelHeader } from "./panel-header.js";
