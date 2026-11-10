@@ -229,4 +229,3 @@ export function moveActive(ids, active, delta) {
     if (at < 0) return ids[delta < 0 ? ids.length - 1 : 0];
     return ids[(at + delta + ids.length) % ids.length];
 }
-

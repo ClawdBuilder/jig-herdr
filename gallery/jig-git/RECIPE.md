@@ -6,7 +6,7 @@ Git for every repo in the focused space's folder: stage, commit, push, fetch and
 
 **What you see:**
 
-A 42 px header with the folder's name (the full path on hover), fold-all (when more than one repo group exists),
+A 42 px header titled **Git**, with fold-all (when more than one repo group exists),
 fetch-all (when a checkout has a remote) and Refresh. A 32 px context card under it names the folder, toggles
 **Terminal**/**Space**, and carries the machine name. A muted body line carries the repo count and changed-file summary.
 The list is grouped **Needs you**, **Changed**, **Ahead or behind** and **Clean**, each with its count and batch action;

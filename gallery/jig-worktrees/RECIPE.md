@@ -7,8 +7,8 @@ ones. From Jig (https://github.com/ClawdBuilder/jig). No Jig required.
 
 **What you see:**
 
-A 42 px header titled with the worktree count (`15 worktrees`, `1 worktree`, or `Worktrees` before the first read; the
-full repo · count is the tooltip), **Prune merged (N)** when N ready rows exist, and Refresh. A 32 px context card under
+A 42 px header titled **Worktrees** (the worktree count is the tooltip), **Prune merged (N)** when N ready rows exist,
+and Refresh. A 32 px context card under
 it names the folder, toggles **Terminal**/**Space**, and carries the machine name. Rows are grouped **Ready to remove**,
 **In progress**, and **Main checkout** last, each with its count: name, branch, head, base, last commit, status, and the
 reason (`merged into base`, `remote branch deleted`, uncommitted changes, locked, an agent working). A row's `⋯` menu

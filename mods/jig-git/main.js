@@ -81,7 +81,17 @@ import {
     worktreeSignal,
 } from "./lib.js";
 import { panelError, panelHeader } from "./panel-header.js";
-import { contextCard, emptyLine, footer, groupHeader, secondaryButton, statusLine } from "./panel-kit.js";
+import {
+    contextCard,
+    dangerButton,
+    emptyLine,
+    footer,
+    groupHeader,
+    primaryButton,
+    row,
+    secondaryButton,
+    statusLine,
+} from "./panel-kit.js";
 import { BranchPicker, DONE } from "./picker.js";
 import { PushConfirm } from "./push.js";
 import {
