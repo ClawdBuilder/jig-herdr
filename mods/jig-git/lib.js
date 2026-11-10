@@ -186,7 +186,7 @@ export function parseRepos(stdout, root) {
             folder,
             common,
             linked: Boolean(common && own && common !== own),
-            worktreeOf: common && own && common !== own ? common.replace(/\/\.git\/?$/, "") : null,
+            worktreeOf: common && own && common !== own ? common.replace(/[\\/]\.git[\\/]?$/, "") : null,
             branch: "?",
             detached: false,
             upstream: null,
