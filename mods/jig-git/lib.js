@@ -1345,6 +1345,9 @@ export function contextKeyOf(loc) {
 }
 
 /** What to draw for the shown context: last rows only when the landed read belongs to that same context. */
-export function viewForContext(shownKey, readKey, repos) {
-    return shownKey === readKey ? { rows: repos ?? [], pending: false } : { rows: [], pending: true };
+export function viewForContext(shownKey, readKey, repos, { error = null, noFolder = false } = {}) {
+    if (noFolder) return { rows: [], pending: false, noFolder: true };
+    if (error) return { rows: shownKey === readKey ? (repos ?? []) : [], pending: false, error: true };
+    if (shownKey !== readKey) return { rows: [], pending: true };
+    return { rows: repos ?? [], pending: false };
 }

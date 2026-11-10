@@ -293,8 +293,8 @@ export default class RepoChanges extends View {
         const loc = location(this.follow),
             context = contextKeyOf(loc);
         if (context !== this.context) {
-            // Another terminal, a `cd`, another space or the other mode. The rows on screen stay until the new ones
-            // arrive, so nothing blinks; everything that belongs to the old folder is forgotten now.
+            // Another terminal, a `cd`, another space or the other mode. The old rows are dropped at once and the panel
+            // shows its skeleton until the read for this context lands; everything belonging to the old folder is forgotten.
             this.context = context;
             this.view = null;
             this.loaded = false;
@@ -1554,7 +1554,11 @@ export default class RepoChanges extends View {
 
     // The list: checkout groups, with a worktree indented under its main row.
     list(t) {
-        if (viewForContext(this.context, this.loadedContext, this.repos).pending) return [skeleton(t)];
+        const context = viewForContext(this.context, this.loadedContext, this.repos, {
+            error: this.error,
+            noFolder: !this.loc?.root,
+        });
+        if (context.pending) return [skeleton(t)];
         if (!this.view) this.rebuildView();
         const groups = this.view.groups,
             states = this.view.states,

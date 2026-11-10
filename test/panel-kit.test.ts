@@ -104,6 +104,14 @@ test("a changed context shows the skeleton; same-key refreshes keep rows and old
     assert.deepEqual(viewForContext("new", "old", rows), { rows: [], pending: true });
     assert.deepEqual(viewForContext("same", "same", rows), { rows, pending: false });
     assert.deepEqual(viewForContext("new", "other", rows), { rows: [], pending: true });
+    assert.deepEqual(viewForContext("new", "old", rows, { error: "boom" }), { rows: [], pending: false, error: true });
+    assert.deepEqual(viewForContext("same", "same", rows, { error: "boom" }), { rows, pending: false, error: true });
+    assert.deepEqual(viewForContext("new", "old", rows, { noFolder: true }), {
+        rows: [],
+        pending: false,
+        noFolder: true,
+    });
+    assert.deepEqual(viewForContext("same", "same", []), { rows: [], pending: false });
 });
 
 test("the context key includes machine, folder and follow mode", async () => {
