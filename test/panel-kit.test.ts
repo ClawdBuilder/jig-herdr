@@ -123,10 +123,7 @@ test("the context key includes machine, folder and follow mode", async () => {
     assert.notEqual(contextKeyOf(base), contextKeyOf({ ...base, follow: false }));
 });
 
-test("Clean folds only in a multi-repo list", async () => {
-    const { shouldFoldClean } = await load<Record<string, any>>("mods/jig-git/lib.js");
-    assert.equal(shouldFoldClean(1, false), false);
-    assert.equal(shouldFoldClean(1, true), false);
-    assert.equal(shouldFoldClean(2, false), true);
-    assert.equal(shouldFoldClean(2, true), false);
+test("a foldable group opens when it is the only group", () => {
+    const source = readFileSync(path.join(mods, "jig-git/panel-kit.js"), "utf8");
+    assert.match(source, /export function groupOpen\(open, groupCount\) \{\s*return groupCount <= 1 \|\| open;/);
 });

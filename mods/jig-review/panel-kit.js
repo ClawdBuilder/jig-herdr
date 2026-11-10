@@ -98,6 +98,11 @@ export function segmented(t, id, options, value, onPick) {
         );
 }
 
+/** A foldable group stays open when it is the only group with rows. */
+export function groupOpen(open, groupCount) {
+    return groupCount <= 1 || open;
+}
+
 export function groupHeader(t, id, label, count, color, action) {
     return h_flex()
         .id(`group-${id}`)

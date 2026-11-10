@@ -70,7 +70,6 @@ import {
     rowActions,
     rowName,
     SCRIPT,
-    shouldFoldClean,
     showsCommit,
     splitPath,
     stageAll,
@@ -91,6 +90,7 @@ import {
     emptyLine,
     footer,
     groupHeader,
+    groupOpen,
     moveActive,
     primaryButton,
     row,
@@ -1588,7 +1588,8 @@ export default class RepoChanges extends View {
         for (const [key, label, color] of specs) {
             const rows = states[key];
             if (!rows.length) continue;
-            const folded = key === "clean" && shouldFoldClean(this.repos.length, this.cleanOpen);
+            const visibleGroups = specs.filter(([id]) => states[id].length).length;
+            const folded = key === "clean" && !groupOpen(this.cleanOpen, visibleGroups);
             const one = key === "changed" && groups.length === 1;
             const action =
                 key === "changed" && one
@@ -1604,7 +1605,7 @@ export default class RepoChanges extends View {
                       )
                     : key === "ahead"
                       ? secondaryButton(t, "fetch-group", "Fetch", (cx) => this.fetchAll(cx), { h: 26 })
-                      : key === "clean" && this.repos.length > 1
+                      : key === "clean" && visibleGroups > 1
                         ? secondaryButton(
                               t,
                               "toggle-clean",

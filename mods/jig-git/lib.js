@@ -265,11 +265,6 @@ export function groupCheckouts(repos) {
     return groups;
 }
 
-/** Clean folds only in a multi-repo list; a single checkout is always shown. */
-export function shouldFoldClean(repoCount, cleanOpen) {
-    return repoCount > 1 && !cleanOpen;
-}
-
 /** The row's detail line: why it is in its group, then the file count. */
 export function checkoutDetail(repo) {
     const hasNew = Boolean(repo.ahead || repo.behind || (repo.base?.count ?? 0) > 0);
