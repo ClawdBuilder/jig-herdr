@@ -124,8 +124,8 @@ test("Review stacks and splits its toolbar at the side-panel widths", async () =
     const { reviewLayout } = await load<Lib>("mods/jig-review/lib.js");
     assert.deepEqual(reviewLayout(0), { stacked: false, toolbarRows: false, listHeight: 240 });
     assert.equal(reviewLayout(379).stacked, true);
-    assert.equal(reviewLayout(479).toolbarRows, true);
-    assert.equal(reviewLayout(480).toolbarRows, false);
+    for (const width of [320, 360, 440, 520, 639]) assert.equal(reviewLayout(width).toolbarRows, true, `${width}`);
+    assert.equal(reviewLayout(640).toolbarRows, false);
     assert.equal(reviewLayout(639).stacked, true);
     assert.equal(reviewLayout(640).stacked, false);
 });
