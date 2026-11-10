@@ -672,6 +672,100 @@ export async function listBranches(exec, checkout) {
     return { ok: true, message: "", current, branches };
 }
 
+/** One exec for everything the picker and a switch need: top, current, refs, origin HEAD, main/master, dirty count. */
+export const BRANCH_SCRIPT = `root=$(git -C "$1" rev-parse --show-toplevel 2>/dev/null) || { printf '@@error\\n'; exit 0; }
+printf '@@top %s\\n' "$root"
+printf '@@current %s\\n' "$(git -C "$1" symbolic-ref -q --short HEAD 2>/dev/null)"
+git -C "$1" for-each-ref --format='%(refname)%09%(worktreepath)' refs/heads refs/remotes/origin 2>/dev/null | while IFS= read -r line; do printf '@@ref %s\\n' "$line"; done
+printf '@@originhead %s\\n' "$(git -C "$1" symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null)"
+git -C "$1" show-ref --verify -q refs/remotes/origin/main && printf '@@has-main\\n'
+git -C "$1" show-ref --verify -q refs/remotes/origin/master && printf '@@has-master\\n'
+printf '@@dirty %s\\n' "$(git -C "$1" --no-optional-locks -c core.fsmonitor=false status --porcelain 2>/dev/null | awk 'END { print NR }')"
+if [ -n "\${2-}" ]; then git -C "$1" check-ref-format --branch "$2" >/dev/null 2>&1 && printf '@@valid-name\\n' || printf '@@invalid-name\\n'; fi`;
+
+/** The one-exec read as one state object, including the list `listBranches` used to build. */
+export function parseBranchState(stdout) {
+    const lines = stdout.split("\n").filter(Boolean);
+    const one = (key) => lines.find((line) => line.startsWith(`@@${key} `))?.slice(key.length + 3) ?? "";
+    const top = one("top");
+    const current = one("current") || null;
+    const local = [],
+        remote = [];
+    for (const line of lines.filter((line) => line.startsWith("@@ref "))) {
+        const [ref, worktree = ""] = line.slice(6).split("\t");
+        if (ref.startsWith("refs/heads/")) {
+            const name = ref.slice(11);
+            local.push({
+                name,
+                remote: false,
+                current: name === current,
+                inUse: worktree && worktree !== top ? worktree.split("/").pop() : null,
+            });
+        } else if (ref.startsWith("refs/remotes/origin/") && ref !== "refs/remotes/origin/HEAD") {
+            remote.push(ref.slice("refs/remotes/origin/".length));
+        }
+    }
+    const names = new Set(local.map((b) => b.name));
+    local.sort((a, b) => Number(b.current) - Number(a.current) || a.name.localeCompare(b.name));
+    return {
+        ok: Boolean(top),
+        top,
+        current,
+        originHead: one("originhead"),
+        hasMain: lines.includes("@@has-main"),
+        hasMaster: lines.includes("@@has-master"),
+        dirty: Number(one("dirty")) || 0,
+        validName: lines.includes("@@valid-name"),
+        invalidName: lines.includes("@@invalid-name"),
+        branches: [
+            ...local,
+            ...remote
+                .filter((name) => !names.has(name))
+                .sort()
+                .map((name) => ({ name, remote: true, current: false, inUse: null })),
+        ],
+    };
+}
+
+/** The picker's whole open read, one exec. */
+export async function readBranchState(exec, checkout, branch) {
+    const args =
+        branch === undefined ? ["-c", BRANCH_SCRIPT, "sh", checkout] : ["-c", BRANCH_SCRIPT, "sh", checkout, branch];
+    const r = await exec("sh", args, { cwd: checkout });
+    if (r.code !== 0) return { ok: false, message: firstLine(r), branches: [] };
+    const state = parseBranchState(r.stdout ?? "");
+    if (!state.ok) return { ok: false, message: "Not a git checkout.", branches: [] };
+    return { ok: true, ...state, message: "" };
+}
+
+/** The base branch from the one-exec state: config, origin HEAD, origin main, origin master, main, master. */
+export function baseFromState(state, config = {}) {
+    if (config.baseBranch) return config.baseBranch;
+    if (state.originHead?.startsWith("origin/")) return state.originHead.slice(7);
+    if (state.hasMain) return "main";
+    if (state.hasMaster) return "master";
+    return "main";
+}
+
+/** One switch precheck: the branch list, name validity and dirty state from one exec. */
+export async function readSwitchState(exec, checkout, branch) {
+    const state = await readBranchState(exec, checkout, branch);
+    if (!state.ok) return state;
+    if (state.invalidName) return { ...state, ok: false, message: `"${branch}" is not a valid branch name.` };
+    const target = state.branches.find((b) => b.name === branch);
+    if (!target) return { ...state, ok: false, message: `No branch ${branch} here or on origin.` };
+    if (target.current) return { ...state, ok: false, message: `Already on ${branch}.` };
+    if (target.inUse)
+        return { ...state, ok: false, message: `${branch} is checked out in ${target.inUse}; switch there instead.` };
+    if (state.dirty)
+        return {
+            ...state,
+            ok: false,
+            message: `${state.dirty} file${state.dirty === 1 ? "" : "s"} with uncommitted changes here: commit or discard them before changing branch.`,
+        };
+    return { ...state, ok: true, target, message: "" };
+}
+
 /** The quick-pick ranking: exact name, then prefix, then the last path segment's prefix, then any substring. */
 function rankBranch(name, query) {
     const lower = name.toLowerCase();
@@ -741,20 +835,16 @@ export function moveActive(branches, text, active, delta) {
 /** `git switch <branch>`, or `git switch --track origin/<branch>` for a branch only origin has. Refused (no switch run)
  * when an agent is busy there, when there are uncommitted changes, or when another worktree has the branch. */
 export async function switchBranch(exec, { checkout, branch, busy = [] }) {
-    const refused = await switchRefusal(exec, checkout, busy);
-    if (refused) return { ok: false, message: refused };
-    const bad = await invalidBranchName(exec, checkout, branch);
-    if (bad) return { ok: false, message: bad };
-    const list = await listBranches(exec, checkout);
-    if (!list.ok) return list;
-    const target = list.branches.find((b) => b.name === branch);
-    if (!target) return { ok: false, message: `No branch ${branch} here or on origin.` };
-    if (target.current) return { ok: false, message: `Already on ${branch}.` };
-    if (target.inUse)
+    if (busy?.length) {
+        const who = busy[0];
         return {
             ok: false,
-            message: `${branch} is checked out in ${target.inUse}; switch there instead.`,
+            message: `${who.name || "An agent"} is ${who.status} in ${who.cwd}: wait until it stops before changing branch.`,
         };
+    }
+    const state = await readSwitchState(exec, checkout, branch);
+    if (!state.ok) return { ok: false, message: state.message };
+    const target = state.target;
     const args = target.remote ? ["switch", "--track", `origin/${branch}`] : ["switch", branch];
     const r = await git(exec, checkout)(args);
     if (r.code !== 0) return { ok: false, message: firstLine(r) };

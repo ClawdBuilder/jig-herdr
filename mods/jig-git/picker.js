@@ -7,17 +7,16 @@ import { h_flex, Input, InputState, v_flex } from "gpui-base";
 import { div, svg } from "gpui-kit";
 import { appHome, closeOverlay, exec, panes, readTextFile, setShared, spaces, theme } from "herdr";
 import {
+    baseFromState,
     branchKey,
     busyAgents,
     cappedBranches,
-    defaultBase,
     hiddenOriginCount,
-    listBranches,
     newBranch,
     panesOn,
     parseConfig,
+    readBranchState,
     switchBranch,
-    switchRefusal,
     visibleBranches,
 } from "./lib.js";
 
@@ -114,13 +113,18 @@ export class BranchPicker {
         try {
             const text = await readTextFile(`${appHome()}/mods/jig-git/config.json`).catch(() => null);
             this.config = parseConfig(text);
-            const list = await listBranches(this.exec(), this.path);
-            if (!list.ok) throw new Error(list.message);
-            this.branches = list.branches;
+            const state = await readBranchState(this.exec(), this.path);
+            if (!state.ok) throw new Error(state.message);
+            this.branches = state.branches;
             this.resetActive();
-            this.base = await defaultBase(this.exec(), this.path, this.config);
+            this.base = baseFromState(state, this.config);
             this.nameInput.set_value(this.config.newBranchPrefix);
-            this.warning = await switchRefusal(this.exec(), this.path, this.busyHere());
+            const busy = this.busyHere();
+            this.warning = busy.length
+                ? `${busy[0].name || "An agent"} is ${busy[0].status} in ${busy[0].cwd}: wait until it stops before changing branch.`
+                : state.dirty
+                  ? `${state.dirty} file${state.dirty === 1 ? "" : "s"} with uncommitted changes here: commit or discard them before changing branch.`
+                  : null;
         } catch (e) {
             this.message = String(e?.message ?? e).split("\n")[0];
         }
