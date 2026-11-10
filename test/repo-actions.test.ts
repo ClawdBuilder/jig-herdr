@@ -76,74 +76,57 @@ const branchOf = (dir: string) => git(dir, "symbolic-ref", "--short", "HEAD");
 const porcelain = (dir: string) =>
     execFileSync("git", ["status", "--porcelain"], { timeout: 30_000, cwd: dir, encoding: "utf8" }).replace(/\n$/, "");
 
-test("checkouts nest under their main repository; a worktree whose main is outside the root stands alone", async (t) => {
-    const { SCRIPT, parseRepos, groupRepos, isClean, checkoutsOf, filterGroups } =
-        await load<Lib>("mods/jig-git/lib.js");
+test("Space mode lists only main checkouts; Terminal mode inside a linked worktree shows that one", async (t) => {
+    const { SCRIPT, parseRepos, groupRepos, checkoutsOf } = await load<Lib>("mods/jig-git/lib.js");
     const root = scratch(t);
     const { repo } = cloned(root);
-    git(repo, "worktree", "add", "-q", "-b", "feature/PROJ-1", path.join(root, "worktrees/PROJ-1/orders-api"));
-    git(repo, "worktree", "add", "-q", "-b", "feature/PROJ-2", path.join(repo, ".trees/PROJ-2")); // inside the main
+    const tree = path.join(root, "worktrees/PROJ-1/orders-api");
+    git(repo, "worktree", "add", "-q", "-b", "feature/PROJ-1", tree);
+    git(repo, "worktree", "add", "-q", "-b", "feature/PROJ-2", path.join(repo, ".trees/PROJ-2"));
     writeFileSync(path.join(repo, ".git/info/exclude"), ".trees/\n");
-    writeFileSync(path.join(root, "worktrees/PROJ-1/orders-api/new.ts"), "x\n");
+    writeFileSync(path.join(tree, "new.ts"), "x\n");
     const billing = path.join(root, "billing");
     mkdirSync(billing);
     git(billing, "init", "-q", "-b", "main");
     git(billing, "commit", "-q", "--allow-empty", "-m", "first");
-    // A worktree under the root whose main checkout is outside it.
-    const outside = scratch(t);
-    git(outside, "init", "-q", "-b", "main", "docs-site");
-    git(path.join(outside, "docs-site"), "commit", "-q", "--allow-empty", "-m", "first");
-    git(path.join(outside, "docs-site"), "worktree", "add", "-q", "-b", "fix/typo", path.join(root, "docs-typo"));
 
     const repos = parseRepos(
         execFileSync("sh", ["-c", SCRIPT, "sh", root], { timeout: 30_000, encoding: "utf8" }),
         root,
     );
+    assert.deepEqual(
+        repos.map((r: any) => [r.name, r.linked]).sort((a: any, b: any) => a[0].localeCompare(b[0])),
+        [
+            ["billing", false],
+            ["orders-api", false],
+            ["seed", false],
+        ],
+    );
     const groups = groupRepos(repos);
-    const shape = groups.map((g: any) => [g.main.name, g.main.linked, g.worktrees.map((w: any) => w.name)]);
-    assert.deepEqual(
-        shape.sort((a: any, b: any) => a[0].localeCompare(b[0])),
-        [
-            ["billing", false, []],
-            ["docs-typo", true, []],
-            ["orders-api", false, ["orders-api/.trees/PROJ-2", "worktrees/PROJ-1/orders-api"]],
-            ["seed", false, []],
-        ],
+    assert.equal(
+        groups.every((g: any) => g.worktrees.length === 0),
+        true,
     );
-    const orders = groups.find((g: any) => g.main.name === "orders-api");
-    assert.deepEqual(
-        orders.worktrees.map((w: any) => [w.folder, w.branch, w.files.length]),
-        [
-            ["PROJ-2", "feature/PROJ-2", 0],
-            ["orders-api", "feature/PROJ-1", 1],
-        ],
-    );
-    assert.equal(isClean(orders), false, "a group with one changed worktree is not clean");
-    assert.equal(isClean(groups.find((g: any) => g.main.name === "billing")), true);
-    // Each checkout with changes counts once.
-    assert.equal(repos.filter((r: any) => r.files.length).length, 1);
-    assert.equal(checkoutsOf(orders).length, 3);
-    // A filter that matches a worktree's file keeps the group, with the main's own files left out.
-    const found = filterGroups(groups, "new.ts");
-    assert.deepEqual(
-        found.map((g: any) => [g.main.name, g.main.files.length, g.worktrees.map((w: any) => w.folder)]),
-        [["orders-api", 0, ["orders-api"]]],
-    );
+    assert.equal(groups.find((g: any) => g.main.name === "orders-api").main.files.length, 0);
+    assert.equal(checkoutsOf(groups.find((g: any) => g.main.name === "orders-api")).length, 1);
 
-    // Inside the main checkout: it and its worktrees. Inside a worktree: that worktree.
     const inMain = parseRepos(
         execFileSync("sh", ["-c", SCRIPT, "sh", repo], { timeout: 30_000, encoding: "utf8" }),
         repo,
     );
-    assert.equal(inMain.length, 3);
+    assert.deepEqual(
+        inMain.map((r: any) => [r.name, r.linked]),
+        [["orders-api", false]],
+    );
     const inTree = parseRepos(
-        execFileSync("sh", ["-c", SCRIPT, "sh", path.join(root, "docs-typo")], { timeout: 30_000, encoding: "utf8" }),
+        execFileSync("sh", ["-c", SCRIPT, "sh", tree], { timeout: 30_000, encoding: "utf8" }),
         root,
     );
     assert.deepEqual(
-        inTree.map((r: any) => [r.folder, r.linked]),
-        [["docs-typo", true]],
+        inTree.map((r: any) => [r.folder, r.branch, r.linked]),
+        [["orders-api", "feature/PROJ-1", true]],
     );
+    assert.match(inTree[0].worktreeOf, /orders-api$/);
 });
 
 test("a file's staged state comes from porcelain's XY", async () => {

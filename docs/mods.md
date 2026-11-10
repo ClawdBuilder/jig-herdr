@@ -102,7 +102,7 @@ the header shows its text with syntax colours, and `Preview` goes back.
 
 ## jig-git: the Git panel
 
-Checkouts, changed files, branches, fetch/pull/push and commit. Full detail: [Git recipe](../gallery/jig-git/RECIPE.md).
+Main checkouts, changed files, branches, fetch/pull/push and commit; linked worktrees belong to Worktrees. Full detail: [Git recipe](../gallery/jig-git/RECIPE.md).
 
 ## jig-review: the Review tab
 

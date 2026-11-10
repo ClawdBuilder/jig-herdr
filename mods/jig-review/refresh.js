@@ -147,6 +147,15 @@ export class RefreshState {
         notify();
     }
 
+    /** Drops the current run's state so a new context can start at once; its late result is dropped by generation. */
+    cancel() {
+        this.loading = false;
+        this.busy = false;
+        this.again = false;
+        this.user = false;
+        this.first = false;
+    }
+
     /** Ends a run and answers whether a user click queued one more. The caller starts that run; this helper never starts
      *  work on its own. */
     finish() {

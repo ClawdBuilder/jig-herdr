@@ -50,8 +50,7 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
   header carries `N repos · M changed` (with the worktree count when there is room); a filter box; then a
   one line for each checkout with changes (its name, a branch chip with an icon, the parent folder only on a name clash, a `2 vs main` chip
   when the branch has commits its base lacks, `↑` ahead in `foreground`, `↓` behind in `blocked`, then pull and push/publish
-  icons, and a count in a small outlined box), and under it its linked worktrees as `↳ <folder>` rows, indented 18 px,
-  each the same way. Under each row, dim: the last commit's short hash, subject and age. Under that, the files: a 14 px
+  icons, and a count in a small outlined box). Linked worktrees are not listed: Worktrees owns them. Under each row, dim: the last commit's short hash, subject and age. Under that, the files: a 14 px
   checkbox (ticked on `accent` when staged, `–` when partly), a letter (`M` in `blocked`, `A` and `??` in `ansi2`, `D` and `U`
   in `ansi1`, `R` in `ansi5`) and the path with its folders dimmed; then, when some are staged, a `Commit message` box,
   `Commit N` and `Commit & Push`. Last, a `Clean (N)` group, folded.
@@ -88,7 +87,7 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
   `caffeinate -i [-d] -w <herdr pid>` on macOS, or `systemd-inhibit --what=sleep[:idle] --mode=block sh -c 'while kill -0
   <herdr pid> ...' jig-keep-awake` on Linux, started on Herdr's own computer and stopped when it is no longer wanted or Herdr
   exits; its request ends with its process.
-- **Git.** It follows the focused terminal's folder (its checkout and linked worktrees, else the repositories below it),
+- **Git.** It follows the focused terminal's folder (that checkout, else the main repositories below it),
   or the space's folder when the header's toggle says `Space`; the choice is kept per space in `localStorage`, and a switch
   keeps the old rows until the new ones arrive and never clears the filter. One `sh` script on the space's machine reads
   them: when the panel is shown, when it is opened, when a terminal changes status or the folder changes, after an action,
@@ -270,7 +269,7 @@ Work panel needs Jig's Pi plugin `jig-session` loaded in Pi: it writes the statu
   (the header's toggle back to `Space` lists the space's folder again), and a branch one commit ahead of its upstream shows
   `↑1`; the push icon opens the confirm with that commit and the destination it names, and Cancel sends nothing. With
   `branch.<b>.pushRemote` set to another remote, the dialog names that remote's branch and the push goes there only.
-- A linked worktree shows as a `↳` row under its repository. Ticking a file's checkbox stages it within a second, the
+- A linked worktree is not a row in Git; Terminal mode inside one shows that active checkout only. Ticking a file's checkbox stages it within a second, the
   commit box commits it and says the short hash, and the branch chip's popup switches branch; with a file changed, the
   switch is refused and says how many files.
 - Clicking a changed file opens a `Review · <repository>` tab with the file's diff, red and lime tinted rows; clicking another

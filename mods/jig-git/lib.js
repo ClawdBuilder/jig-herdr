@@ -19,7 +19,8 @@ export const CAP = 200;
 // origin/main, origin/master, develop, main, master): the one whose merge base with HEAD leaves the fewest commits, the
 // earlier one on a tie; a local branch is skipped when its origin/ twin is the same commit. Nothing is printed for a
 // checkout on develop, main, master or origin's HEAD branch, or with no commit ahead.
-// No fetch and no network: each checkout is read from its own disk, up to 8 at a time.
+// Main checkouts only: a linked worktree has a `.git` file and is skipped in Space mode. A root inside one is read alone
+// (the active checkout). No fetch and no network: each checkout is read from its own disk, up to 8 at a time.
 // (No dollar-brace in here except escaped ones: this is a JS template string.)
 export const SCRIPT = `root=$(cd "$1" 2>/dev/null && pwd -P) || root=$1
 printf '@@root %s\\n' "$root"
@@ -27,23 +28,15 @@ top=$(git -C "$root" rev-parse --show-toplevel 2>/dev/null)
 find_repos() {
   for a in "$root"/*/; do
     case $a in */node_modules/) continue;; esac
-    if [ -e "$a.git" ]; then echo "$a"; continue; fi
+    if [ -d "$a.git" ]; then echo "\${a%/}"; continue; fi
     for b in "$a"*/; do
       case $b in */node_modules/) continue;; esac
-      if [ -e "$b.git" ]; then echo "$b"; continue; fi
+      if [ -d "$b.git" ]; then echo "\${b%/}"; continue; fi
       for c in "$b"*/; do
         case $c in */node_modules/) continue;; esac
-        [ -e "$c.git" ] && echo "$c"
+        [ -d "$c.git" ] && echo "\${c%/}"
       done
     done
-  done
-}
-with_worktrees() {
-  while IFS= read -r repo; do
-    repo=$(cd "$repo" 2>/dev/null && pwd -P) || continue
-    echo "$repo"
-    [ -d "$repo/.git" ] || continue
-    git -C "$repo" worktree list --porcelain 2>/dev/null | awk '/^worktree / { if (n++) print substr($0, 10) }'
   done
 }
 branch_base() {
@@ -77,7 +70,7 @@ trap 'rm -rf "$tmp"' EXIT
 if [ -n "\${2-}" ]; then
   printf '%s\n' "$2" > "$tmp/list"
 else
-  { if [ -n "$top" ]; then echo "$top"; else find_repos; fi; } | with_worktrees | awk '!seen[$0]++' > "$tmp/list"
+  { if [ -n "$top" ]; then echo "$top"; else find_repos; fi; } | awk '!seen[$0]++' > "$tmp/list"
 fi
 n=0
 while IFS= read -r repo; do
@@ -193,6 +186,7 @@ export function parseRepos(stdout, root) {
             folder,
             common,
             linked: Boolean(common && own && common !== own),
+            worktreeOf: common && own && common !== own ? common.replace(/[\\/]\.git[\\/]?$/, "") : null,
             branch: "?",
             detached: false,
             upstream: null,
@@ -257,17 +251,32 @@ export function groupCheckouts(repos) {
     const groups = { needs: [], changed: [], ahead: [], clean: [] };
     for (const repo of repos ?? []) {
         const conflict = (repo.files ?? []).some((file) => file.status === "U" || file.conflict);
+        const unpublishedNew = !repo.upstream && (repo.base?.count ?? 0) > 0;
         const key =
             repo.error || conflict || isDiverged(repo)
                 ? "needs"
                 : repo.files?.length
                   ? "changed"
-                  : !repo.detached && (repo.ahead || repo.behind || repo.base)
+                  : !repo.detached && (repo.ahead || repo.behind || unpublishedNew)
                     ? "ahead"
                     : "clean";
         groups[key].push(repo);
     }
     return groups;
+}
+
+/** The row's detail line: why it is in its group, then the file count. */
+export function checkoutDetail(repo) {
+    const hasNew = Boolean(repo.ahead || repo.behind || (repo.base?.count ?? 0) > 0);
+    return [
+        repo.worktreeOf ? `worktree of ${repo.worktreeOf.split(/[\\/]/).filter(Boolean).pop()}` : null,
+        repo.detached ? "detached" : repo.branch || "?",
+        badgeText(repo),
+        !repo.detached && !repo.upstream ? (hasNew ? "not published" : "no upstream") : null,
+        repo.total ? `${repo.total} file${repo.total === 1 ? "" : "s"}` : null,
+    ]
+        .filter(Boolean)
+        .join(" · ");
 }
 
 /** A group is clean when its main checkout and every worktree has no change, no error and no commit over its base branch. */
@@ -1329,3 +1338,16 @@ export const canRun = (switching, lock) => !switching && !lock;
 
 /** Whether the commit box puts its message above its buttons (a narrow panel) rather than beside them. */
 export const commitRowStacked = (width) => width > 0 && width < 360;
+
+/** The context key: the machine, folder and follow mode a read belongs to. */
+export function contextKeyOf(loc) {
+    return JSON.stringify([loc?.root ?? null, loc?.on ?? null, loc?.follow === true]);
+}
+
+/** What to draw for the shown context: last rows only when the landed read belongs to that same context. */
+export function viewForContext(shownKey, readKey, repos, { error = null, noFolder = false } = {}) {
+    if (noFolder) return { rows: [], pending: false, noFolder: true };
+    if (error) return { rows: shownKey === readKey ? (repos ?? []) : [], pending: false, error: true };
+    if (shownKey !== readKey) return { rows: [], pending: true };
+    return { rows: repos ?? [], pending: false };
+}
