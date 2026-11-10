@@ -454,35 +454,6 @@ export default class RepoHistory extends View {
             );
     }
 
-    /** Fallback cycle, kept for a branch list that is already loaded. */
-    cycleBranch(cx) {
-        if (this.branches) {
-            const names = this.branches.map((b) => b.name);
-            const at = this.branchFilter ? names.indexOf(this.branchFilter) : -1;
-            this.branchFilter = at + 1 >= names.length ? null : names[at + 1];
-            this.clearLog();
-            this.loadLog(cx, true);
-            return;
-        }
-        cx.spawn(async (cx) => {
-            const result = await runCommand(
-                exec,
-                "git",
-                [
-                    "--no-optional-locks",
-                    "for-each-ref",
-                    "--format=%(refname:short)%09%(refname)",
-                    "refs/heads",
-                    "refs/remotes",
-                ],
-                { cwd: this.repo, on: this.where.on },
-            );
-            this.branches = parseBranches(result.stdout ?? "");
-            cx.notify();
-        });
-        cx.notify();
-    }
-
     loadConfig(cx) {
         if (this.configAt && Date.now() - this.configAt < 60000) return;
         this.configAt = Date.now();

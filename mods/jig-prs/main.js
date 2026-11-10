@@ -677,33 +677,6 @@ export default class RepoPullRequests extends View {
         });
     }
 
-    /** A repository's name, with the folders above it dimmed after it. */
-    repoName(t, repo) {
-        const name = lastSegment(repo.name);
-        const above = repo.name.slice(0, repo.name.length - name.length).replace(/\/$/, "");
-        return h_flex()
-            .flex_1()
-            .min_w(0)
-            .gap(6)
-            .items_baseline()
-            .child(div().flex_none().max_w(190).truncate().font_semibold().child(name))
-            .when(Boolean(above), (el) =>
-                el.child(div().min_w(0).truncate().text_size(11).text_color(t.dim).child(above)),
-            );
-    }
-
-    branchTag(t, branch) {
-        return h_flex()
-            .flex_none()
-            .max_w(150)
-            .gap(4)
-            .items_center()
-            .text_size(11)
-            .text_color(t.dim)
-            .child(svg(icon("branch")).size(11).flex_none())
-            .child(div().min_w(0).truncate().child(branch));
-    }
-
     /** A heading row; with `onClick` it also folds a group. */
     heading(t, label, id, { folded, onClick } = {}) {
         return h_flex()

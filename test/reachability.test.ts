@@ -59,17 +59,9 @@ function unreachable(text: string) {
     return [...names].filter((name) => !seen.has(name)).sort();
 }
 
-test("Git has no unreachable View methods", () => {
-    const text = readFileSync(path.join(ROOT, "mods", "jig-git", "main.js"), "utf8");
-    assert.deepEqual(unreachable(text), []);
-});
-
-test("the other panels' reachability report", () => {
-    const report = Object.fromEntries(
-        MODS.filter((mod) => mod !== "jig-git").map((mod) => {
-            const text = readFileSync(path.join(ROOT, "mods", mod, "main.js"), "utf8");
-            return [mod, unreachable(text)];
-        }),
-    );
-    console.log(JSON.stringify(report));
+test("every panel has no unreachable View methods", () => {
+    for (const mod of MODS) {
+        const text = readFileSync(path.join(ROOT, "mods", mod, "main.js"), "utf8");
+        assert.deepEqual(unreachable(text), [], mod);
+    }
 });

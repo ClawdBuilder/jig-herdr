@@ -571,6 +571,7 @@ export default class RepoReview extends View {
         this.range = null; // the rows are new: a selection would point at other lines
         const cut = lines.slice(0, 1500).map((l) => (l.length > 4000 ? `${l.slice(0, 4000)}… (line truncated)` : l));
         this.rows = diffRows(cut);
+        this.reanchor();
         this.patchText = cut.join("\n");
         this.diffWidth = Math.max(300, ...cut.map((l) => l.length * 7.5 + 60));
     }
