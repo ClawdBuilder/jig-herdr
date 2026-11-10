@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- PR & CI no longer asks GitHub about local-path remotes or known non-GitHub hosts: those repositories are parked as
+  "no remote". A GraphQL "Could not resolve to a Repository" answer parks as "not on GitHub" instead of the red error line.
+
 - Listing recipes now match the built panels: Review's header is title and Refresh (Copy and Diff/File/Patch are body
   controls), History's title is the chosen branch under its repository chooser, and keep-awake separates its shared
   `jig-keep-awake.helper` key from the `jig-keep-awake.helper.json` file.

@@ -94,6 +94,27 @@ test("jig-prs reads the owner and name from every form of remote url", async () 
     assert.equal(slugOf("git@github.com:acme/orders-api.git"), "acme/orders-api");
     assert.equal(slugOf("git@github.com-work:acme/orders-api.git"), "acme/orders-api");
     assert.equal(slugOf("ssh://git@github.com/acme/orders-api/"), "acme/orders-api");
+    assert.equal(slugOf("github-work:acme/orders-api"), "acme/orders-api");
+    assert.equal(slugOf("https://github.enterprise.example/acme/orders-api"), "acme/orders-api");
+    for (const local of [
+        "/tmp/jig-herdr-demo/origins/billing-web.git",
+        "origins/billing-web.git",
+        "./orders-api",
+        "../orders-api",
+        "file:///tmp/orders-api.git",
+        "C:\\Users\\me\\orders-api",
+        "\\\\server\\share\\orders-api.git",
+    ])
+        assert.equal(slugOf(local), null, local);
+    for (const other of [
+        "https://gitlab.com/acme/orders-api",
+        "git@gitlab.com:acme/orders-api.git",
+        "https://bitbucket.org/acme/orders-api.git",
+        "https://dev.azure.com/acme/orders/_git/api",
+        "ssh://git@ssh.dev.azure.com/v3/acme/orders/api",
+        "git@vs-ssh.visualstudio.com:v3/acme/orders/api",
+    ])
+        assert.equal(slugOf(other), null, other);
     assert.equal(slugOf(""), null);
     assert.equal(slugOf(undefined), null);
 });
@@ -181,8 +202,9 @@ test("jig-prs words gh's failures: sign-in and network problems are flagged", as
         true,
     );
     assert.equal(ghError("API rate limit exceeded for user").message, "GitHub rate limit reached; try again later.");
-    assert.deepEqual(ghError("GraphQL: Could not resolve to a Repository"), {
-        message: "GraphQL: Could not resolve to a Repository",
+    assert.deepEqual(ghError("GraphQL: Could not resolve to a Repository with the name 'origins/billing-web'."), {
+        notgithub: true,
+        message: "not on GitHub",
     });
     assert.equal(ghError("").message, "gh failed");
 });
@@ -711,6 +733,7 @@ test("PR & CI folds every No PR repository into one group", async () => {
         { status: "pr", name: "a" },
         { status: "nopr", name: "b" },
         { status: "nopr", name: "c" },
+        { status: "notgithub", name: "x" },
         { status: "default", name: "d" },
         { status: "noremote", name: "e" },
         { status: "error", name: "f" },
@@ -725,7 +748,7 @@ test("PR & CI folds every No PR repository into one group", async () => {
     );
     assert.deepEqual(
         split.parked.map((r: any) => r.name),
-        ["d", "e"],
+        ["x", "d", "e"],
     );
     const source = readFileSync(new URL("../mods/jig-prs/main.js", import.meta.url), "utf8");
     assert.match(source, /group\("No PR", "nopr-group"/);

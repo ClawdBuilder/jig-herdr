@@ -49,14 +49,50 @@ export function workspaceSplit(repos) {
     return {
         featured: (repos ?? []).filter((repo) => ["pr", "error", "loading"].includes(repo.status)),
         noPr: (repos ?? []).filter((repo) => repo.status === "nopr"),
-        parked: (repos ?? []).filter((repo) => repo.status === "default" || repo.status === "noremote"),
+        parked: (repos ?? []).filter(
+            (repo) => repo.status === "default" || repo.status === "noremote" || repo.status === "notgithub",
+        ),
     };
 }
 
-/** "owner/repo" from a remote url, whatever its form: https, scp-style with a host alias, or ssh://. Null when there is none. */
+/** Hosts known not to be GitHub. Everything else is asked, including GitHub Enterprise and scp aliases. */
+const NOT_GITHUB = new Set([
+    "gitlab.com",
+    "bitbucket.org",
+    "dev.azure.com",
+    "ssh.dev.azure.com",
+    "vs-ssh.visualstudio.com",
+]);
+
+const cleanSlug = (value) => value.replace(/\.git$/, "").replace(/\/+$/, "");
+
+/** "owner/repo" from a GitHub remote URL or scp alias. A local path, or a known non-GitHub host, has no slug. */
 export function slugOf(url) {
-    const match = /[:/]([^/:\s]+)\/([^/\s]+?)(?:\.git)?\/*$/.exec((url ?? "").trim());
-    return match ? `${match[1]}/${match[2]}` : null;
+    const said = String(url ?? "").trim();
+    if (!said) return null;
+    if (/^(?:file:|\/|\.\.?[\\/]|~[\\/]|[A-Za-z]:[\\/]|\\\\)/i.test(said)) return null;
+    let host;
+    let pathname;
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(said)) {
+        let parsed;
+        try {
+            parsed = new URL(said);
+        } catch {
+            return null;
+        }
+        if (parsed.protocol === "file:") return null;
+        host = parsed.hostname.toLowerCase();
+        pathname = parsed.pathname;
+    } else {
+        const scp = /^(?:[^/@\s]+@)?([^/:\s]+):(.+)$/.exec(said);
+        if (!scp) return null; // a bare relative path, such as origins/billing-web.git
+        host = scp[1].toLowerCase();
+        pathname = scp[2];
+    }
+    if (NOT_GITHUB.has(host)) return null;
+    const parts = pathname.split("/").filter(Boolean);
+    if (parts.length < 2) return null;
+    return cleanSlug(`${parts[0]}/${parts[1]}`);
 }
 
 const TRUNKS = new Set(["main", "master", "develop"]);
@@ -157,6 +193,7 @@ export const REVIEW = {
 export function ghError(stderr) {
     const text = (stderr ?? "").trim();
     const first = text.split("\n").find(Boolean) ?? "gh failed";
+    if (/could not resolve to a repository/i.test(text)) return { notgithub: true, message: "not on GitHub" };
     if (/gh auth login|not logged in|authentication|HTTP 401|bad credentials/i.test(text))
         return { auth: true, message: "gh is not logged in on this machine (run gh auth login)." };
     if (/rate limit/i.test(text)) return { net: true, message: "GitHub rate limit reached; try again later." };
