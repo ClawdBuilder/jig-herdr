@@ -280,7 +280,7 @@ export default class RepoReview extends View {
             this.contextKey = contextKeyOf(where);
             this.contextAt = Date.now();
             this.loadedContext = null;
-            this.refreshState.cancel();
+            this.refreshState?.cancel();
             this.readGeneration = (this.readGeneration ?? 0) + 1;
             this.loading = false;
             this.loadingRepos = false;
