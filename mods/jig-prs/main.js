@@ -771,7 +771,7 @@ export default class RepoPullRequests extends View {
             for (const repo of rows) items.push(this.prKitRow(t, repo));
         };
         section("needs", "Needs fixing", t.ansi1, groups.needs, true, () => {});
-        section("waiting", "Waiting", t.blocked, groups.waiting, true, () => {});
+        section("waiting", "Waiting", t.ansi3, groups.waiting, true, () => {});
         section("ready", "Ready", t.ansi2, groups.ready, true, () => {});
         section("merged", "Merged or closed", t.muted, groups.merged, this.showMerged, (cx) => {
             this.showMerged = !this.showMerged;
@@ -842,7 +842,7 @@ export default class RepoPullRequests extends View {
                         ? countOf(pr, "fail")
                             ? t.ansi1
                             : countOf(pr, "pending")
-                              ? t.blocked
+                              ? t.ansi3
                               : t.ansi2
                         : t.muted,
             title,
