@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Review keeps the branch visible on the row under the context card when the repository chooser is hidden, and splits its
+  diff toolbar below 640 px so no action is clipped at side-panel widths or zoom 1.2.
+
+
 ### Changed
 
 - Worktrees and Review use the kit context card and chooser row; a folder/mode switch shows the skeleton, cancels the old

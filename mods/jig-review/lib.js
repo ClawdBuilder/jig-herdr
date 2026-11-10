@@ -460,7 +460,7 @@ export function buildReviewMessage({ repo, scope, comments }) {
 export function reviewLayout(width) {
     return {
         stacked: width > 0 && width < 640,
-        toolbarRows: width > 0 && width < 480,
+        toolbarRows: width > 0 && width < 640,
         listHeight: 240,
     };
 }
