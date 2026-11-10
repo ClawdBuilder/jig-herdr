@@ -21,6 +21,19 @@ const scan = (root: string) => `@@root ${root}
 ?? notes.txt
 =1
 `;
+function scanFor(root: string, targets: string) {
+    const all = scan(root);
+    if (!targets) return all;
+    const wanted = new Set(targets.split("\n"));
+    const [head, ...blocks] = all.split("@@repo ");
+    return (
+        head +
+        blocks
+            .filter((block) => wanted.has(block.split("\n")[0].trim()))
+            .map((block) => `@@repo ${block}`)
+            .join("")
+    );
+}
 function context(root: string) {
     const ctx: any = (globalThis as any).__CTX ?? {};
     (globalThis as any).__CTX = ctx;
@@ -135,4 +148,135 @@ test("Git preview props pre-open a repo and pre-fill the filter", async () => {
     assert.equal(view.opened.has(`${root}/orders-api`), true);
     assert.equal(view.view.states.changed[0].name, "billing-web");
     view.render(cx);
+});
+
+test("stage click flips at once and re-reads only that checkout", async () => {
+    const root = "/tmp/git-harness-stage";
+    const ctx = context(root);
+    const calls: { cmd: string; args: string[] }[] = [];
+    ctx.exec = async (cmd: string, args: string[]) => {
+        calls.push({ cmd, args });
+        return { code: 0, stdout: cmd === "sh" ? scan(root) : "", stderr: "" };
+    };
+    const { view, cx } = await load("jig-git");
+    await flush();
+    calls.length = 0;
+    const repo = view.repos[0];
+    const file = repo.files[0];
+    view.stageClick(cx, repo, file, true);
+    assert.equal(view.repos[0].files.find((f: any) => f.path === file.path).staged, true);
+    await flush();
+    const git = calls.filter((c) => c.cmd === "git");
+    const scans = calls.filter((c) => c.cmd === "sh");
+    assert.equal(git.length, 1);
+    assert.equal(scans.length, 1);
+    assert.equal(scans[0].args.at(-1), repo.path);
+    assert.equal(
+        calls.some((c) => c.args.includes("sleep")),
+        false,
+    );
+});
+
+test("Git starts a context read from render without waiting for tick", async () => {
+    const root = "/tmp/git-harness-a";
+    const ctx = context(root);
+    let reads = 0;
+    ctx.exec = async (cmd: string) => {
+        if (cmd === "sh") reads++;
+        return { code: 0, stdout: cmd === "sh" ? scan(root) : "", stderr: "" };
+    };
+    const { view, cx, timers } = await load("jig-git");
+    await flush();
+    reads = 0;
+    ctx.folder = "/tmp/git-harness-b";
+    ctx.focused = { pane: "p", cwd: ctx.folder, terminal: "t", space: "s" };
+    ctx.panes = [{ pane: "p", cwd: ctx.folder }];
+    for (let i = 0; i < 5; i++) view.render(cx);
+    const kicks = timers.filter((t: any) => t.ms === 0);
+    assert.equal(kicks.length, 1, "five renders before the timer fire schedule one read");
+    kicks[0].fn(cx);
+    await flush();
+    assert.equal(reads, 1, "exactly one context read starts without a tick");
+});
+
+test("two trigger refreshes with identical output do not notify", async () => {
+    const root = "/tmp/git-harness-same";
+    const ctx = context(root);
+    ctx.exec = async (cmd: string) => ({ code: 0, stdout: cmd === "sh" ? scan(root) : "", stderr: "" });
+    const { view, cx, notifies } = await load("jig-git");
+    view.refresh(cx, false, false);
+    await flush();
+    for (let i = 0; i < 100 && !view.loaded; i++) await flush(1);
+    assert.equal(view.loaded, true);
+    view.lastRead = { targets: view.visibleTargets(), stdout: scan(root) };
+    notifies.count = 0;
+    view.refresh(cx, false, false);
+    await flush();
+    assert.equal(notifies.count, 0, "first identical trigger read does not notify");
+    notifies.count = 0;
+    view.refresh(cx, false, false);
+    await flush();
+    assert.equal(notifies.count, 0, "second identical trigger read does not notify");
+});
+
+test("a same-output read after an error clears it", async () => {
+    const root = "/tmp/git-harness-error-same";
+    const ctx = context(root);
+    ctx.exec = async (cmd: string) => ({ code: 0, stdout: cmd === "sh" ? scan(root) : "", stderr: "" });
+    const { view, cx } = await load("jig-git");
+    await flush();
+    view.error = "old error";
+    view.lastRead = { targets: "", stdout: scan(root) };
+    view.refresh(cx, false, true);
+    await flush();
+    assert.equal(view.error, null);
+    assert.equal(view.loaded, true);
+});
+
+test("follow toggle with the same root ends the skeleton", async () => {
+    const root = "/tmp/git-harness-follow";
+    const ctx = context(root);
+    ctx.exec = async (cmd: string) => ({ code: 0, stdout: cmd === "sh" ? scan(root) : "", stderr: "" });
+    const { view, cx, timers } = await load("jig-git");
+    await flush();
+    view.setFollow(false, cx);
+    view.render(cx);
+    const kick = timers.find((t: any) => t.ms === 0);
+    assert.ok(kick);
+    kick.fn(cx);
+    await flush();
+    assert.equal(view.loadedContext, view.context);
+    assert.equal(view.loaded, true);
+});
+
+test("a context switch never passes the old rows' target list", async () => {
+    const a = "/tmp/git-harness-switch-a";
+    const b = "/tmp/git-harness-switch-b";
+    const ctx = context(a);
+    const calls: string[][] = [];
+    ctx.exec = async (cmd: string, args: string[]) => {
+        calls.push(args);
+        return { code: 0, stdout: cmd === "sh" ? scanFor(ctx.folder, args[4] ?? "") : "", stderr: "" };
+    };
+    const { view, cx, timers } = await load("jig-git");
+    for (let i = 0; i < 100 && !view.loaded; i++) await flush(1);
+    assert.equal(view.repos[0].path.startsWith(a), true);
+    ctx.folder = b;
+    ctx.focused = { pane: "p", cwd: b, terminal: "t", space: "s" };
+    ctx.panes = [{ pane: "p", cwd: b }];
+    for (let i = 0; i < 5; i++) view.render(cx);
+    const kick = timers.find((t: any) => t.ms === 0);
+    assert.ok(kick);
+    kick.fn(cx);
+    await flush();
+    assert.equal(
+        view.repos.every((repo: any) => repo.path.startsWith(b)),
+        true,
+    );
+    assert.equal(
+        view.repos.some((repo: any) => repo.path.startsWith(a)),
+        false,
+    );
+    const last = calls.filter((args) => args[1] !== undefined).at(-1);
+    assert.equal(last?.at(-1), "");
 });

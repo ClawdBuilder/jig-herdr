@@ -52,9 +52,12 @@ export const panes = () => C.panes;
 export const props = () => ({});
 export const readTextFile = async () => null;
 export const run = async () => ({});
-export const setShared = noop;
+export const setShared = (key, value) => {
+    C.shared = C.shared ?? {};
+    C.shared[key] = value;
+};
 export const settings = () => ({ ui_font_size: 13 });
-export const shared = () => C.shared;
+export const shared = (key) => C.shared?.[key];
 export const spaces = () => [{ active: true, id: "s", folder: C.folder, machine: null, tabs: [] }];
 export const terminals = empty;
 export const theme = () => new Proxy(() => {}, { get: (_t, k) => (k === "then" ? undefined : "#808080") });

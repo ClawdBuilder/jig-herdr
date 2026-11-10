@@ -52,7 +52,9 @@ import {
     isDiverged,
     isFolded,
     lockOf,
+    mergeScan,
     networkExec,
+    optimisticStage,
     panesOn,
     parseConfig,
     parseRepos,
@@ -81,7 +83,6 @@ import {
     groupHeader,
     groupOpen,
     moveActive,
-    primaryButton,
     row,
     secondaryButton,
     skeleton,
@@ -173,7 +174,7 @@ function iconButton(t, id, content, tip, onClick, disabled = false, busy = false
         .child(typeof content === "string" ? svg(content).size(13) : content);
 }
 
-function textButton(t, id, label, onClick, danger = false, disabled = false, tip = null) {
+function textButton(t, id, label, onClick, danger = false, disabled = false, tip = null, primary = false) {
     return div()
         .id(id)
         .flex_none()
@@ -184,8 +185,8 @@ function textButton(t, id, label, onClick, danger = false, disabled = false, tip
         .rounded(6)
         .text_size(11.5)
         .cursor_pointer()
-        .bg(disabled ? t.raised : danger ? t.blocked : t.raised)
-        .text_color(disabled ? t.dim : danger ? t.background : t.foreground)
+        .bg(disabled ? t.raised : danger ? t.blocked : primary ? t.solid : t.raised)
+        .text_color(disabled ? t.dim : danger || primary ? t.background : t.foreground)
         .when(disabled, (el) => el.opacity(0.5))
         .when(!disabled, (el) => el.hover((s) => s.opacity(0.85)))
         .when(Boolean(tip), (el) => el.tooltip(tip))
@@ -217,6 +218,7 @@ export default class RepoChanges extends View {
         this.filter = typeof p.filter === "string" ? p.filter : "";
         this.previewOpen = Array.isArray(p.open) ? p.open : [];
         this.opened = new Set(); // checkouts whose files are shown; files start folded, so every row is one line
+        this.fileAll = new Set(); // repos whose file list is past the 50-row cap
         this.folds = foldMap(shared(FOLD_KEY));
         this.cleanOpen = false;
         this.hover = null; // the checkout row under the pointer
@@ -286,6 +288,8 @@ export default class RepoChanges extends View {
             this.context = context;
             this.readGeneration++;
             this.refreshState.cancel();
+            this.lastRead = null;
+            this.repos = [];
             this.loading = false;
             this.loadedContext = null;
             this.view = null;
@@ -394,15 +398,20 @@ export default class RepoChanges extends View {
     }
 
     /** The main checkouts on screen and the worktrees that are unfolded; folded worktrees wait for the backstop. */
-    visibleTargets() {
-        if (!this.loaded || !this.repos) return "";
+    targetList() {
+        if (!this.repos?.length) return "";
         return groupRepos(this.repos)
             .flatMap((group) => [group.main, ...(this.foldedGroup(group) ? [] : group.worktrees)])
             .map((repo) => repo.path)
             .join("\n");
     }
 
-    refresh(cx, user = false, full = false) {
+    visibleTargets() {
+        if (!this.loaded || !this.repos?.length) return "";
+        return this.targetList();
+    }
+
+    refresh(cx, user = false, full = false, only = null) {
         const { root, on } = this.loc,
             context = this.context;
         if (!root) {
@@ -414,14 +423,32 @@ export default class RepoChanges extends View {
         if (!this.refreshState.start({ user, first: !this.repos, notify: () => cx.notify() })) return;
         this.refreshScheduler.sweep();
         this.loading = true;
+        const pendingBefore = this.loadedContext !== context;
+        const errorBefore = Boolean(this.error);
+        const busyBefore = this.refreshState.busy || this.switching;
+        this.changedThisRead = false;
         const run = ++this.readGeneration;
-        const targets = full ? "" : this.visibleTargets();
+        const targets = only ?? (full ? "" : this.visibleTargets());
         cx.spawn(async (cx) => {
             try {
                 const r = await runCommand(exec, "sh", ["-c", SCRIPT, "sh", root, targets], { on });
                 if (run !== this.readGeneration || context !== this.context) return;
                 if (r.code !== 0) throw Object.assign(new Error(r.stderr || `exit ${r.code}`), r);
-                this.repos = parseRepos(r.stdout, root);
+                const whole = targets === "";
+                const same = only === null && this.lastRead?.targets === targets && this.lastRead.stdout === r.stdout;
+                if (same) {
+                    this.loadedContext = context;
+                    this.loaded = true;
+                    this.error = null;
+                    this.switching = false;
+                    this.last = Date.now();
+                    if (pendingBefore || errorBefore || busyBefore) this.changedThisRead = true;
+                    return;
+                }
+                const scanned = parseRepos(r.stdout, root);
+                this.changedThisRead = true;
+                this.repos = whole ? scanned : mergeScan(this.repos, scanned);
+                this.lastRead = { targets: whole ? this.targetList() : targets, stdout: r.stdout };
                 if (this.previewOpen?.length) {
                     const wanted = new Set(this.previewOpen);
                     for (const repo of this.repos)
@@ -443,14 +470,15 @@ export default class RepoChanges extends View {
             } finally {
                 if (run === this.readGeneration) {
                     this.loading = false;
+                    const wasBusy = this.refreshState.busy || this.switching;
                     const again = this.refreshState.finish();
                     this.last = again ? 0 : Date.now();
                     if (again) this.refreshScheduler.trigger();
-                    cx.notify();
+                    if (this.changedThisRead || wasBusy) cx.notify();
+                    this.changedThisRead = false;
                 }
             }
         });
-        cx.notify();
     }
 
     /**
@@ -478,19 +506,17 @@ export default class RepoChanges extends View {
 
     /** What runs in this checkout now, from any copy of this mod (the panel and the push dialog share the lock), or null. */
     lock(repo) {
-        return lockOf(shared(RUNNING_KEY) ?? {}, this.loc?.on ?? null, repo.path);
+        return lockOf(this.locks ?? shared(RUNNING_KEY) ?? {}, this.loc?.on ?? null, repo.path);
     }
 
-    /** Takes this checkout's lock for one action: a token is written, then checked again after a short wait, so two
-     * copies claiming at once cannot both act. Resolves with the token, or null when another action holds it. */
+    /** Takes this checkout's lock in one synchronous check-then-set. Mods share one JS runtime, so no other copy can
+     * claim between the read and the write; the immediate re-read keeps a defensive check. */
     async hold(repo, what) {
         const on = this.loc?.on ?? null,
             locks = shared(RUNNING_KEY) ?? {};
         if (lockOf(locks, on, repo.path)) return null;
         const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
         setShared(RUNNING_KEY, withLock(locks, on, repo.path, what, Date.now(), token));
-        const wait = { cmd: "sh", args: ["-c", "sleep 0.15"] };
-        await exec(wait.cmd, wait.args, { on }).catch(() => null);
         if (!holdsLock(shared(RUNNING_KEY) ?? {}, on, repo.path, token)) return null;
         this.claimed.set(repo.path, { on, path: repo.path, token });
         return token;
@@ -520,6 +546,7 @@ export default class RepoChanges extends View {
      * `after` runs when it succeeded, still in this action's task. One action per checkout, never on a row that still
      * shows another folder. */
     act(cx, repo, fn, quiet = false, what = "Working", after = null) {
+        this.locks = shared(RUNNING_KEY) ?? {};
         if (!canRun(this.switching, this.lock(repo))) return;
         const git = this.git(),
             context = this.context;
@@ -547,7 +574,7 @@ export default class RepoChanges extends View {
                     }
                 } else delete this.notes[repo.path];
                 this.last = 0;
-                this.refresh(cx, false, true);
+                this.refresh(cx, false, false, repo.path);
                 if (r.ok && after) after(cx);
             }
             cx.notify();
@@ -713,6 +740,21 @@ export default class RepoChanges extends View {
         cx.notify();
     }
 
+    /** Flip the checkbox at once, then run the git action and re-read only this checkout. */
+    stageClick(cx, repo, file, staged) {
+        this.repos = mergeScan(this.repos, [optimisticStage(repo, [file.path], staged)]);
+        this.rebuildView();
+        cx.notify();
+        const args = { checkout: repo.path, file: file.path };
+        this.act(
+            cx,
+            repo,
+            (git) => (staged ? stageFile(git, args) : unstageFile(git, args)),
+            true,
+            staged ? "Staging" : "Unstaging",
+        );
+    }
+
     checkbox(t, repo, f) {
         const state = f.staged ? (f.unstaged ? "some" : "all") : "none";
         const disabled = this.switching || Boolean(this.lock(repo));
@@ -741,17 +783,7 @@ export default class RepoChanges extends View {
                 el
                     .cursor_pointer()
                     .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-                    .on_click((_e, cx) => {
-                        cx.stop_propagation();
-                        const args = { checkout: repo.path, file: f.path };
-                        this.act(
-                            cx,
-                            repo,
-                            (git) => (state === "all" ? unstageFile(git, args) : stageFile(git, args)),
-                            true,
-                            state === "all" ? "Unstaging" : "Staging",
-                        );
-                    }),
+                    .on_click((_e, cx) => this.stageClick(cx, repo, f, state !== "all")),
             )
             .tooltip(tip)
             .child(state === "all" ? svg(ICON("check")).size(10) : state === "some" ? "–" : "");
@@ -887,6 +919,7 @@ export default class RepoChanges extends View {
                 false,
                 !enabled,
                 `${tip} · Ctrl+Enter`,
+                true,
             ),
             textButton(
                 t,
@@ -918,11 +951,13 @@ export default class RepoChanges extends View {
     }
 
     /** A repo as the kit's 48 px row; opening it shows files, commit box and actions. */
-    kitCheckout(t, repo, color, nested, group, dir) {
+    kitCheckout(t, repo, color, nested, group, dir, locks) {
         const open = this.opened.has(repo.path),
             detail = checkoutDetail(repo);
-        const locked = this.lock(repo);
+        const locked = lockOf(locks, this.loc?.on ?? null, repo.path);
         const actions = repoActions(repo);
+        const allFiles = [...repo.files].sort((a, b) => Number(b.staged) - Number(a.staged));
+        const shownFiles = this.fileAll.has(repo.path) ? allFiles : allFiles.slice(0, 50);
         const details = () =>
             v_flex()
                 .p(8)
@@ -930,7 +965,21 @@ export default class RepoChanges extends View {
                 .when(isDiverged(repo), (el) =>
                     el.child(div().text_size(11).text_color(t.blocked).child("Diverged · pull fast-forwards only")),
                 )
-                .children(repo.files.flatMap((file) => this.fileRows(t, repo, file, nested ? 16 : 0)))
+                .children(shownFiles.flatMap((file) => this.fileRows(t, repo, file, nested ? 16 : 0)))
+                .when(allFiles.length > shownFiles.length, (el) =>
+                    el.child(
+                        secondaryButton(
+                            t,
+                            `show-all-${repo.path}`,
+                            `Show all ${allFiles.length} files`,
+                            (cx) => {
+                                this.fileAll.add(repo.path);
+                                cx.notify();
+                            },
+                            { h: 26 },
+                        ),
+                    ),
+                )
                 .when(repo.total > repo.files.length, (el) =>
                     el.child(
                         div()
@@ -941,6 +990,9 @@ export default class RepoChanges extends View {
                     ),
                 )
                 .when(repo.staged > 0 && this.commits.has(repo.path), (el) => el.child(this.commitBox(t, repo, 0)))
+                .when(repo.staged === 0, (el) =>
+                    el.child(div().pl(10).text_size(11).text_color(t.dim).child("Tick files to stage them")),
+                )
                 .when(this.confirm?.key === `all:${repo.path}`, (el) =>
                     el
                         .child(
@@ -984,12 +1036,6 @@ export default class RepoChanges extends View {
                         .justify_end()
                         .flex_wrap()
                         .when(Boolean(locked), (el) => el.child(busyButton(t, `busy-${repo.path}`, `${locked.what}…`)))
-                        .child(
-                            primaryButton(t, `commit-${repo.path}`, "Commit", (cx) => this.commitNow(cx, repo), {
-                                h: 26,
-                                disabled: Boolean(locked),
-                            }),
-                        )
                         .when(actions.includes("pull"), (el) =>
                             el.child(
                                 secondaryButton(
@@ -1093,6 +1139,7 @@ export default class RepoChanges extends View {
             groups,
             states: groupCheckouts(repos),
             mains: new Map(groups.map((g) => [g.main.path, g.main])),
+            tags: disambiguators(repos.map((repo) => ({ path: repo.path, name: rowName(repo, { main: null }).name }))),
             changed: repos.filter((r) => r.files.length).length,
         };
     }
@@ -1107,10 +1154,8 @@ export default class RepoChanges extends View {
         if (!this.view) this.rebuildView();
         const groups = this.view.groups,
             states = this.view.states,
-            tags = disambiguators(
-                this.repos.map((repo) => ({ path: repo.path, name: rowName(repo, { main: null }).name })),
-            ),
-            items = [];
+            items = [],
+            locks = shared(RUNNING_KEY) ?? {};
         const specs = [
             ["needs", "Needs you", t.ansi1],
             ["changed", "Changed", t.accent],
@@ -1131,6 +1176,15 @@ export default class RepoChanges extends View {
                           "Stage all",
                           (cx) => {
                               const repo = rows[0];
+                              this.repos = mergeScan(this.repos, [
+                                  optimisticStage(
+                                      repo,
+                                      repo.files.map((f) => f.path),
+                                      true,
+                                  ),
+                              ]);
+                              this.rebuildView();
+                              cx.notify();
                               this.act(cx, repo, (git) => stageAll(git, { checkout: repo.path }), true, "Staging");
                           },
                           { h: 26 },
@@ -1161,7 +1215,8 @@ export default class RepoChanges extends View {
                         color,
                         Boolean(parent),
                         parent ?? { main: repo, worktrees: [] },
-                        tags.get(repo.path) ?? null,
+                        this.view.tags.get(repo.path) ?? null,
+                        locks,
                     ),
                 );
             }
@@ -1205,7 +1260,13 @@ export default class RepoChanges extends View {
         if (this.picker) return this.picker.render(cx);
         if (this.dialog) return this.dialog.render(cx);
         const t = theme();
+        this.locks = shared(RUNNING_KEY) ?? {};
+        const before = this.context;
         this.locate();
+        if (this.context !== before && this.contextChanged) {
+            this.contextChanged = false;
+            cx.timer.after(0, (cx) => this.refresh(cx));
+        }
         if (!this.view) this.rebuildView();
         const loc = this.loc,
             groups = this.view.groups,
@@ -1228,7 +1289,7 @@ export default class RepoChanges extends View {
         }).pending;
         const items = this.list(t);
         // Space mode's folder: the other place to look when following a terminal lands nowhere.
-        const there = location(false).root;
+        const there = items.length ? null : location(false).root;
         const empty = items.length ? null : this.emptyState(there);
         const latest = Object.entries(this.notes).sort((a, b) => b[1].at - a[1].at)[0];
         const note = latest

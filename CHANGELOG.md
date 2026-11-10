@@ -20,6 +20,10 @@
 
 ### Changed
 
+- Git actions no longer wait for a full rescan: stage/unstage flips at once, then one git call and a one-repo read; the
+  lock's 150 ms exec sleep is gone. A click is about 0.2 s instead of ~1.0 s. Identical scans skip parse/rebuild/notify,
+  file rows cap at 50 with **Show all**, and the open row's commit box is the only commit action.
+
 - Worktrees and Review use the kit context card and chooser row; a folder/mode switch shows the skeleton, cancels the old
   read and starts the new one at once. Added the strict context-switch test.
 
