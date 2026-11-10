@@ -52,8 +52,10 @@ export const dangerButton = (t, id, label, onClick, opts = {}) =>
     button(t, id, label, onClick, { ...opts, danger: true });
 export const busyButton = (t, id, label) => button(t, id, label, () => {}, { busy: true });
 
-export const pill = (text, t) =>
-    h_flex()
+export const pill = (text, t) => {
+    const said = String(text ?? "").trim();
+    if (!said) return null;
+    return h_flex()
         .h(20)
         .px(8)
         .flex_none()
@@ -62,7 +64,8 @@ export const pill = (text, t) =>
         .bg(t.selected)
         .text_size(size().label)
         .text_color(t.muted)
-        .child(text);
+        .child(said);
+};
 
 export function segmented(t, id, options, value, onPick) {
     return h_flex()

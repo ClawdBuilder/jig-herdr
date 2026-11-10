@@ -24,6 +24,7 @@ import {
     checkCount,
     checkSummary,
     checksOf,
+    checksText,
     contextKeyOf,
     countOf,
     currentGeneration,
@@ -802,7 +803,7 @@ export default class RepoPullRequests extends View {
                       pr.updated ? pill(since(pr.updated), t) : null,
                   ].filter(Boolean)
                 : [
-                      pill(checkSummary(pr.checks ?? []), t),
+                      pill(checksText(pr), t),
                       pr.review ? pill(pr.review, t) : null,
                       pr.additions || pr.deletions ? pill(`+${pr.additions} −${pr.deletions}`, t) : null,
                   ].filter(Boolean)

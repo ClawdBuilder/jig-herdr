@@ -220,3 +220,12 @@ test("a default branch is No PR, and merged/closed PRs have their own group", as
         ["MERGED", "CLOSED"],
     );
 });
+
+test("a PR with an empty check rollup says so, and no empty chip is drawn", async () => {
+    const { shapePr, checksText } = await load<Record<string, any>>("mods/jig-prs/lib.js");
+    const pr = shapePr({ number: 37, title: "Kit", statusCheckRollup: [] }, "ClawdBuilder/jig-herdr");
+    assert.equal(checksText(pr), "no checks yet");
+    assert.equal(checksText({ checks: null }), null);
+    const kit = readFileSync(path.join(mods, "jig-prs/panel-kit.js"), "utf8");
+    assert.match(kit, /const said = String\(text \?\? ""\)\.trim\(\);\s*if \(!said\) return null;/);
+});

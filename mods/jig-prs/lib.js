@@ -366,3 +366,10 @@ export function prRowDetail(repo) {
         .filter(Boolean)
         .join(" · ");
 }
+
+/** The checks chip: null while checks are unknown, `no checks yet` for an empty rollup, else the summary. */
+export function checksText(pr) {
+    if (!pr || pr.checks == null) return null;
+    if (!pr.checks.length) return "no checks yet";
+    return checkSummary(pr.checks);
+}
