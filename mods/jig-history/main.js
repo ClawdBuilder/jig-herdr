@@ -196,6 +196,8 @@ export default class RepoHistory extends View {
         this.where = where;
         this.contextKey = contextKeyOf(where);
         this.loadedContext = null;
+        this.lastLogRaw = null;
+        this.lastReposRaw = null;
         this.readGeneration = (this.readGeneration ?? 0) + 1;
         this.refreshState.cancel();
         this.loading = false;
@@ -499,12 +501,22 @@ export default class RepoHistory extends View {
                     return;
                 }
                 this.error = null;
+                const raw = `${key}|${log.stdout}|${status.stdout}`;
+                if (raw === this.lastLogRaw && this.loadedContext === contextKey) {
+                    this.loadedContext = contextKey;
+                    this.error = null;
+                    this.loading = false;
+                    return;
+                }
+                this.lastLogRaw = raw;
                 this.commits = parseLog(log.stdout);
                 this.rows = layoutGraph(this.commits);
+                this.laneWidth = laneColumns(Math.max(1, ...(this.rows ?? []).map((r) => r.width)));
                 this.uncommitted = status.code === 0 ? status.stdout.split("\n").filter(Boolean).length : 0;
                 this.logAt = Date.now();
                 this.logFor = key;
                 this.loadedContext = contextKey;
+                this.changedThisRead = true;
             } catch (e) {
                 if (
                     run === this.logGeneration &&
@@ -522,11 +534,12 @@ export default class RepoHistory extends View {
                     readGeneration === this.readGeneration
                 ) {
                     this.loading = false;
+                    const wasBusy = this.refreshState.busy;
                     if (this.refreshState.finish()) {
                         this.logAt = 0;
                         this.refreshScheduler.trigger();
                     }
-                    cx.notify();
+                    if (this.changedThisRead || wasBusy) cx.notify();
                 }
             }
         });
@@ -1029,12 +1042,19 @@ export default class RepoHistory extends View {
             );
     }
 
-    render(_cx) {
+    render(cx) {
+        const where = whereToLook();
+        if (contextKeyOf(where) !== this.contextKey) {
+            this.enter(where);
+            this.refreshScheduler.trigger();
+            this.contextChanged = false;
+            cx.timer.after(0, (cx) => this.loadRepos(cx, true));
+        }
         const t = theme();
         const palette = HUES[settings()?.dark === false ? "light" : "dark"];
         const hue = (i) => (i === null ? t.muted : palette[i % palette.length]);
         const query = this.filterBox.value();
-        const width = laneColumns(Math.max(1, ...(this.rows ?? []).map((r) => r.width)));
+        const width = this.laneWidth ?? 1;
         const hasChooser = !this.single && (this.repos?.length ?? 0) > 1;
         const choosing = hasChooser && this.picking;
         const state = viewForContext(this.contextKey, this.loadedContext, this.commits ?? [], {

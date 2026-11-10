@@ -18,7 +18,7 @@ Empty, no-git, detached-HEAD and unborn-branch states each show one line. While 
 
 **How it behaves:**
 
-Click a commit to open or close its card; the first open runs one `git show --numstat` read. **Open diff** places a terminal beside the panel showing that commit. The scope switch rereads with `--branches --remotes --tags HEAD` for **All**. The repository chooser searches under the focused folder and remembers the choice in `jig-history.branch`. Refresh on mount, when shown, on focus, when a terminal in the folder finishes, and on the backstop (default 60 s). A user-clicked read shows busy after 400 ms; automatic reads do not. A same-key refresh keeps rows; a context change is a skeleton until the read lands; a stale read is discarded. **Load more** reads the next page; the graph says when it is cut.
+Click a commit to open or close its card; the first open runs one `git show --numstat` read. **Open diff** places a terminal beside the panel showing that commit. The scope switch rereads with `--branches --remotes --tags HEAD` for **All**. The repository chooser searches under the focused folder and remembers the choice in `jig-history.branch`. Refresh on mount, when shown, on focus, when a terminal in the folder finishes, and on the backstop (default 60 s). A user-clicked read shows busy after 400 ms; automatic reads do not. A same-key refresh keeps rows; a context change drops them and starts the new read at once. An identical read skips the rebuild and its notify. **Load more** reads the next page; the graph says when it is cut.
 
 **Built from:**
 

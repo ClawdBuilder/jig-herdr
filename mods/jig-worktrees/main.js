@@ -176,6 +176,7 @@ export default class RepoWorktrees extends View {
         this.loadedContext = null;
         this.generation = (this.generation ?? 0) + 1;
         this.trees = null;
+        this.lastRaw = null;
         this.error = null;
         this.confirming = null;
         this.pruning = null;
@@ -237,10 +238,11 @@ export default class RepoWorktrees extends View {
         const { root, on } = this.where;
         const contextKey = this.contextKey;
         const started = Date.now();
-        const _generation = ++this.generation;
         if (!this.refreshState.start({ user, first: this.trees === null, notify: () => cx.notify() })) return;
         this.refreshScheduler.sweep();
         this.loading = true;
+        const pendingBefore = this.loadedContext !== contextKey;
+        this.changedThisRead = false;
         this.triedAt = started;
         const run = ++this.readGeneration;
         cx.spawn(async (cx) => {
@@ -251,12 +253,20 @@ export default class RepoWorktrees extends View {
                     if (result.code !== 0)
                         throw Object.assign(new Error(result.stderr || `exit ${result.code}`), result);
                     const parsed = parseTrees(result.stdout);
-                    this.single = parsed.single;
-                    this.trees = parsed.trees;
+                    const same = this.lastRaw === result.stdout && this.loadedContext === contextKey;
+                    this.lastRaw = result.stdout;
                     this.loadedContext = contextKey;
                     this.error = null;
                     this.loadedAt = Date.now();
                     this.tookMs = this.loadedAt - started;
+                    if (same) {
+                        this.single = parsed.single;
+                        if (pendingBefore) this.changedThisRead = true;
+                    } else {
+                        this.single = parsed.single;
+                        this.trees = parsed.trees;
+                        this.changedThisRead = true;
+                    }
                 })();
                 await work;
             } catch (e) {
@@ -265,11 +275,12 @@ export default class RepoWorktrees extends View {
             } finally {
                 if (run === this.readGeneration) {
                     this.loading = false;
+                    const wasBusy = this.refreshState.busy;
                     if (this.refreshState.finish()) {
                         this.triedAt = 0;
                         this.refreshScheduler.trigger();
                     }
-                    cx.notify();
+                    if (this.changedThisRead || wasBusy) cx.notify();
                 }
             }
         });
@@ -507,7 +518,14 @@ export default class RepoWorktrees extends View {
         );
     }
 
-    render(_cx) {
+    render(cx) {
+        const where = whereToLook();
+        if (contextKeyOf(where) !== this.contextKey) {
+            this.enter(where);
+            this.refreshScheduler.trigger();
+            this.contextChanged = false;
+            cx.timer.after(0, (cx) => this.load(cx, true));
+        }
         const t = theme();
         const context = viewForContext(this.contextKey, this.loadedContext, this.trees, {
             error: this.error,
