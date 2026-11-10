@@ -34,20 +34,21 @@ From **herdr.dev**: coming soon. The listings will be installable there; until t
 
 ## What each panel needs
 
-| Panel      | Needs                      | Reads and runs                                                                                                |
-| ---------- | -------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Git        | `git`, POSIX `sh`          | The focused folder's git metadata and `config.json`; stages, commits, fetches, pulls and pushes on your click |
-| History    | `git`, POSIX `sh`          | Git log, show and status; opens a diff in a terminal; no writes                                               |
-| PR & CI    | `gh` signed in, POSIX `sh` | GitHub PRs and checks through `gh`; opens links in your browser; no writes                                    |
-| Worktrees  | `git`, POSIX `sh`          | Worktree metadata; removes a ready worktree and its merged branch after a confirm; no network                 |
-| Review     | `git`, POSIX `sh`          | A repository's changed files and diffs; stages, unstages or discards a file; no commit                        |
-| Files      | POSIX `sh`                 | The focused folder; opens a file in a read-only tab at any path                                               |
-| Keep awake | Platform sleep tool        | Runs `powershell`/`taskkill` on Windows, `caffeinate` on macOS, `systemd-inhibit` on Linux; no network        |
+| Panel      | Needs                      | Reads and runs                                                                                                   |
+| ---------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Git        | `git`, POSIX `sh`          | Main checkouts in the focused folder and `config.json`; stages, commits, fetches, pulls and pushes on your click |
+| History    | `git`, POSIX `sh`          | Git log, show and status; opens a diff in a terminal; no writes                                                  |
+| PR & CI    | `gh` signed in, POSIX `sh` | Workspace and Mine PRs and checks through `gh`; opens links in your browser; no writes                           |
+| Worktrees  | `git`, POSIX `sh`          | Worktree metadata; removes a ready worktree and its merged branch after a confirm; no network                    |
+| Review     | `git`, POSIX `sh`          | A repository's changed files and diffs; stages, unstages or discards a file; no commit                           |
+| Files      | POSIX `sh`                 | The focused folder; opens a file in a read-only tab at any path                                                  |
+| Keep awake | Platform sleep tool        | Runs `powershell`/`taskkill` on Windows, `caffeinate` on macOS, `systemd-inhibit` on Linux; no network           |
 
 Reads get a 20 s deadline and network actions 60 s, with Herdr's own deadline 5 s later; `networkTimeoutSeconds` can
 raise the network budget, up to Herdr's 600 s cap. Detail and the per-panel programs are in each
-[gallery recipe](gallery/jig-git/RECIPE.md). Everything runs on the machine the space is on. Linux, WSL and macOS work; a
-Windows-local space without WSL has no POSIX `sh` and the git panels will not work.
+[gallery recipe](gallery/jig-git/RECIPE.md). Everything runs on the machine the space is on, so an SSH space needs these programs there. Linux, WSL and macOS work;
+a Windows-local space without WSL has no POSIX `sh` and the git panels will not work. PR & CI also needs `gh` signed in
+on that machine.
 
 The panels show what is there: no approval, no merge, no comment, no write except the explicit stage, commit, discard,
 worktree-remove and fetch/pull/push actions above.

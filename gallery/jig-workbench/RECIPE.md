@@ -6,6 +6,8 @@ layout: no Jig session is needed. From Jig (https://github.com/ClawdBuilder/jig)
 
 ![Jig Workbench](preview.png)
 
+**Install:** add the layout from herdr.dev, or copy `layouts/jig-workbench.json` and the six panel mods from this repository into your Herdr config folder. It needs `git` on the space's machine, a POSIX `sh`, and a signed-in `gh` for PR & CI; a Windows-local space without WSL has no `sh`. No Jig session is needed.
+
 **What you see:**
 
 The window has `titlebar: none`, traffic lights at `[12, 16]`, and `terminal_padding: [14, 12]`. It is a row: a 300 px
@@ -29,11 +31,12 @@ and shown again. Herdr's shipped tab bar remembers whether the side panel was hi
 pane focus are Herdr's own. `Ctrl+Shift+R` toggles the side panel (`layout.toggle:panel`); the layout's key
 section is `layout:jig-workbench`. The sidebar's spaces and agents are Herdr's shipped mods. Keep awake has no visible
 control in this layout; its key is `Ctrl+Shift+Alt+K` (cycle Off / On / While agents work), and its state is shared with the
-zero-height block. Each panel's own refresh triggers, clicks and hover actions are those in its recipe below.
+zero-height block. Each panel's own refresh triggers, clicks and controls are those in its recipe below.
 
 Panels refresh when shown and on focus, and when a terminal in the panel's folder finishes a command, with their configured backstop (Git, History, Worktrees and
-Files default 60 s; PR & CI defaults 180 s, never below 15 s). A loading state appears immediately only on first load;
-a click-started refresh shows busy after 400 ms, and automatic refreshes stay silent.
+Files default 60 s; PR & CI defaults 180 s, never below 15 s). A first load, or a changed machine/folder/follow mode, draws Git, PR & CI and History as a skeleton until their read
+lands; a same-key refresh keeps the last rows. A click-started refresh shows
+busy after 400 ms, and automatic refreshes stay silent.
 
 **Built from:**
 
