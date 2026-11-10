@@ -212,6 +212,11 @@ export default class RepoHistory extends View {
         this.where = where;
         this.contextKey = contextKeyOf(where);
         this.loadedContext = null;
+        this.readGeneration = (this.readGeneration ?? 0) + 1;
+        this.refreshState.cancel();
+        this.loading = false;
+        this.loadingRepos = false;
+        this.contextChanged = true;
         this.generation = (this.generation ?? 0) + 1;
         this.repos = null;
         this.single = false;
@@ -247,9 +252,10 @@ export default class RepoHistory extends View {
             this.loadLog(cx, true);
         }
         const where = whereToLook();
-        if (JSON.stringify([where.root, where.on]) !== this.contextKey) {
+        if (contextKeyOf(where) !== this.contextKey) {
             this.enter(where);
             this.refreshScheduler.trigger();
+            this.loadRepos(cx, true);
             cx.notify();
         }
         const seen = onScreen();
@@ -502,6 +508,8 @@ export default class RepoHistory extends View {
         const on = this.where.on;
         const key = this.logKey();
         const contextKey = this.contextKey;
+        this.readGeneration = (this.readGeneration ?? 0) + 1;
+        const readGeneration = this.readGeneration;
         const logArgs = [
             "--no-optional-locks",
             "log",
@@ -524,7 +532,12 @@ export default class RepoHistory extends View {
                     runCommand(exec, "git", logArgs, { cwd, on }),
                     runCommand(exec, "git", statusArgs, { cwd, on }),
                 ]);
-                if (run !== this.logGeneration || contextKey !== this.contextKey) return;
+                if (
+                    run !== this.logGeneration ||
+                    contextKey !== this.contextKey ||
+                    readGeneration !== this.readGeneration
+                )
+                    return;
                 if (key !== this.logKey()) return;
                 if (log.code !== 0) {
                     this.error = friendlyError(log, { what: "Reading", follow: true }) || "git log failed.";
@@ -538,13 +551,21 @@ export default class RepoHistory extends View {
                 this.logFor = key;
                 this.loadedContext = contextKey;
             } catch (e) {
-                if (run === this.logGeneration) {
+                if (
+                    run === this.logGeneration &&
+                    contextKey === this.contextKey &&
+                    readGeneration === this.readGeneration
+                ) {
                     this.error = String(e?.message ?? e);
                     this.logAt = Date.now();
                     this.logFor = key;
                 }
             } finally {
-                if (run === this.logGeneration) {
+                if (
+                    run === this.logGeneration &&
+                    contextKey === this.contextKey &&
+                    readGeneration === this.readGeneration
+                ) {
                     this.loading = false;
                     if (this.refreshState.finish()) {
                         this.logAt = 0;

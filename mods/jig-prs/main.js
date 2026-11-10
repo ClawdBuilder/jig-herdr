@@ -205,6 +205,10 @@ export default class RepoPullRequests extends View {
         this.where = where;
         this.contextKey = contextKeyOf(where);
         this.loadedContext = null;
+        this.readGeneration++;
+        this.refreshState.cancel();
+        this.loading = false;
+        this.contextChanged = true;
         this.error = null;
         this.data = {};
         this.loadedAt = {};
@@ -230,9 +234,10 @@ export default class RepoPullRequests extends View {
     tick(cx) {
         this.refreshState.tick(Date.now(), () => cx.notify());
         const where = whereToLook();
-        if (JSON.stringify([where.root, where.on]) !== this.contextKey) {
+        if (contextKeyOf(where) !== this.contextKey) {
             this.enter(where);
             this.refreshScheduler.trigger();
+            this.load(cx);
             cx.notify();
         }
         this.updateBadge();
@@ -316,8 +321,10 @@ export default class RepoPullRequests extends View {
                 })();
                 await work;
             } catch (e) {
-                if (run === this.readGeneration && contextKey === this.contextKey)
+                if (run === this.readGeneration && contextKey === this.contextKey) {
                     this.error = friendlyError(e, { what: "Reading", follow: true });
+                    this.loading = false;
+                }
             } finally {
                 if (run === this.readGeneration) {
                     this.loading = false;
