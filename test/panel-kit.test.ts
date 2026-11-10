@@ -16,7 +16,7 @@ test("every panel-kit.js is byte-identical and imported", () => {
             return [];
         }
     });
-    assert.equal(files.length, 2);
+    assert.equal(files.length, 3);
     for (const file of files) {
         assert.equal(file.text, files[0].text, `${file.mod}/panel-kit.js differs`);
         assert.match(readFileSync(path.join(mods, file.mod, "main.js"), "utf8"), /from "\.\/panel-kit\.js"/, file.mod);

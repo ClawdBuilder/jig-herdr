@@ -8,7 +8,8 @@ focused terminal's repository, or the space's folder, with a repository chooser 
 
 **What you see:**
 
-A 42 px header with the repository name, the Terminal/Space switch (side panel only) and Refresh. A draggable divider
+A 42 px header with the repository name and Refresh. In the side panel, a 32 px context card under it names the folder,
+toggles **Terminal**/**Space**, and carries the machine; a Review tab has no card. A draggable divider
 (width remembered in the mod's localStorage) separates the file list from the right side; below 640 px the list stacks
 above the diff instead, keeping both usable in a 380 px panel. The right side's own row carries the file path, the
 **Diff | File | Patch** switch, **Copy file** and **Copy path**. The left side has two mode
@@ -26,7 +27,7 @@ Unstage and Discard are per file; Discard asks inline. A second request for the 
 
 **Built from:**
 
-`main.js` + `lib.js` + `refresh.js` (the shared runner and `GIT_READ`) + `panel-header.js` (the shared header and error line) + `follow.js`/`follow-state.js` (the Terminal/Space choice); no `config.json`. Props: `{ on, repo, name, file?, mode? }`; without `repo` it follows the folder. Herdr: `exec`, `run`,
+`main.js` + `lib.js` + `refresh.js` (the shared runner and `GIT_READ`) + `panel-header.js` (the shared header and error line) + `panel-kit.js` (the context card) + `follow.js`/`follow-state.js` (the Terminal/Space choice); no `config.json`. Props: `{ on, repo, name, file?, mode? }`; without `repo` it follows the folder. Herdr: `exec`, `run`,
 `tab.new`, `shared`/`setShared`, `appHome`, `readTextFile`, `theme`, `layout`, `panes`, `spaces`, `Editor`/`TextView` from
 `gpui-base`. Shared key `jig-review.open`; localStorage stores divider width, pane choice and wrap. Base candidates, in order:
 `origin/develop`, the remote HEAD branch, `origin/main`, `origin/master`, `develop`, `main`, `master`.
