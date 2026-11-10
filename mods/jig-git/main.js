@@ -1409,6 +1409,7 @@ export default class RepoChanges extends View {
         const open = this.opened.has(repo.path),
             focus = repo.files.length > 0,
             detail = [
+                repo.worktreeOf ? `worktree of ${repo.worktreeOf.split(/[\\/]/).filter(Boolean).pop()}` : null,
                 repo.branch || (repo.detached ? "detached" : "?"),
                 badgeText(repo),
                 repo.total ? `${repo.total} file${repo.total === 1 ? "" : "s"}` : null,

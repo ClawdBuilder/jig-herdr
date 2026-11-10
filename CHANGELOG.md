@@ -4,6 +4,10 @@
 
 ### Changed
 
+- Git lists main checkouts only in Space mode; linked worktrees belong to the Worktrees panel. In Terminal mode a focused
+  linked worktree is shown alone with `worktree of <repo>`, so its active branch still works. A refresh of the demo folder
+  drops from 96 `git` calls to 58 (six checkouts to four), including four `git worktree list` calls removed.
+
 - Review uses the shared panel kit for its buttons, status line and empty state, with the kit's type scale; its narrow
   two-row toolbar and stacked file list remain.
 - The demo repository script now builds richer, deterministic history: ages relative to the run, several authors, fifteen
