@@ -744,11 +744,11 @@ test("PR & CI folds every No PR repository into one group", async () => {
     );
     assert.deepEqual(
         split.noPr.map((r: any) => r.name),
-        ["b", "c"],
+        ["b", "c", "d"],
     );
     assert.deepEqual(
         split.parked.map((r: any) => r.name),
-        ["x", "d", "e"],
+        ["x", "e"],
     );
     const source = readFileSync(new URL("../mods/jig-prs/main.js", import.meta.url), "utf8");
     assert.match(source, /section\("noPr", "No PR"/);

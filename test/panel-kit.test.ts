@@ -125,7 +125,10 @@ test("the context key includes machine, folder and follow mode", async () => {
 
 test("a foldable group opens when it is the only group", () => {
     const source = readFileSync(path.join(mods, "jig-git/panel-kit.js"), "utf8");
-    assert.match(source, /export function groupOpen\(open, groupCount\) \{\s*return groupCount <= 1 \|\| open;/);
+    assert.match(
+        source,
+        /export function groupOpen\(open, unfoldedGroups\) \{\s*return open \|\| unfoldedGroups === 0;/,
+    );
 });
 
 test("PR groups put failures first, pending next, green+approved ready and non-PRs parked", async () => {
@@ -141,6 +144,7 @@ test("PR groups put failures first, pending next, green+approved ready and non-P
         needs: ["fail"],
         waiting: ["wait"],
         ready: ["ready"],
+        merged: [],
         noPr: ["nopr"],
         parked: ["parked"],
     });
@@ -169,8 +173,8 @@ test("PR workspace with local or non-GitHub remotes lands parked, never loading"
 
 test("the kit's group rule opens a lone folded group", () => {
     const kit = readFileSync(path.join(mods, "jig-git/panel-kit.js"), "utf8");
-    assert.match(kit, /export function groupOpen\(open, groupCount\) \{\s*return groupCount <= 1 \|\| open;/);
-    assert.match(readFileSync(path.join(mods, "jig-prs/main.js"), "utf8"), /groupOpen\(shown, groupsShown\)/);
+    assert.match(kit, /export function groupOpen\(open, unfoldedGroups\) \{\s*return open \|\| unfoldedGroups === 0;/);
+    assert.match(readFileSync(path.join(mods, "jig-prs/main.js"), "utf8"), /groupOpen\(shown, openedGroups\)/);
 });
 
 test("a no-PR row's detail does not repeat the repo title", async () => {
@@ -184,4 +188,44 @@ test("a no-PR row's detail does not repeat the repo title", async () => {
         "feature/PROJ-124",
     );
     assert.equal(prRowDetail({ name: "w", branch: "x", upstream: null }), "x · no upstream");
+});
+
+test("a default branch is No PR, and merged/closed PRs have their own group", async () => {
+    const { prGroups, workspaceRowsFor } = await load<Record<string, any>>("mods/jig-prs/lib.js");
+    const discovery = {
+        repos: [
+            {
+                path: "/d/jig-herdr",
+                branch: "main",
+                remote: "https://github.com/ClawdBuilder/jig-herdr.git",
+                onDefault: true,
+                slug: "ClawdBuilder/jig-herdr",
+            },
+            {
+                path: "/d/git",
+                branch: "feat/x",
+                remote: "https://github.com/ClawdBuilder/jig-herdr.git",
+                onDefault: false,
+                slug: "ClawdBuilder/jig-herdr",
+            },
+        ],
+    };
+    const rows = workspaceRowsFor(discovery, "/d");
+    assert.equal(rows[0].status, "nopr", "main is a no-PR row");
+    const merged = { ...rows[0], status: "merged", pr: { state: "MERGED", n: 34, title: "Kit" } };
+    const closed = { ...rows[1], status: "merged", pr: { state: "CLOSED", n: 33, title: "Git" } };
+    const groups = prGroups([merged, closed]);
+    assert.deepEqual(
+        groups.merged.map((r: any) => r.pr.state),
+        ["MERGED", "CLOSED"],
+    );
+});
+
+test("a PR with an empty check rollup says so, and no empty chip is drawn", async () => {
+    const { shapePr, checksText } = await load<Record<string, any>>("mods/jig-prs/lib.js");
+    const pr = shapePr({ number: 37, title: "Kit", statusCheckRollup: [] }, "ClawdBuilder/jig-herdr");
+    assert.equal(checksText(pr), "no checks yet");
+    assert.equal(checksText({ checks: null }), null);
+    const kit = readFileSync(path.join(mods, "jig-prs/panel-kit.js"), "utf8");
+    assert.match(kit, /const said = String\(text \?\? ""\)\.trim\(\);\s*if \(!said\) return null;/);
 });

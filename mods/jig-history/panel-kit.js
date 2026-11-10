@@ -52,8 +52,10 @@ export const dangerButton = (t, id, label, onClick, opts = {}) =>
     button(t, id, label, onClick, { ...opts, danger: true });
 export const busyButton = (t, id, label) => button(t, id, label, () => {}, { busy: true });
 
-export const pill = (text, t) =>
-    h_flex()
+export const pill = (text, t) => {
+    const said = String(text ?? "").trim();
+    if (!said) return null;
+    return h_flex()
         .h(20)
         .px(8)
         .flex_none()
@@ -62,7 +64,8 @@ export const pill = (text, t) =>
         .bg(t.selected)
         .text_size(size().label)
         .text_color(t.muted)
-        .child(text);
+        .child(said);
+};
 
 export function segmented(t, id, options, value, onPick) {
     return h_flex()
@@ -98,9 +101,9 @@ export function segmented(t, id, options, value, onPick) {
         );
 }
 
-/** A foldable group stays open when it is the only group with rows. */
-export function groupOpen(open, groupCount) {
-    return groupCount <= 1 || open;
+/** Folded groups open when no group is unfolded; otherwise only the chosen opened ones are open. */
+export function groupOpen(open, unfoldedGroups) {
+    return open || unfoldedGroups === 0;
 }
 
 export function groupHeader(t, id, label, count, color, action) {
@@ -200,7 +203,7 @@ export function contextCard(t, { name, follow, onFollow, machine }) {
         .items_center()
         .text_size(size().secondary)
         .child(svg("mods/workspace-chrome/folder.svg").size(13).flex_none().text_color(t.muted))
-        .child(div().min_w(0).truncate().font_semibold().child(name))
+        .child(div().flex_1().min_w(0).truncate().font_semibold().child(name))
         .child(
             div()
                 .id("panel-follow")
@@ -214,7 +217,7 @@ export function contextCard(t, { name, follow, onFollow, machine }) {
                 })
                 .child(follow ? "follows the focused terminal" : "uses the space's folder"),
         )
-        .when(Boolean(machine), (el) => el.child(div().flex_1().justify_end().child(pill(machine, t))));
+        .when(Boolean(machine), (el) => el.child(div().flex_none().justify_end().child(pill(machine, t))));
 }
 
 export function footer(t, { summary, color, action }) {

@@ -49,21 +49,19 @@ while [ $i -lt $count ]; do cat "$work/$i.out"; i=$((i + 1)); done`;
 /** Split workspace repositories: PR/error/loading stay in the list, "no PR" and default/remote-less get folded groups. */
 export function workspaceSplit(repos) {
     return {
-        featured: (repos ?? []).filter((repo) => ["pr", "error", "loading"].includes(repo.status)),
-        noPr: (repos ?? []).filter((repo) => repo.status === "nopr"),
-        parked: (repos ?? []).filter(
-            (repo) => repo.status === "default" || repo.status === "noremote" || repo.status === "notgithub",
-        ),
+        featured: (repos ?? []).filter((repo) => ["pr", "error", "loading", "merged"].includes(repo.status)),
+        noPr: (repos ?? []).filter((repo) => repo.status === "nopr" || repo.status === "default"),
+        parked: (repos ?? []).filter((repo) => repo.status === "noremote" || repo.status === "notgithub"),
     };
 }
 
 /** The PR list groups: a PR with a failure needs fixing; pending or unapproved waits; green+approved is ready. */
 export function prGroups(repos) {
-    const groups = { needs: [], waiting: [], ready: [], noPr: [], parked: [] };
+    const groups = { needs: [], waiting: [], ready: [], merged: [], noPr: [], parked: [] };
     for (const repo of repos ?? []) {
-        if (repo.status === "nopr") groups.noPr.push(repo);
-        else if (repo.status === "default" || repo.status === "noremote" || repo.status === "notgithub")
-            groups.parked.push(repo);
+        if (repo.status === "merged") groups.merged.push(repo);
+        else if (repo.status === "nopr") groups.noPr.push(repo);
+        else if (repo.status === "noremote" || repo.status === "notgithub") groups.parked.push(repo);
         else if (repo.status === "error" || countOf(repo.pr, "fail") || repo.pr?.review === "CHANGES_REQUESTED")
             groups.needs.push(repo);
         else if (repo.status === "loading" || countOf(repo.pr, "pending") || repo.pr?.review !== "APPROVED")
@@ -347,7 +345,7 @@ export function workspaceRowsFor(discovery, root) {
     return (discovery?.repos ?? []).map((repo) => {
         let status = "loading";
         if (!repo.slug) status = "noremote";
-        else if (repo.onDefault) status = "default";
+        else if (repo.onDefault) status = "nopr";
         return { ...repo, name: relName(repo.path, root), status, pr: null, err: null };
     });
 }
@@ -367,4 +365,11 @@ export function prRowDetail(repo) {
     return [repo.branch, repo.detached ? "detached" : null, !repo.detached && !repo.upstream ? "no upstream" : null]
         .filter(Boolean)
         .join(" · ");
+}
+
+/** The checks chip: null while checks are unknown, `no checks yet` for an empty rollup, else the summary. */
+export function checksText(pr) {
+    if (!pr || pr.checks == null) return null;
+    if (!pr.checks.length) return "no checks yet";
+    return checkSummary(pr.checks);
 }
