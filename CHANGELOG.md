@@ -16,6 +16,11 @@
 
 ### Changed
 
+- A shared `panel-kit.js` now gives Git and Worktrees one type scale, status dot, buttons, pills, segmented controls,
+  group headers, rows, context cards, footer and status line. Git groups checkouts as Needs you, Changed, Ahead or
+  behind and Clean; Worktrees groups Ready, In progress and Main checkout. The Terminal/Space switch moves to a context
+  card for these two panels. Patterns adapted from runkids/skillshare (MIT); see NOTICE and LICENSE-SKILLSHARE.
+
 - The mod-folder `RECIPE.md` and `preview.png` of `jig-git` and `jig-keep-awake` are no longer installed; the installer
   removes files from earlier versions.
 - The root `RECIPE.md` now describes the current Jig layout, including the shared header and the Git and Keep awake recipes.
