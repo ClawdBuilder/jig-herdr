@@ -49,7 +49,7 @@ import {
     visibleBranches,
 } from "./lib.js";
 import { panelError, panelHeader, ROW_FONT } from "./panel-header.js";
-import { contextCard, segmented, skeleton } from "./panel-kit.js";
+import { chooserRow, contextCard, segmented, skeleton } from "./panel-kit.js";
 import {
     focusRegained,
     friendlyError,
@@ -834,43 +834,18 @@ export default class RepoHistory extends View {
     /** The repository chooser's button, and, while it is open, a search box under it. */
     chooser(t, hue) {
         const current = this.repos?.find((r) => r.path === this.repo);
-        const button = h_flex()
-            .id("repo-pick")
-            .h(26)
-            .px(8)
-            .gap(6)
-            .items_center()
-            .rounded(7)
-            .border_1()
-            .border_color(t.border)
-            .bg(t.surface)
-            .cursor_pointer()
-            .hover((s) => s.bg(t.hover))
-            .tooltip("Choose the repo")
-            .on_click((_e, cx) => {
+        const button = chooserRow(t, {
+            label: current
+                ? `${relName(current.path, this.where.root)}${current.branch ? ` · ${current.branch}` : ""}`
+                : (this.reposError ?? "No repo"),
+            dirty: Boolean(current?.dirty),
+            color: hue(3),
+            open: this.picking,
+            onClick: (cx) => {
                 this.picking = !this.picking;
                 cx.notify();
-            })
-            .child(svg("mods/workspace-chrome/folder.svg").size(13).flex_none().text_color(t.muted))
-            .child(
-                div()
-                    .flex_1()
-                    .min_w(0)
-                    .truncate()
-                    .font_semibold()
-                    .child(
-                        current
-                            ? `${relName(current.path, this.where.root)}${current.branch ? ` · ${current.branch}` : ""}`
-                            : (this.reposError ?? "No repo"),
-                    ),
-            )
-            .when(Boolean(current?.dirty), (el) => el.child(div().flex_none().w(8).h(8).rounded(8).bg(hue(3))))
-            .child(
-                svg(`mods/workspace-chrome/chevron-${this.picking ? "down" : "right"}.svg`)
-                    .size(12)
-                    .flex_none()
-                    .text_color(t.dim),
-            );
+            },
+        });
         const search = div()
             .id("pick-q")
             .h(28)

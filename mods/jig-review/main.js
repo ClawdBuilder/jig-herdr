@@ -83,6 +83,7 @@ import {
 } from "./lib.js";
 import { panelError, panelHeader } from "./panel-header.js";
 import {
+    chooserRow,
     contextCard,
     dangerButton,
     emptyLine,
@@ -923,36 +924,22 @@ export default class RepoReview extends View {
         const branch = current?.branch || this.branch;
         return v_flex()
             .flex_none()
+            .px(12)
+            .py(4)
             .border_b(1)
             .border_color(t.border)
             .child(
-                h_flex()
-                    .id("review-repo-pick")
-                    .h(24)
-                    .px(12)
-                    .gap(6)
-                    .items_center()
-                    .text_size(11)
-                    .text_color(t.muted)
-                    .cursor_pointer()
-                    .hover((s) => s.bg(t.hover).text_color(t.foreground))
-                    .on_click((_e, cx) => {
+                chooserRow(t, {
+                    id: "review-repo-pick",
+                    label: `${repoName(current?.path ?? this.repo)} · ${branch}`,
+                    dirty: Boolean(current?.dirty),
+                    color: t.ansi3,
+                    open: this.picking,
+                    onClick: (cx) => {
                         this.picking = !this.picking;
                         cx.notify();
-                    })
-                    .child(svg(ICON("folder")).size(11).flex_none())
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w(0)
-                            .truncate()
-                            .child(repoName(current?.path ?? this.repo)),
-                    )
-                    .child(
-                        div()
-                            .flex_none()
-                            .child(this.picking ? "▴" : "▾"),
-                    ),
+                    },
+                }),
             )
             .when(this.picking, (el) =>
                 el.child(

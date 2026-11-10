@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Worktrees and Review use the kit context card and chooser row; a folder/mode switch shows the skeleton, cancels the old
+  read and starts the new one at once. Added the strict context-switch test.
+
+
 ### Fixed
 
 - Worktrees and Review now key reads by machine, folder and follow mode: a switch cancels the old read, shows the kit
