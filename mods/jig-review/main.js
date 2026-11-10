@@ -1221,8 +1221,8 @@ export default class RepoReview extends View {
     }
 
     /** Added / removed rows: a tint behind the row, a full-strength bar at the left edge, and the line
-    // number and marker in the same full-strength color. Text stays foreground so it reads over the tint.
-    // (Colors take #rrggbbaa; the fallbacks are the dark theme's ansi1 / ansi2 in case a theme lacks them.)
+     * number and marker in the same full-strength color. Text stays foreground so it reads over the tint.
+     * (Colors take #rrggbbaa; the fallbacks are the dark theme's ansi1 / ansi2 in case a theme lacks them.) */
     diffRow(t, { kind, number, text }, selected) {
         if (kind === "@")
             return div()
@@ -1379,7 +1379,13 @@ export default class RepoReview extends View {
                     .child(div().flex_none().text_size(11).text_color(t.ansi2).child(`+${add}`))
                     .child(div().flex_none().text_size(11).text_color(t.ansi1).child(`−${del}`))
                     .when(this.comments.length > 0, (el) =>
-                        el.child(div().flex_none().text_size(11).text_color(t.accent).child(`Comments ${this.comments.length}`)),
+                        el.child(
+                            div()
+                                .flex_none()
+                                .text_size(11)
+                                .text_color(t.accent)
+                                .child(`Comments ${this.comments.length}`),
+                        ),
                     )
                     .when(Boolean(copy) && this.pane === "diff", (el) =>
                         el.child(
@@ -1462,10 +1468,7 @@ export default class RepoReview extends View {
                         .border_color(t.border)
                         .children(
                             (() => {
-                                const placed = placeComments(
-                                    commentsInFile(this.comments, this.sel),
-                                    this.rows,
-                                );
+                                const placed = placeComments(commentsInFile(this.comments, this.sel), this.rows);
                                 const out = placed.filter((comment) => comment.outdated);
                                 return [
                                     ...(out.length
