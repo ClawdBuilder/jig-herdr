@@ -5,6 +5,8 @@ ones. From Jig (https://github.com/ClawdBuilder/jig). No Jig required.
 
 ![Worktrees](preview.png)
 
+Preview: the demo repositories from scripts/demo-repos.sh.
+
 **What you see:**
 
 A 42 px header titled **Worktrees** (the worktree count is the tooltip), **Prune merged (N)** when N ready rows exist,

@@ -4,6 +4,8 @@ Git for every main checkout in the focused folder: stage, commit, fetch, pull an
 
 ![Git](preview.png)
 
+Preview: the demo repositories from scripts/demo-repos.sh.
+
 **Install:** add the listing from herdr.dev, or copy the repository's `mods/jig-git` into your Herdr config folder's `mods/`. Put a layout block with `content.mod = "jig-git"` where the panel should sit.
 
 **What you see:**

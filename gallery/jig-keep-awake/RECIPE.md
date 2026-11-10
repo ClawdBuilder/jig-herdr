@@ -6,6 +6,8 @@ required.
 
 ![Keep awake](preview.png)
 
+Preview: the Keep awake popup in the Jig Workbench layout.
+
 **Install:** add the listing from herdr.dev, or copy `mods/jig-keep-awake` into your Herdr config folder's `mods/` and map `ctrl-shift-alt-k` to `jig-keep-awake.cycle` in `keys.json`. A layout needs a 0 px block with `content.mod = "jig-keep-awake"`. It needs no git, no `gh` and no network; on Windows it uses PowerShell, not `sh`.
 
 **What you see:**

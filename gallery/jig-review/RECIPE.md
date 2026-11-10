@@ -6,6 +6,8 @@ focused terminal's repository, or the space's folder, with a repository chooser 
 
 ![Review](preview.png)
 
+Preview: the demo repositories from scripts/demo-repos.sh.
+
 **What you see:**
 
 A 42 px header with the repository name and Refresh. In the side panel, a 32 px context card under it names the folder,

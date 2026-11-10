@@ -6,6 +6,8 @@ layout: no Jig session is needed. From Jig (https://github.com/ClawdBuilder/jig)
 
 ![Jig Workbench](preview.png)
 
+Preview: the full Jig Workbench window on the demo repositories, with the spaces sidebar hidden.
+
 **Install:** add the layout from herdr.dev, or copy `layouts/jig-workbench.json` and the six panel mods from this repository into your Herdr config folder. It needs `git` on the space's machine, a POSIX `sh`, and a signed-in `gh` for PR & CI; a Windows-local space without WSL has no `sh`. No Jig session is needed.
 
 **What you see:**
