@@ -30,13 +30,8 @@ import {
 } from "herdr";
 import { shown } from "./layout.js";
 import {
-    ago,
-    aheadChip,
     badgeText,
-    branchLabel,
-    branchMatchesName,
     busyAgents,
-    CAP,
     canRun,
     checkoutDetail,
     commit,
@@ -46,7 +41,6 @@ import {
     disambiguators,
     discardFile,
     discardKind,
-    divergedText,
     FOLD_KEY,
     fetchRemote,
     filterGroups,
@@ -55,7 +49,6 @@ import {
     groupCheckouts,
     groupRepos,
     holdsLock,
-    isClean,
     isDiverged,
     isFolded,
     lockOf,
@@ -65,26 +58,22 @@ import {
     parseRepos,
     pickRoot,
     pullFastForward,
-    pushTarget,
     RUNNING_KEY,
-    rowActions,
+    repoActions,
     rowName,
     SCRIPT,
-    showsCommit,
     splitPath,
     stageAll,
     stageFile,
-    unstageAll,
     unstageFile,
     viewForContext,
     withAllFolds,
-    withFold,
     withLock,
     withoutLock,
-    worktreeSignal,
 } from "./lib.js";
 import { panelError, panelHeader } from "./panel-header.js";
 import {
+    busyButton,
     contextCard,
     dangerButton,
     emptyLine,
@@ -115,7 +104,6 @@ import {
 // (an agent finishing a turn, a command ending): that's when files change.
 const NOTE_MS = 12000; // how long an action's result stays under its checkout
 const CONFIG_MS = 60000; // how long config.json is trusted before it is read again
-const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const visible = () => shown(layout(), "jig-git");
 const ICON = (name) => `mods/workspace-chrome/${name}.svg`;
 const OWN = (name) => `mods/jig-git/${name}.svg`;
@@ -211,7 +199,7 @@ function textButton(t, id, label, onClick, danger = false, disabled = false, tip
 
 export default class RepoChanges extends View {
     init(_props, cx) {
-        const p = modProps() ?? {};
+        const p = { ...(modProps() ?? {}), ...(_props ?? {}) };
         if (p.picker) {
             // This copy is the branch picker popup, not the panel.
             this.picker = new BranchPicker(p, cx);
@@ -226,7 +214,8 @@ export default class RepoChanges extends View {
         this.error = null;
         this.loaded = false;
         this.last = 0;
-        this.filter = "";
+        this.filter = typeof p.filter === "string" ? p.filter : "";
+        this.previewOpen = Array.isArray(p.open) ? p.open : [];
         this.opened = new Set(); // checkouts whose files are shown; files start folded, so every row is one line
         this.folds = foldMap(shared(FOLD_KEY));
         this.cleanOpen = false;
@@ -242,10 +231,7 @@ export default class RepoChanges extends View {
         this.configAt = 0;
         this.follow = true;
         this.spaceId = undefined;
-        this.targets = new Map(); // path -> pushTarget, for the row's Push/Publish label
         this.claimed = new Map(); // path -> { on, token }: what this copy holds, to release on close
-        this.targetsAt = 0;
-        this.targetsLoading = false;
         this.refreshState = new RefreshState();
         this.refreshScheduler = new RefreshScheduler({ seconds: refreshSeconds(this.config) });
         this.readGeneration = 0;
@@ -256,6 +242,7 @@ export default class RepoChanges extends View {
         this.done = Number(shared(DONE)?.at ?? 0);
         this.view = null;
         this.input = InputState.new({ placeholder: "Filter repos and files" });
+        if (this.filter) this.input.set_value(this.filter);
         this.input.on("change", (_e, cx) => {
             this.filter = this.input.value();
             this.rebuildView();
@@ -310,8 +297,6 @@ export default class RepoChanges extends View {
             this.confirm = null;
             this.notes = {};
             this.fetchNote = null;
-            this.targets = new Map();
-            this.targetsAt = 0;
             this.last = 0;
             this.contextChanged = true;
         }
@@ -351,7 +336,7 @@ export default class RepoChanges extends View {
             cx.notify();
         }
         const now = Date.now(),
-            stale = Object.entries(this.notes).filter(([, n]) => now - n.at > NOTE_MS);
+            stale = Object.entries(this.notes).filter(([, n]) => n.ok && now - n.at > NOTE_MS);
         if (stale.length) {
             for (const [path] of stale) delete this.notes[path];
             cx.notify();
@@ -382,7 +367,6 @@ export default class RepoChanges extends View {
         if (terminalFinished(this.lastTerminals, currentTerminals, this.loc?.root)) this.refreshScheduler.trigger();
         this.lastTerminals = currentTerminals;
         if (!this.loading && this.refreshScheduler.due()) this.refresh(cx, false, this.refreshScheduler.isBackstop());
-        if (this.loaded) this.loadTargets(cx);
     }
 
     // A commit message box for each checkout with staged files. Input states are made here, never in render.
@@ -438,6 +422,12 @@ export default class RepoChanges extends View {
                 if (run !== this.readGeneration || context !== this.context) return;
                 if (r.code !== 0) throw Object.assign(new Error(r.stderr || `exit ${r.code}`), r);
                 this.repos = parseRepos(r.stdout, root);
+                if (this.previewOpen?.length) {
+                    const wanted = new Set(this.previewOpen);
+                    for (const repo of this.repos)
+                        if (wanted.has(repo.name) || wanted.has(repo.path)) this.opened.add(repo.path);
+                    this.previewOpen = null;
+                }
                 this.loadedRoot = root;
                 this.loadedContext = context;
                 this.rebuildView();
@@ -544,12 +534,18 @@ export default class RepoChanges extends View {
             }
             this.release(repo, token);
             if (context === this.context) {
-                if (!r.ok || !quiet) this.notes[repo.path] = { ...r, at: Date.now() };
-                else delete this.notes[repo.path];
-                if (r.ok && ["Fetching", "Pulling", "Pushing", "Publishing"].includes(what)) {
-                    this.targets.delete(repo.path);
-                    this.targetsAt = 0;
-                }
+                if (!r.ok || !quiet) {
+                    this.notes[repo.path] = { ...r, at: Date.now() };
+                    if (r.ok) {
+                        const at = this.notes[repo.path].at;
+                        cx.timer.after(4000, (cx) => {
+                            if (this.notes[repo.path]?.at === at) {
+                                delete this.notes[repo.path];
+                                cx.notify();
+                            }
+                        });
+                    }
+                } else delete this.notes[repo.path];
                 this.last = 0;
                 this.refresh(cx, false, true);
                 if (r.ok && after) after(cx);
@@ -557,34 +553,6 @@ export default class RepoChanges extends View {
             cx.notify();
         });
         cx.notify();
-    }
-
-    /** The push target of every checkout, cached for half a minute: the row's button follows git's own settings, like
-     * the dialog does. Read locally, never on the network. */
-    loadTargets(cx) {
-        if (this.targetsLoading || Date.now() - this.targetsAt < 30000) return;
-        const repos = (this.repos ?? []).filter((r) => r.remote);
-        if (!repos.length) return;
-        this.targetsLoading = true;
-        this.targetsAt = Date.now();
-        const git = this.git(),
-            context = this.context,
-            remote = this.config.remote;
-        cx.spawn(async (cx) => {
-            const found = new Map(this.targets);
-            for (const repo of repos) {
-                try {
-                    found.set(repo.path, await pushTarget(git, { checkout: repo.path, remote }));
-                } catch {
-                    // a checkout that cannot be read keeps its last answer
-                }
-            }
-            this.targetsLoading = false;
-            if (context === this.context) {
-                this.targets = found;
-                cx.notify();
-            }
-        });
     }
 
     configNetwork() {
@@ -730,26 +698,11 @@ export default class RepoChanges extends View {
     }
 
     /** Show or hide one checkout's files; they start hidden, so a list of ten repos is ten lines. */
-    toggleFiles(path, cx) {
-        if (!this.opened.delete(path)) this.opened.add(path);
-        cx.notify();
-    }
-
-    /** Whether this group's worktrees are folded away now: the person's stored choice, else the default. */
     foldedGroup(group) {
         return isFolded(this.folds, group, this.loc?.root ?? "");
     }
 
     /** The chevron on a main checkout: fold or unfold its worktrees, and remember it for this repo path. */
-    foldGroup(group, cx) {
-        const folded = this.foldedGroup(group);
-        this.folds = withFold(this.folds, group, !folded);
-        setShared(FOLD_KEY, this.folds);
-        if (folded) this.refreshScheduler.trigger();
-        cx.notify();
-    }
-
-    /** The header button: fold every group, or unfold every group when any is folded. */
     foldAll(cx) {
         const groups = groupRepos(this.repos);
         this.folds = withAllFolds(
@@ -760,468 +713,6 @@ export default class RepoChanges extends View {
         cx.notify();
     }
 
-    hovering(path) {
-        return (on, cx) => {
-            this.hover = on ? path : this.hover === path ? null : this.hover;
-            cx.notify();
-        };
-    }
-
-    // The name: the folder's own (shortened for a worktree), the collision tag, then the folded-worktree count or the
-    // file fold (chevron + count) where they belong, beside the name.
-    nameCell(t, repo, nested, dir, group, tip, folded, signal, files, maxName) {
-        const { name } = rowName(repo, { main: nested ? group.main : null, dir }),
-            clean = !repo.files.length && !repo.base,
-            trees = nested ? 0 : group.worktrees.length;
-        return h_flex()
-            .flex_none()
-            .min_w(0)
-            .gap(4)
-            .items_center()
-            .overflow_hidden()
-            .child(
-                div()
-                    .min_w(24)
-                    .max_w(maxName)
-                    .truncate()
-                    .when(!nested, (el) => el.font_semibold())
-                    .when(nested, (el) => el.text_color(t.muted))
-                    .when(clean && !nested, (el) => el.text_color(t.muted))
-                    .tooltip(tip)
-                    .child(name),
-            )
-            .when(Boolean(dir), (el) =>
-                el.child(div().flex_none().max_w(46).truncate().text_size(9.5).text_color(t.dim).child(dir)),
-            )
-            .when(folded && trees > 0, (el) =>
-                el.child(div().flex_none().text_size(9.5).text_color(t.dim).child(String(trees))),
-            )
-            .when(signal, (el) => el.child(div().flex_none().text_size(8).text_color(t.blocked).child("●")))
-            .when(Boolean(files), (el) =>
-                el.child(
-                    h_flex()
-                        .flex_none()
-                        .gap(1)
-                        .items_center()
-                        .cursor_pointer()
-                        .rounded(4)
-                        .px(2)
-                        .hover((sp) => sp.bg(t.raised))
-                        .tooltip(files.open ? "Hide files" : "Show files")
-                        .on_mouse_down("left", (_e, cx) => cx.stopPropagation())
-                        .on_click((_e, cx) => {
-                            cx.stop_propagation();
-                            this.toggleFiles(repo.path, cx);
-                        })
-                        .child(svg(ICON(files.open ? "chevron-down" : "chevron-right")).size(9))
-                        .child(div().text_size(9.5).text_color(t.dim).child(String(files.total))),
-                ),
-            );
-    }
-
-    // The branch chip (a click opens the picker): the conventional prefix as one dim word on wide panels, and the rest
-    // cut from the left so its end (the ticket number) always survives.
-    branchChip(t, repo, repeatsName = false) {
-        const label = branchLabel(repo.branch, { lead: this.width >= 480 }),
-            iconOnly = repeatsName || this.width === 0 || this.width < 240;
-        if (iconOnly)
-            return h_flex()
-                .id(`branch-${repo.path}`)
-                .flex_none()
-                .w(22)
-                .h(18)
-                .items_center()
-                .justify_center()
-                .rounded(5)
-                .cursor_pointer()
-                .text_color(repo.detached ? t.dim : t.muted)
-                .hover((s) => s.bg(t.raised).text_color(t.foreground))
-                .tooltip(repo.upstream ? `${repo.branch} · tracks ${repo.upstream}` : repo.branch)
-                .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-                .on_click((_e, cx) => {
-                    cx.stop_propagation();
-                    this.openPicker(repo);
-                })
-                .child(svg(ICON("branch")).size(10));
-        return h_flex()
-            .id(`branch-${repo.path}`)
-            .flex_1()
-            .min_w(0)
-            .h(18)
-            .px(4)
-            .gap(2)
-            .items_center()
-            .rounded(5)
-            .text_size(10.5)
-            .text_color(repo.detached ? t.dim : t.muted)
-            .cursor_pointer()
-            .hover((s) => s.bg(t.raised).text_color(t.foreground))
-            .tooltip(repo.upstream ? `${repo.branch} · tracks ${repo.upstream}` : repo.branch)
-            .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-            .on_click((_e, cx) => {
-                cx.stop_propagation();
-                this.openPicker(repo);
-            })
-            .child(svg(ICON("branch")).size(10).flex_none())
-            .child(
-                h_flex()
-                    .flex_1()
-                    .min_w(0)
-                    .gap(0)
-                    .items_center()
-                    .when(Boolean(label.lead), (el) =>
-                        el.child(div().flex_none().text_size(9.5).text_color(t.dim).child(label.lead)),
-                    )
-                    .child(div().flex_1().min_w(0).text_ellipsis_start().child(label.text)),
-            );
-    }
-
-    // Ahead, behind and the diverged mark: text, never a line of their own.
-    badges(t, repo) {
-        const diverged = isDiverged(repo);
-        if (!repo.ahead && !repo.behind) return null;
-        return h_flex()
-            .flex_none()
-            .gap(3)
-            .items_center()
-            .text_size(10.5)
-            .when(Boolean(repo.ahead), (el) =>
-                el.child(
-                    div()
-                        .flex_none()
-                        .text_color(diverged ? t.blocked : t.muted)
-                        .child(`↑${repo.ahead}`),
-                ),
-            )
-            .when(Boolean(repo.behind), (el) =>
-                el.child(div().flex_none().text_color(t.blocked).child(`↓${repo.behind}`)),
-            )
-            .when(diverged, (el) =>
-                el.child(
-                    div()
-                        .flex_none()
-                        .text_color(t.blocked)
-                        .tooltip("diverged: rebase or merge in a terminal")
-                        .child("⇅"),
-                ),
-            );
-    }
-
-    // "3 commits vs develop" ("3 vs develop" when the panel is narrow): the checkout is ahead of its base branch.
-    // A click reviews the branch.
-    commitsChip(t, repo) {
-        const compact = this.width > 0 && this.width < 700,
-            label = aheadChip(repo, compact);
-        if (!label || (this.width > 0 && this.width < 480)) return null;
-        return div()
-            .id(`commits-${repo.path}`)
-            .flex_none()
-            .max_w(compact ? 110 : 170)
-            .h(18)
-            .px(6)
-            .flex()
-            .items_center()
-            .rounded(9)
-            .border_1()
-            .border_color(t.accent)
-            .truncate()
-            .text_size(10.5)
-            .text_color(t.accent)
-            .cursor_pointer()
-            .hover((s) => s.bg(t.raised))
-            .tooltip(`Review this branch's ${repo.base.count} commits against ${repo.base.name}`)
-            .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-            .on_click((_e, cx) => {
-                cx.stop_propagation();
-                this.review(repo, null, "branch");
-            })
-            .child(label);
-    }
-
-    // The buttons on a checkout's row, in the always-reserved right-hand slot: pull, push/publish, fetch, unstage all,
-    // terminal. They replace the row's badges on hover, so nothing is ever drawn over the text. Stage all stays on the
-    // left of the name (when there are unstaged files). A narrow row shows the first few only.
-    syncButtons(t, repo) {
-        if (this.switching) return [];
-        const lock = this.lock(repo),
-            running = Boolean(lock) || Boolean(this.switching),
-            target = this.targets.get(repo.path),
-            publish = target ? target.mode === "publish" : null, // unknown: a neutral Push/Publish until the target is read
-            buttons = [];
-        if (this.hover === repo.path && repo.files.some((f) => f.unstaged))
-            buttons.push(
-                iconButton(t, `stage-all-${repo.path}`, ICON("plus"), "Stage all changes", (cx) =>
-                    this.act(cx, repo, (git) => stageAll(git, { checkout: repo.path }), true, "Staging"),
-                ),
-            );
-        if (repo.behind || this.hover === repo.path)
-            buttons.push(
-                iconButton(
-                    t,
-                    `pull-${repo.path}`,
-                    OWN("pull"),
-                    `Pull ${repo.upstream ?? ""} (fast-forward only)`,
-                    (cx) => this.syncNow(cx, repo, "pull"),
-                    running,
-                ),
-            );
-        if (repo.ahead || publish || this.hover === repo.path) {
-            const to = target?.target ?? (publish ? `${this.config.remote}/${repo.branch}` : repo.upstream);
-            buttons.push(
-                publish
-                    ? iconButton(
-                          t,
-                          `publish-${repo.path}`,
-                          OWN("push"),
-                          `Publish to ${to}`,
-                          (cx) => this.syncNow(cx, repo, "publish"),
-                          running || repo.detached || repo.unborn,
-                      )
-                    : iconButton(
-                          t,
-                          `push-${repo.path}`,
-                          OWN("push"),
-                          publish === null
-                              ? "Push or publish (reading git's push target…)"
-                              : `Push ${plural(repo.ahead, "commit")} to ${to}`,
-                          (cx) => this.syncNow(cx, repo, "push"),
-                          running || (publish === false && !repo.ahead) || repo.detached,
-                      ),
-            );
-        }
-        if (this.hover === repo.path) {
-            buttons.push(
-                iconButton(
-                    t,
-                    `fetch-${repo.path}`,
-                    OWN("fetch"),
-                    `Fetch from ${this.config.remote}`,
-                    (cx) => this.syncNow(cx, repo, "fetch"),
-                    running,
-                ),
-            );
-            if (repo.staged)
-                buttons.push(
-                    iconButton(t, `unstage-all-${repo.path}`, ICON("minus"), "Unstage all", (cx) =>
-                        this.act(cx, repo, (git) => unstageAll(git, { checkout: repo.path }), true, "Unstaging"),
-                    ),
-                );
-            if (this.width >= 400)
-                buttons.push(
-                    iconButton(t, `term-${repo.path}`, ICON("terminal"), "Open a terminal here", () =>
-                        run("tab.new", { space: this.loc.space, folder: repo.path }),
-                    ),
-                );
-        }
-        return buttons;
-    }
-
-    /** How many action buttons the right-hand slot holds at this width; it is reserved even when they are hidden. */
-    slotButtons() {
-        return this.width > 0 && this.width < 400
-            ? 2
-            : this.width > 0 && this.width < 520
-              ? 3
-              : this.width > 0 && this.width < 700
-                ? 4
-                : 5;
-    }
-
-    /** A small chevron that folds something: 14 px, so rows line up whether or not they have one. */
-    chevronButton(t, id, open, tip, onClick) {
-        return div()
-            .id(id)
-            .w(14)
-            .h(20)
-            .flex_none()
-            .flex()
-            .items_center()
-            .justify_center()
-            .rounded(4)
-            .cursor_pointer()
-            .text_color(t.dim)
-            .hover((s) => s.bg(t.raised).text_color(t.foreground))
-            .tooltip(tip)
-            .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-            .on_click((_e, cx) => {
-                cx.stop_propagation();
-                onClick(cx);
-            })
-            .child(svg(ICON(open ? "chevron-down" : "chevron-right")).size(12));
-    }
-
-    // The last commit as a second line: short hash, subject, age. Only the focused row (or every row in the full look).
-    lastCommit(t, repo, indent) {
-        if (!repo.head) return null;
-        return h_flex()
-            .flex_none()
-            .pl(20 + indent)
-            .pr(8)
-            .pb(2)
-            .gap(5)
-            .items_center()
-            .text_size(10.5)
-            .text_color(t.dim)
-            .child(div().flex_none().child(repo.head.hash))
-            .child(div().flex_none().child("·"))
-            .child(div().min_w(0).truncate().tooltip(repo.head.subject).child(repo.head.subject))
-            .when(Boolean(repo.head.at), (el) =>
-                el.child(
-                    div()
-                        .flex_none()
-                        .child(`· ${ago(repo.head.at)}`),
-                ),
-            );
-    }
-
-    // One checkout, one line: [accent] [chevron] name branch badges [slot]. The last commit is a second line only for
-    // the focused checkout (or every row in the full look); files, the commit box and the last result follow when open.
-    checkout(t, repo, q, nested, group, dir, focus, folded) {
-        const has = repo.files.length > 0,
-            open = has && (q || this.opened.has(repo.path)),
-            indent = nested ? 16 : 0,
-            lock = this.lock(repo),
-            detail = this.config.rowDetail === "full" ? "full" : "compact",
-            focused = repo.path === focus,
-            trees = nested ? 0 : group.worktrees.length,
-            foldedRepo = !nested && folded,
-            signal = foldedRepo && group.worktrees.some(worktreeSignal),
-            commitLine = showsCommit(repo, focus, detail) ? this.lastCommit(t, repo, indent) : null,
-            diverged = isDiverged(repo),
-            tip = [repo.path, repo.head ? `${repo.head.hash} ${repo.head.subject}` : null].filter(Boolean).join("\n"),
-            slot = this.slotButtons(),
-            name = rowName(repo, { main: nested ? group.main : null, dir }).name,
-            maxName = Math.max(64, Math.round((this.width || 380) * 0.6)),
-            buttons = this.hover === repo.path ? this.syncButtons(t, repo).slice(0, slot) : [];
-        const header = h_flex()
-            .id(`repo-${repo.path}`)
-            .h(26)
-            .flex_none()
-            .pl(4 + indent)
-            .pr(4)
-            .gap(4)
-            .items_center()
-            .overflow_hidden()
-            .rounded(7)
-            .when(focused, (el) => el.bg(t.raised))
-            .hover((s) => s.bg(t.hover))
-            .on_hover(this.hovering(repo.path))
-            .when(has || repo.base, (el) =>
-                el
-                    .cursor_pointer()
-                    .on_click((_e, cx) => (has ? this.toggleFiles(repo.path, cx) : this.review(repo, null, "branch"))),
-            )
-            .child(
-                div()
-                    .w(2)
-                    .h(14)
-                    .flex_none()
-                    .rounded(1)
-                    .when(focused, (el) => el.bg(t.accent)),
-            )
-            .when(!nested && trees > 0, (el) =>
-                el.child(
-                    this.chevronButton(
-                        t,
-                        `fold-${repo.path}`,
-                        !foldedRepo,
-                        foldedRepo ? `Show ${plural(trees, "worktree")}` : "Hide worktrees",
-                        (cx) => this.foldGroup(group, cx),
-                    ),
-                ),
-            )
-            .when(!nested && trees === 0, (el) => el.child(div().w(14).flex_none()))
-            .child(
-                this.nameCell(
-                    t,
-                    repo,
-                    nested,
-                    dir,
-                    group,
-                    tip,
-                    foldedRepo,
-                    signal,
-                    has && this.width >= 340 ? { open, total: repo.total } : null,
-                    maxName,
-                ),
-            )
-            .child(this.branchChip(t, repo, branchMatchesName(name, repo.branch)))
-            .when(Boolean(badgeText(repo)), (el) => el.child(this.badges(t, repo)))
-            .when(Boolean(lock), (el) =>
-                el.child(
-                    h_flex()
-                        .flex_none()
-                        .gap(4)
-                        .items_center()
-                        .child(div().flex_none().text_size(9.5).text_color(t.dim).child(`${lock.what}…`))
-                        .child(div().flex_none().text_size(10).text_color(t.accent).frames(SPINNER, 90)),
-                ),
-            )
-            .when(!lock && this.hover === repo.path, (el) =>
-                el.child(h_flex().flex_none().gap(4).items_center().children(buttons)),
-            );
-        const more = repo.total - repo.files.length,
-            note = this.notes[repo.path];
-        return v_flex()
-            .flex_none()
-            .child(header)
-            .when(Boolean(commitLine), (el) => el.child(commitLine))
-            .when(detail === "full" && diverged, (el) =>
-                el.child(
-                    div()
-                        .flex_none()
-                        .pl(24 + indent)
-                        .pr(8)
-                        .pb(2)
-                        .text_size(10.5)
-                        .text_color(t.blocked)
-                        .child(divergedText(repo)),
-                ),
-            )
-            .when(Boolean(repo.error), (el) =>
-                el.child(
-                    div()
-                        .pl(24 + indent)
-                        .py(2)
-                        .text_size(11)
-                        .text_color(t.blocked)
-                        .truncate()
-                        .tooltip(repo.error)
-                        .child(repo.error),
-                ),
-            )
-            .when(open, (el) =>
-                el
-                    .children(repo.files.flatMap((f) => this.fileRows(t, repo, f, indent)))
-                    .when(more > 0, (e) =>
-                        e.child(
-                            div()
-                                .pl(48 + indent)
-                                .py(3)
-                                .text_size(11)
-                                .text_color(t.dim)
-                                .child(`+${more} more (first ${CAP} shown)`),
-                        ),
-                    )
-                    .when(repo.staged > 0 && this.commits.has(repo.path), (e) =>
-                        e.child(this.commitBox(t, repo, indent)),
-                    ),
-            )
-            .when(Boolean(note), (el) =>
-                el.child(
-                    div()
-                        .pl(24 + indent)
-                        .pr(8)
-                        .py(2)
-                        .text_size(11)
-                        .text_color(note.ok ? t.done : t.blocked)
-                        .tooltip(note.message)
-                        .child(note.message),
-                ),
-            );
-    }
-
-    // The staged state as a box: ticked when staged, a dash when only part of it is.
     checkbox(t, repo, f) {
         const state = f.staged ? (f.unstaged ? "some" : "all") : "none";
         const disabled = this.switching || Boolean(this.lock(repo));
@@ -1429,12 +920,16 @@ export default class RepoChanges extends View {
     /** A repo as the kit's 48 px row; opening it shows files, commit box and actions. */
     kitCheckout(t, repo, color, nested, group, dir) {
         const open = this.opened.has(repo.path),
-            focus = repo.files.length > 0,
             detail = checkoutDetail(repo);
+        const locked = this.lock(repo);
+        const actions = repoActions(repo);
         const details = () =>
             v_flex()
                 .p(8)
                 .gap(6)
+                .when(isDiverged(repo), (el) =>
+                    el.child(div().text_size(11).text_color(t.blocked).child("Diverged · pull fast-forwards only")),
+                )
                 .children(repo.files.flatMap((file) => this.fileRows(t, repo, file, nested ? 16 : 0)))
                 .when(repo.total > repo.files.length, (el) =>
                     el.child(
@@ -1487,34 +982,69 @@ export default class RepoChanges extends View {
                     h_flex()
                         .gap(6)
                         .justify_end()
+                        .flex_wrap()
+                        .when(Boolean(locked), (el) => el.child(busyButton(t, `busy-${repo.path}`, `${locked.what}…`)))
                         .child(
                             primaryButton(t, `commit-${repo.path}`, "Commit", (cx) => this.commitNow(cx, repo), {
                                 h: 26,
+                                disabled: Boolean(locked),
                             }),
                         )
-                        .child(
-                            secondaryButton(
-                                t,
-                                `push-${repo.path}`,
-                                repo.ahead ? "Push" : "Sync",
-                                (cx) => this.syncNow(cx, repo, "push"),
-                                { h: 26 },
+                        .when(actions.includes("pull"), (el) =>
+                            el.child(
+                                secondaryButton(
+                                    t,
+                                    `pull-${repo.path}`,
+                                    "Pull",
+                                    (cx) => this.syncNow(cx, repo, "pull"),
+                                    {
+                                        h: 26,
+                                        disabled: Boolean(locked),
+                                    },
+                                ),
+                            ),
+                        )
+                        .when(actions.includes("push") || actions.includes("publish"), (el) =>
+                            el.child(
+                                secondaryButton(
+                                    t,
+                                    `push-${repo.path}`,
+                                    actions.includes("push") ? "Push" : "Publish",
+                                    (cx) => this.syncNow(cx, repo, "push"),
+                                    { h: 26, disabled: Boolean(locked) },
+                                ),
+                            ),
+                        )
+                        .when(actions.includes("fetch"), (el) =>
+                            el.child(
+                                secondaryButton(
+                                    t,
+                                    `fetch-${repo.path}`,
+                                    "Fetch",
+                                    (cx) => this.syncNow(cx, repo, "fetch"),
+                                    {
+                                        h: 26,
+                                        disabled: Boolean(locked),
+                                    },
+                                ),
                             ),
                         )
                         .child(
                             secondaryButton(t, `branch-${repo.path}`, "Branch", (cx) => this.openPicker(repo, cx), {
                                 h: 26,
+                                disabled: Boolean(locked),
                             }),
                         )
                         .child(
                             dangerButton(t, `discard-${repo.path}`, "Discard all…", (cx) => this.confirmAll(repo, cx), {
                                 h: 26,
+                                disabled: Boolean(locked),
                             }),
                         ),
                 );
         return row(t, {
             id: repo.path,
-            color,
+            color: locked ? t.working : color,
             active: this.activeRepo === repo.path,
             title: `${"  ".repeat(nested ? 1 : 0)}${
                 dir
@@ -1556,12 +1086,14 @@ export default class RepoChanges extends View {
 
     /** Grouping and the main lookup change only when the data or filter changes. */
     rebuildView() {
-        const groups = this.repos.length ? groupRepos(this.repos) : [];
+        const all = this.repos.length ? groupRepos(this.repos) : [];
+        const groups = filterGroups(all, this.filter);
+        const repos = groups.flatMap((g) => [g.main, ...g.worktrees]);
         this.view = {
             groups,
-            states: groupCheckouts(this.repos),
+            states: groupCheckouts(repos),
             mains: new Map(groups.map((g) => [g.main.path, g.main])),
-            changed: this.repos.filter((r) => r.files.length).length,
+            changed: repos.filter((r) => r.files.length).length,
         };
     }
 
@@ -1589,7 +1121,7 @@ export default class RepoChanges extends View {
             const rows = states[key];
             if (!rows.length) continue;
             const visibleGroups = specs.filter(([id]) => states[id].length).length;
-            const folded = key === "clean" && !groupOpen(this.cleanOpen, visibleGroups - 1);
+            const folded = key === "clean" && !this.filter.trim() && !groupOpen(this.cleanOpen, visibleGroups - 1);
             const one = key === "changed" && groups.length === 1;
             const action =
                 key === "changed" && one
@@ -1650,44 +1182,6 @@ export default class RepoChanges extends View {
     }
 
     /** The header's follow toggle: what the panel follows, and a click to swap it for this space. */
-    followToggle(t) {
-        const follow = this.follow,
-            narrow = this.width > 0 && this.width < 480;
-        return h_flex()
-            .id("repos-follow")
-            .flex_none()
-            .h(22)
-            .px(6)
-            .gap(5)
-            .items_center()
-            .rounded(6)
-            .border_1()
-            .border_color(t.border)
-            .when(follow, (el) => el.bg(t.raised))
-            .text_size(10.5)
-            .text_color(follow ? t.foreground : t.muted)
-            .cursor_pointer()
-            .hover((s) => s.bg(t.hover).text_color(t.foreground))
-            .tooltip(
-                follow
-                    ? "Following the focused terminal — click to list the space's folder instead"
-                    : "Listing the space's folder — click to follow the focused terminal",
-            )
-            .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-            .on_click((_e, cx) => {
-                cx.stop_propagation();
-                this.setFollow(!follow, cx);
-            })
-            .child(
-                svg(ICON(follow ? "terminal" : "folder"))
-                    .size(12)
-                    .flex_none()
-                    .text_color(follow ? t.accent : t.muted),
-            )
-            .when(!narrow, (el) => el.child(div().child(follow ? "Terminal" : "Space")));
-    }
-
-    /** The panel goes away (a reload, the layout changing): let go of every claim this copy still holds. */
     close() {
         this.releaseAll();
     }
@@ -1736,7 +1230,26 @@ export default class RepoChanges extends View {
         // Space mode's folder: the other place to look when following a terminal lands nowhere.
         const there = location(false).root;
         const empty = items.length ? null : this.emptyState(there);
-        const narrow = this.width > 0 && this.width < 380;
+        const latest = Object.entries(this.notes).sort((a, b) => b[1].at - a[1].at)[0];
+        const note = latest
+            ? {
+                  text: `${this.repos.find((r) => r.path === latest[0])?.name ?? latest[0]}: ${latest[1].message}`,
+                  tone: latest[1].ok ? "done" : "error",
+                  onDismiss: latest[1].ok
+                      ? undefined
+                      : (cx) => {
+                            delete this.notes[latest[0]];
+                            cx.notify();
+                        },
+              }
+            : null;
+        const status =
+            note ??
+            (this.fetchNote
+                ? { text: this.fetchNote.text, tone: "done" }
+                : this.error
+                  ? { text: this.error, tone: "error" }
+                  : null);
         return v_flex()
             .id("jig-git")
             .size_full()
@@ -1874,16 +1387,7 @@ export default class RepoChanges extends View {
                     )
                     .children(items),
             )
-            .when(Boolean(this.fetchNote || this.error), (el) =>
-                el.child(
-                    statusLine(
-                        t,
-                        this.fetchNote
-                            ? { text: this.fetchNote.text, tone: "done" }
-                            : { text: this.error, tone: "error" },
-                    ),
-                ),
-            )
+            .when(Boolean(status), (el) => el.child(statusLine(t, status)))
             .child(
                 footer(t, {
                     summary: (() => {
@@ -1931,8 +1435,6 @@ export default class RepoChanges extends View {
                 } finally {
                     this.release(repo, token);
                 }
-                this.targets.delete(repo.path);
-                this.targetsAt = 0;
             }
             this.fetching = false;
             if (context === this.context) {

@@ -1351,3 +1351,16 @@ export function viewForContext(shownKey, readKey, repos, { error = null, noFolde
     if (shownKey !== readKey) return { rows: [], pending: true };
     return { rows: repos ?? [], pending: false };
 }
+
+/** The open row's network actions, from the scan: Pull when behind or diverged, Push when ahead, Publish when the
+ * branch has no upstream, Fetch when it has a remote. A detached checkout only fetches. */
+export function repoActions(repo) {
+    const actions = [];
+    if (repo.detached) return repo.remote ? ["fetch"] : [];
+    if (repo.behind > 0 || isDiverged(repo)) actions.push("pull");
+    const unpublished = Boolean(repo.remote) && (!repo.upstream || repo.gone);
+    if (repo.ahead > 0 && !unpublished) actions.push("push");
+    else if (unpublished) actions.push("publish");
+    if (repo.remote) actions.push("fetch");
+    return actions;
+}

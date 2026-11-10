@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- Git shows action results and failures in the kit status line, with Pull, Fetch, Push/Publish, Branch and Discard in an
+  open row, a working busy state, and a filter that actually filters repositories and files. Removed the dead row
+  renderer and the per-repo push-target scan that cost ~150 exec calls every 30 s.
+
 - Review keeps the branch visible on the row under the context card when the repository chooser is hidden, and splits its
   diff toolbar below 640 px so no action is clipped at side-panel widths or zoom 1.2.
 

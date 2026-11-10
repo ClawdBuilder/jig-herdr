@@ -288,7 +288,22 @@ export function statusLine(t, state) {
                 ? svg("mods/workspace-chrome/spinner.svg").size(13).spin(900)
                 : dot(state.tone === "error" ? t.ansi1 : t.done),
         )
-        .child(div().flex_1().min_w(0).truncate().child(state.text));
+        .child(div().flex_1().min_w(0).truncate().child(state.text))
+        .when(Boolean(state.onDismiss), (el) =>
+            el.child(
+                div()
+                    .id("panel-status-dismiss")
+                    .flex_none()
+                    .cursor_pointer()
+                    .text_color(t.muted)
+                    .hover((s) => s.text_color(t.foreground))
+                    .on_click((_e, cx) => {
+                        cx.stop_propagation();
+                        state.onDismiss(cx);
+                    })
+                    .child("×"),
+            ),
+        );
 }
 
 /** Pure active-row movement for the list keyboard handler. */
