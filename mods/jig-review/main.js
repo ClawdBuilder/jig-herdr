@@ -1,5 +1,6 @@
 // A full-size review tab for one repo: its changed files on the left, the selected file's diff
-// on the right. jig-git opens it (tab.new, or setShared("jig-review.open") on a tab that
+// on the right. Comment cards and the send-to-agent flow adapt vytasgavelis/herdr-reviewer (MIT) and
+// jakub-tucek/herdr-annotator (MIT); see NOTICE. We wait for an idle agent and never pass --force. jig-git opens it (tab.new, or setShared("jig-review.open") on a tab that
 // already shows the repo). The diff's header can stage or unstage the shown file, and discard it after
 // an inline confirm (lib.js); nothing else is written, and nothing is committed or fetched here.
 // The file list's width is a draggable divider, remembered in the mod's localStorage; below 640 px the list and the diff
@@ -22,17 +23,37 @@ import {
     h_resizable,
     resizable_panel,
     Scrollbar,
+    Textarea,
+    TextareaState,
     v_flex,
     v_virtual_list,
 } from "gpui-base";
 import { div, svg, View } from "gpui-kit";
-import { exec, props as modProps, panes, readTextFile, settings, shared, spaces, terminals, theme } from "herdr";
+import {
+    agents,
+    exec,
+    focused,
+    hc,
+    props as modProps,
+    panes,
+    readTextFile,
+    run,
+    settings,
+    shared,
+    spaces,
+    terminals,
+    theme,
+} from "herdr";
 import { location, readFollow, writeFollow } from "./follow.js";
 import {
+    addComment,
     branchFiles,
+    buildReviewMessage,
     canWrite,
     capText,
     chooseRepo,
+    commentsInFile,
+    commentsKey,
     diffRows,
     discardFile,
     discardKind,
@@ -42,10 +63,15 @@ import {
     langFor,
     openMode,
     PANES,
+    parseComments,
     parseNameStatus,
     parseRepoList,
     parseStatus,
+    placeComment,
+    placeComments,
     REPO_SCRIPT,
+    removeComment,
+    reviewLayout,
     reviewPane,
     selectionCopy,
     selectLine,
@@ -54,7 +80,15 @@ import {
     unstageFile,
 } from "./lib.js";
 import { panelError, panelHeader } from "./panel-header.js";
-import { contextCard } from "./panel-kit.js";
+import {
+    contextCard,
+    dangerButton,
+    emptyLine,
+    primaryButton,
+    secondaryButton,
+    sizes,
+    statusLine,
+} from "./panel-kit.js";
 import { friendlyError, GIT_READ, run as runCommand } from "./refresh.js";
 
 const EVERY = 5000; // re-list the files this often while the tab is shown
@@ -162,6 +196,17 @@ export default class RepoReview extends View {
         this.note = null; // { ok, message } of the last action
         this.sideWidth = readSideWidth();
         this.range = null; // the selected diff lines: { anchor, end } (lib.js), or null
+        this.comments = []; // { id, file, rowStart, rowEnd, startLine, endLine, quote, note, at }
+        this.commentsAt = null;
+        this.draft = null; // { rowStart, rowEnd, startLine, endLine, quote, note }
+        this.commentInput = TextareaState.new({ placeholder: "Your note to the agent…", rows: 2 });
+        this.commentInput.on("change", (_e, cx) => {
+            if (this.draft) this.draft.note = this.commentInput.value();
+            cx.notify();
+        });
+        this.sendTarget = null;
+        this.waitingSend = false;
+        this.sendError = null;
         this.shift = false; // is Shift held? (a row click does not report it, so the root and the list track it)
         this.pane = readPane(); // "diff" | "file" | "patch"
         this.editor = null; // { key, text, state } for File and Patch; state is released when replaced
@@ -170,6 +215,7 @@ export default class RepoReview extends View {
         this.patchText = "";
         this.handle = cx.focus_handle(); // so arrow keys reach this tab
         cx.timer.every(500, (cx) => this.tick(cx));
+        this.syncComments();
         if (!this.fixed) this.loadRepos(cx, true);
         else this.refresh(cx);
     }
@@ -194,6 +240,14 @@ export default class RepoReview extends View {
             else this.switchTo(this.mode, cx);
         }
         if (this.shown() && Date.now() - this.last >= EVERY) this.refresh(cx);
+        if (this.waitingSend) {
+            const agent = this.agentTarget();
+            if (agent && agent.status !== "working" && agent.status !== "blocked") this.deliver(cx, agent);
+            else if (!agent) {
+                this.waitingSend = false;
+                this.sendError = "The agent is gone; start one, then send.";
+            }
+        }
     }
 
     // Is a review tab the one on screen? (Several copies live at once, one per tab; a hidden one stays quiet.)
@@ -277,6 +331,10 @@ export default class RepoReview extends View {
         this.patchText = "";
         this.editor = null;
         this.last = 0;
+        this.comments = [];
+        this.commentsAt = null;
+        this.draft = null;
+        this.syncComments();
     }
 
     /** Follow the focused terminal, or use the space's folder; the same switch as History. */
@@ -354,6 +412,7 @@ export default class RepoReview extends View {
                 this.applyMode();
                 this.error = null;
                 this.loaded = true;
+                this.syncComments();
                 this.fixSelection();
                 await this.loadDiff();
             } catch (e) {
@@ -621,22 +680,8 @@ export default class RepoReview extends View {
         ].filter(Boolean);
     }
 
-    textButton(t, id, label, danger, onClick, plain = false) {
-        return div()
-            .id(id)
-            .flex_none()
-            .h(22)
-            .px(8)
-            .flex()
-            .items_center()
-            .rounded(6)
-            .text_size(11.5)
-            .cursor_pointer()
-            .bg(danger ? t.blocked : t.raised)
-            .text_color(danger ? t.background : t.foreground)
-            .hover((s) => s.opacity(0.85))
-            .on_click(onClick)
-            .child(this.acting && !plain ? "…" : label);
+    textButton(t, id, label, danger, onClick, _plain = false) {
+        return danger ? dangerButton(t, id, label, onClick) : secondaryButton(t, id, label, onClick);
     }
 
     pick(path, cx) {
@@ -984,9 +1029,195 @@ export default class RepoReview extends View {
             );
     }
 
-    // Added / removed rows: a tint behind the row, a full-strength bar at the left edge, and the line
-    // number and marker in the same full-strength color. Text stays foreground so it reads over the tint.
-    // (Colors take #rrggbbaa; the fallbacks are the dark theme's ansi1 / ansi2 in case a theme lacks them.)
+    /** Move this file's comments onto the new rows, marking a lost quote outdated. */
+    reanchor() {
+        if (!this.sel) return;
+        this.comments = this.comments.map((comment) =>
+            comment.file === this.sel ? placeComment(comment, this.rows) : comment,
+        );
+        this.saveComments();
+    }
+
+    /** The current review scope, also the comment store's second key. */
+    scopeKey() {
+        return this.view === "branch" && this.base ? `branch:${this.base.name}` : "working";
+    }
+
+    scopeLabel() {
+        return this.view === "branch" && this.base ? `branch vs ${this.base.name}` : "working changes";
+    }
+
+    syncComments() {
+        const key = commentsKey(this.repo, this.scopeKey());
+        if (key === this.commentsAt) return;
+        this.commentsAt = key;
+        try {
+            this.comments = parseComments(localStorage.getItem(key));
+        } catch {
+            this.comments = [];
+        }
+    }
+
+    saveComments() {
+        if (!this.commentsAt) return;
+        try {
+            localStorage.setItem(this.commentsAt, JSON.stringify(this.comments));
+        } catch {
+            this.note = { ok: false, message: "Comments stay in this tab: storage is full." };
+        }
+    }
+
+    /** The selected diff rows as a comment draft. */
+    openComment(cx) {
+        if (!this.range || !this.rows.length) return;
+        const start = Math.min(this.range.anchor, this.range.end),
+            end = Math.max(this.range.anchor, this.range.end),
+            rows = this.rows.slice(start, end + 1).filter((row) => row.kind !== "@");
+        if (!rows.length) return;
+        const first = rows[0],
+            last = rows[rows.length - 1];
+        this.draft = {
+            side: first.kind === "-" ? "old" : "new",
+            startLine: first.number,
+            endLine: last.number,
+            quote: rows.map((row) => row.text),
+            note: "",
+        };
+        this.commentInput.set_value("");
+        this.commentInput.focus();
+        cx.notify();
+    }
+
+    saveDraft(cx) {
+        if (!this.draft) return;
+        const note = this.draft.note.trim();
+        if (!note) {
+            this.note = { ok: false, message: "Write a note first." };
+            cx.notify();
+            return;
+        }
+        this.comments = addComment(this.comments, {
+            ...this.draft,
+            id: `${Date.now()}-${this.comments.length}`,
+            file: this.sel,
+            note,
+            at: Date.now(),
+        });
+        this.draft = null;
+        this.saveComments();
+        cx.notify();
+    }
+
+    /** The focused agent of this space, else the one changed most recently. */
+    agentTarget() {
+        const space = focused()?.space ?? spaces().find((s) => s.active)?.id;
+        const list = agents()
+            .filter((agent) => agent.space === space)
+            .sort((a, b) => b.seq - a.seq);
+        const focusedAgent = focused()?.agent;
+        return (
+            list.find((agent) => agent.address === focusedAgent) ??
+            list.find((agent) => agent.focused) ??
+            list[0] ??
+            null
+        );
+    }
+
+    sendReview(cx) {
+        if (!this.comments.length) return;
+        const agent = this.agentTarget();
+        this.sendTarget = agent;
+        if (!agent) {
+            this.sendError = "No agent in this space. Start one, then send.";
+            cx.notify();
+            return;
+        }
+        const busy = agent.status === "working" || agent.status === "blocked";
+        if (busy) {
+            this.waitingSend = true;
+            cx.notify();
+            return;
+        }
+        this.deliver(cx, agent);
+    }
+
+    deliver(cx, agent) {
+        const text = buildReviewMessage({
+            repo: this.repo,
+            scope: this.scopeLabel(),
+            comments: this.comments,
+        });
+        this.waitingSend = false;
+        this.sendError = null;
+        cx.spawn(async (cx) => {
+            const result = await hc(["send", agent.address, text]).catch((e) => ({
+                code: 1,
+                stderr: String(e?.message ?? e),
+            }));
+            if (result.code !== 0) {
+                this.sendError = (result.stderr || result.stdout || "hc send failed").trim().slice(0, 300);
+                cx.notify();
+                return;
+            }
+            const count = this.comments.length;
+            this.comments = [];
+            this.saveComments();
+            this.waitingSend = false;
+            this.note = { ok: true, message: `Sent review (${count}) to ${agent.tab_name || agent.address}.` };
+            run("pane.focus", { terminal: agent.address });
+            cx.notify();
+        });
+        cx.notify();
+    }
+
+    commentCard(t, comment) {
+        return v_flex()
+            .flex_none()
+            .mx(8)
+            .my(2)
+            .p(8)
+            .gap(4)
+            .rounded(6)
+            .border_1()
+            .border_color(t.accent)
+            .bg(t.raised)
+            .text_size(12)
+            .child(
+                h_flex()
+                    .gap(6)
+                    .items_center()
+                    .child(div().flex_1().truncate().text_color(t.accent).child(comment.file))
+                    .child(
+                        div()
+                            .text_size(11)
+                            .text_color(t.dim)
+                            .child(
+                                comment.startLine === comment.endLine
+                                    ? `line ${comment.startLine}`
+                                    : `lines ${comment.startLine}–${comment.endLine}`,
+                            ),
+                    )
+                    .child(
+                        div()
+                            .id(`review-comment-remove-${comment.id}`)
+                            .text_size(11)
+                            .text_color(t.dim)
+                            .cursor_pointer()
+                            .hover((s) => s.text_color(t.blocked))
+                            .on_click((_e, cx) => {
+                                this.comments = removeComment(this.comments, comment.id);
+                                this.saveComments();
+                                cx.notify();
+                            })
+                            .child("Remove"),
+                    ),
+            )
+            .child(div().text_color(t.foreground).child(comment.note));
+    }
+
+    /** Added / removed rows: a tint behind the row, a full-strength bar at the left edge, and the line
+     * number and marker in the same full-strength color. Text stays foreground so it reads over the tint.
+     * (Colors take #rrggbbaa; the fallbacks are the dark theme's ansi1 / ansi2 in case a theme lacks them.) */
     diffRow(t, { kind, number, text }, selected) {
         if (kind === "@")
             return div()
@@ -1102,6 +1333,94 @@ export default class RepoReview extends View {
             .child(this.editorNote ?? "Reading…");
     }
 
+    /** The diff toolbar: one row wide, two rows at side-panel width so nothing is clipped. */
+    toolbar(t, file, i, add, del, copy) {
+        const { dir, name } = splitPath(file.path);
+        const narrow = reviewLayout(this.width).toolbarRows;
+        const path = h_flex()
+            .flex_1()
+            .min_w(0)
+            .truncate()
+            .tooltip(file.path)
+            .child(div().min_w(0).truncate().text_color(t.dim).child(dir))
+            .child(div().flex_none().font_semibold().child(name));
+        const counts = [
+            div().flex_none().text_size(11).text_color(t.ansi2).child(`+${add}`),
+            div().flex_none().text_size(11).text_color(t.ansi1).child(`−${del}`),
+            ...(this.comments.length > 0
+                ? [div().flex_none().text_size(11).text_color(t.accent).child(`Comments ${this.comments.length}`)]
+                : []),
+        ];
+        const actions = [
+            ...(Boolean(copy) && this.pane === "diff"
+                ? [
+                      this.textButton(t, "review-comment", "Comment", false, (_e, cx) => this.openComment(cx), true),
+                      this.textButton(
+                          t,
+                          "review-copy-lines",
+                          narrow ? `Copy ${copy.lines}` : `Copy ${copy.lines} line${copy.lines === 1 ? "" : "s"}`,
+                          false,
+                          (_e, cx) => this.copyLines(cx),
+                          true,
+                      ),
+                  ]
+                : []),
+            this.textButton(
+                t,
+                "review-copy-file",
+                narrow ? "File" : "Copy file",
+                false,
+                (_e, cx) => this.copyFile(cx, file),
+                true,
+            ),
+            this.textButton(
+                t,
+                "review-copy-path",
+                narrow ? "Path" : "Copy path",
+                false,
+                (_e, cx) => {
+                    cx.write_to_clipboard(file.path);
+                    this.flash(cx, true, `Copied ${file.path}`);
+                },
+                true,
+            ),
+            ...this.fileActions(t, file),
+        ];
+        const rows = [path, this.paneSwitch(t), ...counts];
+        if (!narrow)
+            return h_flex()
+                .h(32)
+                .flex_none()
+                .px(12)
+                .gap(10)
+                .items_center()
+                .border_b(1)
+                .border_color(t.border)
+                .text_size(12)
+                .children(rows)
+                .children(actions);
+        return v_flex()
+            .flex_none()
+            .border_b(1)
+            .border_color(t.border)
+            .child(h_flex().h(32).px(12).gap(8).items_center().text_size(12).children(rows))
+            .child(
+                h_flex()
+                    .h(30)
+                    .px(12)
+                    .gap(6)
+                    .items_center()
+                    .overflow_x_scrollbar()
+                    .children(actions)
+                    .child(this.headerButton(t, "review-prev", "‹", i > 0, (_e, cx) => this.step(-1, cx)))
+                    .child(
+                        this.headerButton(t, "review-next", "›", i < this.files.length - 1, (_e, cx) =>
+                            this.step(1, cx),
+                        ),
+                    ),
+            );
+    }
+
     // Right side: a 32 px header (path, +added −removed, prev/next), then the diff at full size.
     diffPanel(t) {
         const file = this.files.find((f) => f.path === this.sel);
@@ -1122,79 +1441,67 @@ export default class RepoReview extends View {
         return v_flex()
             .size_full()
             .min_w(0)
-            .child(
-                h_flex()
-                    .h(32)
-                    .flex_none()
-                    .px(12)
-                    .gap(10)
-                    .items_center()
-                    .border_b(1)
-                    .border_color(t.border)
-                    .text_size(12)
-                    .child(
-                        h_flex()
-                            .flex_1()
-                            .min_w(0)
-                            .child(div().min_w(0).truncate().text_color(t.dim).child(dir))
-                            .child(div().flex_none().font_semibold().child(name)),
-                    )
-                    .child(this.paneSwitch(t))
-                    .child(div().flex_none().text_size(11).text_color(t.ansi2).child(`+${add}`))
-                    .child(div().flex_none().text_size(11).text_color(t.ansi1).child(`−${del}`))
-                    .when(Boolean(copy) && this.pane === "diff", (el) =>
-                        el.child(
-                            this.textButton(
-                                t,
-                                "review-copy-lines",
-                                `Copy ${copy.lines} line${copy.lines === 1 ? "" : "s"}`,
-                                false,
-                                (_e, cx) => this.copyLines(cx),
-                                true,
+            .child(this.toolbar(t, file, i, add, del, copy))
+            .when(Boolean(this.note), (el) =>
+                el.child(statusLine(t, { tone: this.note.ok ? "done" : "error", text: this.note.message })),
+            )
+            .when(Boolean(this.sendError), (el) => el.child(statusLine(t, { tone: "error", text: this.sendError })))
+            .when(this.comments.length > 0 || Boolean(this.draft), (el) =>
+                el.child(
+                    v_flex()
+                        .id("review-comments")
+                        .flex_none()
+                        .max_h(180)
+                        .overflow_y_scrollbar()
+                        .border_b(1)
+                        .border_color(t.border)
+                        .children(
+                            (() => {
+                                const placed = placeComments(commentsInFile(this.comments, this.sel), this.rows);
+                                const out = placed.filter((comment) => comment.outdated);
+                                return [
+                                    ...(out.length
+                                        ? [div().px(12).pt(4).text_size(11).text_color(t.dim).child("Outdated")]
+                                        : []),
+                                    ...out.map((comment) => this.commentCard(t, comment)),
+                                    ...placed
+                                        .filter((comment) => !comment.outdated)
+                                        .map((comment) => this.commentCard(t, comment)),
+                                ];
+                            })(),
+                        )
+                        .when(Boolean(this.draft), (box) =>
+                            box.child(
+                                v_flex()
+                                    .flex_none()
+                                    .mx(8)
+                                    .my(4)
+                                    .p(8)
+                                    .gap(6)
+                                    .rounded(6)
+                                    .border_1()
+                                    .border_color(t.accent)
+                                    .bg(t.raised)
+                                    .child(div().text_size(11).text_color(t.dim).child("New comment"))
+                                    .child(Textarea.new(this.commentInput).w_full().h(56).text_size(12))
+                                    .child(
+                                        h_flex()
+                                            .gap(6)
+                                            .justify_end()
+                                            .child(
+                                                this.textButton(t, "comment-cancel", "Cancel", false, (_e, cx) => {
+                                                    this.draft = null;
+                                                    cx.notify();
+                                                }),
+                                            )
+                                            .child(
+                                                this.textButton(t, "comment-save", "Add comment", true, (_e, cx) =>
+                                                    this.saveDraft(cx),
+                                                ),
+                                            ),
+                                    ),
                             ),
                         ),
-                    )
-                    .child(
-                        this.textButton(
-                            t,
-                            "review-copy-file",
-                            "Copy file",
-                            false,
-                            (_e, cx) => this.copyFile(cx, file),
-                            true,
-                        ),
-                    )
-                    .child(
-                        this.textButton(
-                            t,
-                            "review-copy-path",
-                            "Copy path",
-                            false,
-                            (_e, cx) => {
-                                cx.write_to_clipboard(file.path);
-                                this.flash(cx, true, `Copied ${file.path}`);
-                            },
-                            true,
-                        ),
-                    )
-                    .children(this.fileActions(t, file))
-                    .child(this.headerButton(t, "review-prev", "‹", i > 0, (_e, cx) => this.step(-1, cx)))
-                    .child(
-                        this.headerButton(t, "review-next", "›", i < this.files.length - 1, (_e, cx) =>
-                            this.step(1, cx),
-                        ),
-                    ),
-            )
-            .when(Boolean(this.note), (el) =>
-                el.child(
-                    div()
-                        .flex_none()
-                        .px(12)
-                        .py(3)
-                        .truncate()
-                        .text_size(11)
-                        .text_color(this.note.ok ? t.done : t.blocked)
-                        .child(this.note.message),
                 ),
             )
             .child(
@@ -1251,6 +1558,32 @@ export default class RepoReview extends View {
                                   ),
                           )
                           .child(Scrollbar.vertical(list).viewport_from_layout().absolute().inset_0()),
+            )
+            .when(this.comments.length > 0, (el) => el.child(this.commentFooter(t)));
+    }
+
+    /** The send bar: a primary button, or a waiting line while the target agent works. */
+    commentFooter(t) {
+        const target = this.agentTarget();
+        const busy = target && (target.status === "working" || target.status === "blocked");
+        const label = this.waitingSend || busy ? "Send when idle" : `Send review (${this.comments.length})`;
+        const summary = target
+            ? this.waitingSend
+                ? `${target.tab_name || target.address} is ${target.status}; sending when idle.`
+                : `To ${target.tab_name || target.address}`
+            : "No agent in this space.";
+        return h_flex()
+            .id("review-comments-footer")
+            .h(40)
+            .flex_none()
+            .px(12)
+            .gap(8)
+            .items_center()
+            .border_t(1)
+            .border_color(t.border)
+            .child(div().flex_1().min_w(0).truncate().text_size(sizes().secondary).text_color(t.muted).child(summary))
+            .when(Boolean(target), (el) =>
+                el.child(primaryButton(t, "review-send", label, (cx) => this.sendReview(cx))),
             );
     }
 
@@ -1266,7 +1599,7 @@ export default class RepoReview extends View {
             .bg(t.background)
             .text_color(t.foreground)
             .child(this.header(t))
-            .child(div().p(12).text_color(t.dim).child(text));
+            .child(emptyLine(text, t));
     }
 
     render(_cx) {
@@ -1303,7 +1636,7 @@ export default class RepoReview extends View {
                     ? v_flex()
                           .size_full()
                           .min_h(0)
-                          .child(v_flex().flex_none().max_h(240).child(this.sidebar(t)))
+                          .child(v_flex().flex_none().h(reviewLayout(this.width).listHeight).child(this.sidebar(t)))
                           .child(v_flex().flex_1().min_h(0).child(this.diffPanel(t)))
                     : h_resizable("review-split")
                           .size_full()

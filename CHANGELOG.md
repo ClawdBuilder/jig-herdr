@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Review uses the shared panel kit for its buttons, status line and empty state, with the kit's type scale; its narrow
+  two-row toolbar and stacked file list remain.
+
+
+### Fixed
+
+- Review fits a 380 px side panel: the file list keeps its 240 px band when stacked, and below 480 px the diff toolbar
+  splits into two rows so counts, copy and stage actions are not clipped.
+
+
+### Added
+
+- Review comments on selected diff lines, kept per repository and scope and sent as one message to the focused or
+  last-focused agent when it is idle; the app never uses `--force` and keeps a failed review.
+
+
 ### Fixed
 
 - PR & CI no longer asks GitHub about local-path remotes or known non-GitHub hosts: those repositories are parked as

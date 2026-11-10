@@ -363,3 +363,104 @@ export function chooseRepo(repos, current, remembered) {
 
 /** A tab keeps the repository it was opened for; the side panel uses the followed one. */
 export const repositoryFor = (props, followed) => props?.repo || followed || "";
+
+/** The side a diff row belongs to: deleted rows are old, everything else new. */
+export const rowSide = (row) => (row?.kind === "-" ? "old" : "new");
+
+/** Put one comment on the current rows: find its quote near the anchored line on the same side. */
+export function placeComment(comment, rows) {
+    const side = comment.side === "old" ? "old" : "new";
+    const usable = rows
+        .map((row, index) => ({ row, index }))
+        .filter(({ row }) => row.kind !== "@" && rowSide(row) === side);
+    const first = usable.findIndex(({ row }) => row.number === comment.startLine);
+    const matches = (at) => {
+        const quote = comment.quote ?? [];
+        return quote.length > 0 && quote.every((text, n) => usable[at + n]?.row.text === text);
+    };
+    const near = first >= 0 ? first : usable.findIndex(({ row }) => row.number >= comment.startLine);
+    const from = Math.max(0, (near >= 0 ? near : 0) - 50),
+        to = Math.min(usable.length - 1, (near >= 0 ? near : 0) + 50);
+    for (let at = from; at <= to; at++)
+        if (matches(at))
+            return {
+                ...comment,
+                outdated: false,
+                rowStart: usable[at].index,
+                rowEnd: usable[at + (comment.quote?.length ?? 1) - 1].index,
+                side,
+            };
+    for (let at = 0; at < usable.length; at++)
+        if (matches(at))
+            return {
+                ...comment,
+                outdated: false,
+                rowStart: usable[at].index,
+                rowEnd: usable[at + (comment.quote?.length ?? 1) - 1].index,
+                side,
+            };
+    return { ...comment, outdated: true, rowStart: -1, rowEnd: -1, side };
+}
+
+/** Place every comment in a file; comments whose quote is gone keep their old anchor and are marked outdated. */
+export function placeComments(comments, rows) {
+    return comments.map((comment) => placeComment(comment, rows));
+}
+
+/** The localStorage key for comments
+ in one repository and review scope. */
+export const commentsKey = (repo, scope) => `review.comments|${repo}|${scope}`;
+
+/** Parse a stored comment list; anything malformed is ignored so a bad entry cannot break the panel. */
+export function parseComments(raw) {
+    try {
+        const list = JSON.parse(raw ?? "[]");
+        if (!Array.isArray(list)) return [];
+        return list.filter(
+            (c) =>
+                c &&
+                typeof c === "object" &&
+                typeof c.file === "string" &&
+                (c.side === "old" || c.side === "new") &&
+                Number.isInteger(c.startLine) &&
+                Number.isInteger(c.endLine) &&
+                Array.isArray(c.quote) &&
+                typeof c.note === "string",
+        );
+    } catch {
+        return [];
+    }
+}
+
+export const addComment = (comments, comment) => [...comments, comment];
+export const removeComment = (comments, id) => comments.filter((comment) => comment.id !== id);
+
+/** The comments under one file, in row order. */
+export const commentsInFile = (comments, file) => comments.filter((comment) => comment.file === file);
+
+/** One message for the agent: a request line, repository, scope, then each file, range, quoted lines and note. */
+export function buildReviewMessage({ repo, scope, comments }) {
+    const name = String(repo).split("/").filter(Boolean).pop() || repo;
+    const lines = [
+        `Please address these review comments on ${name} (${scope}). Each quotes the lines it is about; reply with what you changed.`,
+        `Repository: ${repo}`,
+    ];
+    for (const comment of comments) {
+        const range =
+            comment.side === "old"
+                ? `${comment.file} (removed lines ${comment.startLine}${comment.endLine === comment.startLine ? "" : `–${comment.endLine}`})`
+                : `${comment.file}:${comment.startLine}${comment.endLine === comment.startLine ? "" : `–${comment.endLine}`}`;
+        const outdated = comment.outdated ? " (outdated)" : "";
+        lines.push("", range + outdated, ...comment.quote.map((line) => `> ${line}`), `Note: ${comment.note.trim()}`);
+    }
+    return lines.join("\n");
+}
+
+/** Side-panel layout: stack the list, and split the diff toolbar, when the panel is narrow. */
+export function reviewLayout(width) {
+    return {
+        stacked: width > 0 && width < 640,
+        toolbarRows: width > 0 && width < 480,
+        listHeight: 240,
+    };
+}
