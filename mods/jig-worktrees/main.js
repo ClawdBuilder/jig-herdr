@@ -546,7 +546,7 @@ export default class RepoWorktrees extends View {
         const space = spaces().find((s) => s.active);
         const follow = readFollow(space?.id);
         const header = panelHeader(t, {
-            title: worktreeTitle(rows.length),
+            title: "Worktrees",
             titleTooltip: `${title} · ${count}`,
             readAt: this.loadedAt,
             busy: this.refreshState.busy,
