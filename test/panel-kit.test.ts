@@ -57,3 +57,11 @@ test("Worktrees separates ready, in progress and main", async () => {
         main: ["/r"],
     });
 });
+
+test("Git render maps the cached view and does not regroup", () => {
+    const source = readFileSync(path.join(mods, "jig-git/main.js"), "utf8");
+    const render = source.slice(source.indexOf("render(cx) {"));
+    assert.doesNotMatch(render, /groupRepos\(|groupCheckouts\(/);
+    assert.match(source, /rebuildView\(\)/);
+    assert.match(source, /this\.view\.states/);
+});

@@ -4,6 +4,10 @@
 
 ### Changed
 
+- Git caches its groups, state split, main lookup and summary once per read/filter mode. Closed rows build no file
+  details; the Clean Show/Hide toggle only maps the cached view. A 30-repo render bench drops from ~9.29 ms to ~1.5–1.9 ms
+  per render.
+
 - Git lists main checkouts only in Space mode; linked worktrees belong to the Worktrees panel. In Terminal mode a focused
   linked worktree is shown alone with `worktree of <repo>`, so its active branch still works. A refresh of the demo folder
   drops from 96 `git` calls to 58 (six checkouts to four), including four `git worktree list` calls removed.

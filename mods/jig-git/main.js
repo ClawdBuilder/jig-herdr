@@ -249,9 +249,11 @@ export default class RepoChanges extends View {
         this.width = 0;
         this.keys = cx.focus_handle();
         this.done = Number(shared(DONE)?.at ?? 0);
+        this.view = null;
         this.input = InputState.new({ placeholder: "Filter repos and files" });
         this.input.on("change", (_e, cx) => {
             this.filter = this.input.value();
+            this.rebuildView();
             cx.notify();
         });
         this.input.on("focus", (_e, cx) => {
@@ -421,6 +423,7 @@ export default class RepoChanges extends View {
                 if (r.code !== 0) throw Object.assign(new Error(r.stderr || `exit ${r.code}`), r);
                 this.repos = parseRepos(r.stdout, root);
                 this.loadedRoot = root;
+                this.rebuildView();
                 this.error = null;
                 this.loaded = true;
                 this.switching = false;
@@ -1416,85 +1419,87 @@ export default class RepoChanges extends View {
             ]
                 .filter(Boolean)
                 .join(" · ");
-        const files = repo.files.flatMap((file) => this.fileRows(t, repo, file, nested ? 16 : 0));
-        const details = v_flex()
-            .p(8)
-            .gap(6)
-            .children(files)
-            .when(repo.total > repo.files.length, (el) =>
-                el.child(
-                    div()
-                        .pl(12)
-                        .text_size(11)
-                        .text_color(t.dim)
-                        .child(`+${repo.total - repo.files.length} more`),
-                ),
-            )
-            .when(repo.staged > 0 && this.commits.has(repo.path), (el) => el.child(this.commitBox(t, repo, 0)))
-            .when(this.confirm?.key === `all:${repo.path}`, (el) =>
-                el
-                    .child(
+        const details = () =>
+            v_flex()
+                .p(8)
+                .gap(6)
+                .children(repo.files.flatMap((file) => this.fileRows(t, repo, file, nested ? 16 : 0)))
+                .when(repo.total > repo.files.length, (el) =>
+                    el.child(
                         div()
-                            .text_size(12)
-                            .text_color(t.blocked)
-                            .child(
-                                `Discard all ${repo.files.length} changed files in ${repo.name}? Untracked files are deleted.`,
-                            ),
-                    )
-                    .child(
-                        h_flex()
-                            .gap(6)
-                            .justify_end()
-                            .child(
-                                secondaryButton(
-                                    t,
-                                    `discard-all-no-${repo.path}`,
-                                    "Cancel",
-                                    (cx) => {
-                                        this.confirm = null;
-                                        cx.notify();
-                                    },
-                                    { h: 26 },
-                                ),
-                            )
-                            .child(
-                                dangerButton(
-                                    t,
-                                    `discard-all-yes-${repo.path}`,
-                                    "Discard all",
-                                    (cx) => this.discardAll(repo, cx),
-                                    { h: 26 },
-                                ),
-                            ),
+                            .pl(12)
+                            .text_size(11)
+                            .text_color(t.dim)
+                            .child(`+${repo.total - repo.files.length} more`),
                     ),
-            )
-            .child(
-                h_flex()
-                    .gap(6)
-                    .justify_end()
-                    .child(
-                        primaryButton(t, `commit-${repo.path}`, "Commit", (cx) => this.commitNow(cx, repo), { h: 26 }),
-                    )
-                    .child(
-                        secondaryButton(
-                            t,
-                            `push-${repo.path}`,
-                            repo.ahead ? "Push" : "Sync",
-                            (cx) => this.syncNow(cx, repo, "push"),
-                            { h: 26 },
+                )
+                .when(repo.staged > 0 && this.commits.has(repo.path), (el) => el.child(this.commitBox(t, repo, 0)))
+                .when(this.confirm?.key === `all:${repo.path}`, (el) =>
+                    el
+                        .child(
+                            div()
+                                .text_size(12)
+                                .text_color(t.blocked)
+                                .child(
+                                    `Discard all ${repo.files.length} changed files in ${repo.name}? Untracked files are deleted.`,
+                                ),
+                        )
+                        .child(
+                            h_flex()
+                                .gap(6)
+                                .justify_end()
+                                .child(
+                                    secondaryButton(
+                                        t,
+                                        `discard-all-no-${repo.path}`,
+                                        "Cancel",
+                                        (cx) => {
+                                            this.confirm = null;
+                                            cx.notify();
+                                        },
+                                        { h: 26 },
+                                    ),
+                                )
+                                .child(
+                                    dangerButton(
+                                        t,
+                                        `discard-all-yes-${repo.path}`,
+                                        "Discard all",
+                                        (cx) => this.discardAll(repo, cx),
+                                        { h: 26 },
+                                    ),
+                                ),
                         ),
-                    )
-                    .child(
-                        secondaryButton(t, `branch-${repo.path}`, "Branch", (cx) => this.openPicker(repo, cx), {
-                            h: 26,
-                        }),
-                    )
-                    .child(
-                        dangerButton(t, `discard-${repo.path}`, "Discard all…", (cx) => this.confirmAll(repo, cx), {
-                            h: 26,
-                        }),
-                    ),
-            );
+                )
+                .child(
+                    h_flex()
+                        .gap(6)
+                        .justify_end()
+                        .child(
+                            primaryButton(t, `commit-${repo.path}`, "Commit", (cx) => this.commitNow(cx, repo), {
+                                h: 26,
+                            }),
+                        )
+                        .child(
+                            secondaryButton(
+                                t,
+                                `push-${repo.path}`,
+                                repo.ahead ? "Push" : "Sync",
+                                (cx) => this.syncNow(cx, repo, "push"),
+                                { h: 26 },
+                            ),
+                        )
+                        .child(
+                            secondaryButton(t, `branch-${repo.path}`, "Branch", (cx) => this.openPicker(repo, cx), {
+                                h: 26,
+                            }),
+                        )
+                        .child(
+                            dangerButton(t, `discard-${repo.path}`, "Discard all…", (cx) => this.confirmAll(repo, cx), {
+                                h: 26,
+                            }),
+                        ),
+                );
         return row(t, {
             id: repo.path,
             color,
@@ -1507,7 +1512,7 @@ export default class RepoChanges extends View {
                 else this.opened.add(repo.path);
                 cx.notify();
             },
-            details: focus ? details : null,
+            details: open ? details() : null,
         });
     }
 
@@ -1533,10 +1538,22 @@ export default class RepoChanges extends View {
         );
     }
 
+    /** Grouping and the main lookup change only when the data or filter changes. */
+    rebuildView() {
+        const groups = this.repos.length ? groupRepos(this.repos) : [];
+        this.view = {
+            groups,
+            states: groupCheckouts(this.repos),
+            mains: new Map(groups.map((g) => [g.main.path, g.main])),
+            changed: this.repos.filter((r) => r.files.length).length,
+        };
+    }
+
     // The list: checkout groups, with a worktree indented under its main row.
     list(t) {
-        const groups = groupRepos(this.repos),
-            states = groupCheckouts(this.repos),
+        if (!this.view) this.rebuildView();
+        const groups = this.view.groups,
+            states = this.view.states,
             items = [];
         const specs = [
             ["needs", "Needs you", t.ansi1],
@@ -1578,7 +1595,7 @@ export default class RepoChanges extends View {
             items.push(groupHeader(t, key, label, rows.length, color, action));
             if (folded) continue;
             for (const repo of rows) {
-                const main = groups.find((g) => g.main.path === repo.main)?.main;
+                const main = this.view.mains.get(repo.main);
                 const parent = repo.linked ? (main ?? null) : null;
                 items.push(
                     this.kitCheckout(t, repo, color, Boolean(parent), parent ?? { main: repo, worktrees: [] }, null),
@@ -1663,10 +1680,11 @@ export default class RepoChanges extends View {
         if (this.dialog) return this.dialog.render(cx);
         const t = theme();
         this.locate();
+        if (!this.view) this.rebuildView();
         const loc = this.loc,
-            groups = groupRepos(this.repos),
+            groups = this.view.groups,
             trees = this.repos.length - groups.length;
-        const changed = this.repos.filter((r) => r.files.length).length;
+        const changed = this.view.changed;
         // A narrow header keeps the folder's name: the worktree count goes first.
         const compact = this.width > 0 && this.width < 520;
         const summary = this.loaded
@@ -1783,7 +1801,7 @@ export default class RepoChanges extends View {
                     .overflow_y_scrollbar()
                     .track_focus(this.keys)
                     .on_key_down((e, cx) => {
-                        const ids = Object.values(groupCheckouts(this.repos))
+                        const ids = Object.values(this.view.states)
                             .flat()
                             .map((r) => r.path);
                         if (e.key === "up" || e.key === "down") {
