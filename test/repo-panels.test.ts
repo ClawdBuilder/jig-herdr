@@ -949,7 +949,7 @@ test("jig-prs opens only GitHub links", async () => {
 test("the follow-state copies agree and pickRoot follows the focused terminal first", async () => {
     const root = new URL("../mods/", import.meta.url);
     const source = readFileSync(new URL("jig-git/follow-state.js", root), "utf8");
-    for (const mod of ["jig-history", "jig-prs", "jig-worktrees"])
+    for (const mod of ["jig-history", "jig-prs", "jig-worktrees", "jig-review"])
         assert.equal(
             readFileSync(new URL(`${mod}/follow-state.js`, root), "utf8"),
             source,
@@ -1048,7 +1048,8 @@ test("realpath comparison sees a terminal inside a symlinked folder", async (t) 
 
 test("the live panel files call the tested seams, not inline copies", () => {
     const read = (name: string) => readFileSync(new URL(`../mods/${name}/main.js`, import.meta.url), "utf8");
-    for (const name of ["jig-history", "jig-prs", "jig-worktrees"]) assert.match(read(name), /writeFollow\(/, name);
+    for (const name of ["jig-history", "jig-prs", "jig-worktrees", "jig-review"])
+        assert.match(read(name), /writeFollow\(/, name);
     const wt = read("jig-worktrees");
     for (const seam of [
         "pruneAll(",

@@ -48,10 +48,10 @@ test("only the five header panels import panelHeader; Files and File view do not
     }
 });
 
-test("follow is only on Repos, History, PR & CI and Worktrees", () => {
-    for (const mod of ["jig-git", "jig-history", "jig-prs", "jig-worktrees"])
+test("follow is on the repository panels and their side-panel Review", () => {
+    for (const mod of ["jig-git", "jig-history", "jig-prs", "jig-worktrees", "jig-review"])
         assert.match(source(path.join(mods, mod, "main.js")), /follow:/, mod);
-    for (const mod of ["jig-review", "jig-files", "jig-file-view"])
+    for (const mod of ["jig-files", "jig-file-view"])
         assert.doesNotMatch(source(path.join(mods, mod, "main.js")), /follow:/, mod);
 });
 

@@ -2,8 +2,9 @@
 // on the right. jig-git opens it (tab.new, or setShared("jig-review.open") on a tab that
 // already shows the repo). The diff's header can stage or unstage the shown file, and discard it after
 // an inline confirm (lib.js); nothing else is written, and nothing is committed or fetched here.
-// The file list's width is a draggable divider, remembered in the mod's localStorage. Code is copied by clicking a line
-// (shift-click extends, Escape clears) and pressing Ctrl+C or "Copy N lines"; "Copy file" and "Copy path" are in the header.
+// The file list's width is a draggable divider, remembered in the mod's localStorage; below 640 px the list and the diff
+// stack. Code is copied by clicking a line (shift-click extends, Escape clears) and pressing Ctrl+C or "Copy N lines";
+// "Copy file" and "Copy path" are in the diff's own row.
 // A switch in the diff header, Diff | File | Patch, picks what the right side shows: the tinted rows (click to select lines),
 // the file's text, or the diff's text, the last two in a read-only code editor where the mouse drags a selection and Ctrl+C
 // copies it. The choice is remembered in localStorage like the width.
@@ -25,11 +26,13 @@ import {
     v_virtual_list,
 } from "gpui-base";
 import { div, svg, View } from "gpui-kit";
-import { exec, props as modProps, panes, readTextFile, settings, shared, spaces, theme } from "herdr";
+import { exec, props as modProps, panes, readTextFile, settings, shared, spaces, terminals, theme } from "herdr";
+import { location, readFollow, writeFollow } from "./follow.js";
 import {
     branchFiles,
     canWrite,
     capText,
+    chooseRepo,
     diffRows,
     discardFile,
     discardKind,
@@ -40,7 +43,9 @@ import {
     openMode,
     PANES,
     parseNameStatus,
+    parseRepoList,
     parseStatus,
+    REPO_SCRIPT,
     reviewPane,
     selectionCopy,
     selectLine,
@@ -53,6 +58,7 @@ import { friendlyError, GIT_READ, run as runCommand } from "./refresh.js";
 
 const EVERY = 5000; // re-list the files this often while the tab is shown
 const BASE_EVERY = 60000; // find the base branch again this often even when HEAD stays (origin may have been fetched)
+const REPOS_EVERY = 5000; // how often the side panel looks for repositories under the folder
 const SIDE_DEFAULT = 280; // the file list's width until the user drags it
 const SIDE_MIN = 160;
 const SIDE_MAX = 720;
@@ -61,6 +67,19 @@ const PANE_LABEL = { diff: "Diff", file: "File", patch: "Patch" };
 const ICON = (name) => `mods/workspace-chrome/${name}.svg`;
 // Reads write nothing under .git (same flags as jig-git).
 const READ = [...GIT_READ, "-c", "diff.autoRefreshIndex=false"];
+
+/** The folder to review and its machine: the shown space's folder, else its first terminal's. */
+function whereToLook() {
+    const space = spaces().find((s) => s.active);
+    return location(readFollow(space?.id));
+}
+
+/** A repository path's name for the chooser. */
+const repoName = (path) =>
+    String(path ?? "")
+        .split("/")
+        .filter(Boolean)
+        .pop() || "Repository";
 
 // The file list's width, remembered in the mod's own storage (every Review tab shares it, and a restart keeps it).
 function readSideWidth() {
@@ -100,9 +119,19 @@ function savePane(pane) {
 export default class RepoReview extends View {
     init(_props, cx) {
         const props = modProps() ?? {}; // what tab.new gave this copy; none under herdr-app check
+        this.fixed = Boolean(props.repo);
+        this.where = this.fixed ? { root: props.repo, on: props.on ?? null } : whereToLook();
         this.repo = props.repo ?? "";
         this.name = props.name ?? (this.repo.split("/").pop() || "Review");
-        this.on = props.on ?? null;
+        this.on = this.fixed ? (props.on ?? null) : this.where.on;
+        const spaceId = this.fixed ? null : spaces().find((s) => s.active)?.id;
+        this.follow = this.fixed ? undefined : readFollow(spaceId);
+        this.repos = null;
+        this.reposAt = 0;
+        this.loadingRepos = false;
+        this.repoError = null;
+        this.picking = false;
+        this.width = 0;
         this.branch = "?";
         this.ahead = 0;
         this.behind = 0;
@@ -140,12 +169,14 @@ export default class RepoReview extends View {
         this.patchText = "";
         this.handle = cx.focus_handle(); // so arrow keys reach this tab
         cx.timer.every(500, (cx) => this.tick(cx));
-        this.refresh(cx);
+        if (!this.fixed) this.loadRepos(cx, true);
+        else this.refresh(cx);
     }
 
     // Cheap check twice a second: a new "open this file" request, and the 5 s re-list while shown.
     // Not from render: both notify, and render may not.
     tick(cx) {
+        if (!this.fixed) this.followTick(cx);
         const open = shared("jig-review.open");
         if (open && open.repo === this.repo && open.at > this.handled) {
             this.handled = open.at;
@@ -172,8 +203,101 @@ export default class RepoReview extends View {
         return Boolean(tab) && panes().some((p) => p.tab === tab.id && p.mod === "jig-review");
     }
 
+    /** The followed folder or machine changed, or its repositories need a fresh list. */
+    followTick(cx) {
+        const where = whereToLook();
+        if (JSON.stringify([where.root, where.on]) !== JSON.stringify([this.where?.root, this.where?.on])) {
+            this.where = where;
+            this.on = where.on;
+            this.repo = "";
+            this.repos = null;
+            this.reposAt = 0;
+            this.resetRepo();
+            this.loadRepos(cx, true);
+            return;
+        }
+        if (this.where?.root && Date.now() - this.reposAt >= REPOS_EVERY) this.loadRepos(cx);
+    }
+
+    /** The repository a fixed tab was opened for, or the first one under the followed folder. */
+    loadRepos(cx, initial = false) {
+        if (this.loadingRepos || !this.where?.root) return;
+        this.loadingRepos = true;
+        this.reposAt = Date.now();
+        const context = JSON.stringify([this.where.root, this.where.on]);
+        cx.spawn(async (cx) => {
+            try {
+                const found = await runCommand(exec, "sh", ["-c", REPO_SCRIPT, "sh", this.where.root], {
+                    on: this.where.on,
+                });
+                if (context !== JSON.stringify([this.where?.root, this.where?.on])) return;
+                if (found.code !== 0) throw new Error((found.stderr || `exit ${found.code}`).trim().split("\n")[0]);
+                const { repos } = parseRepoList(found.stdout);
+                this.repos = repos;
+                this.reposAt = Date.now();
+                this.repoError = null;
+                let remembered = null;
+                try {
+                    remembered = localStorage.getItem("jig-review.repo");
+                } catch {
+                    // storage unavailable: the first repository is a fine default
+                }
+                const choice = chooseRepo(repos, this.repo, remembered);
+                if (choice !== this.repo) {
+                    this.repo = choice ?? "";
+                    this.name = repoName(this.repo);
+                    this.resetRepo();
+                    if (this.repo) this.refresh(cx);
+                } else if (initial && this.repo) this.refresh(cx);
+            } catch (e) {
+                this.repoError = String(e?.message ?? e).split("\n")[0];
+            } finally {
+                this.loadingRepos = false;
+                cx.notify();
+            }
+        });
+    }
+
+    /** A new repository: forget the old rows and diff, keep the view choice. */
+    resetRepo() {
+        this.loaded = false;
+        this.error = null;
+        this.files = [];
+        this.rows = [];
+        this.sel = null;
+        this.want = null;
+        this.branch = "?";
+        this.ahead = 0;
+        this.behind = 0;
+        this.unborn = false;
+        this.total = 0;
+        this.base = null;
+        this.baseFor = null;
+        this.patchText = "";
+        this.editor = null;
+        this.last = 0;
+    }
+
+    /** Follow the focused terminal, or use the space's folder; the same switch as History. */
+    toggleFollow(cx) {
+        const space = spaces().find((s) => s.active);
+        this.follow = !this.follow;
+        writeFollow(space?.id, this.follow);
+        this.where = whereToLook();
+        this.on = this.where.on;
+        this.repo = "";
+        this.repos = null;
+        this.reposAt = 0;
+        this.resetRepo();
+        this.loadRepos(cx, true);
+    }
+
     refresh(cx) {
-        if (!this.repo) return;
+        if (!this.repo) {
+            this.loading = false;
+            this.loaded = false;
+            return;
+        }
         if (this.loading) {
             this.again = true; // an action changed the files during this read: read again right after
             return;
@@ -695,6 +819,99 @@ export default class RepoReview extends View {
         ];
     }
 
+    header(t) {
+        return panelHeader(t, {
+            title: this.name,
+            follow: this.fixed ? undefined : this.follow,
+            onFollow: this.fixed ? undefined : (cx) => this.toggleFollow(cx),
+            readAt: this.last,
+            busy: this.loading,
+            onRefresh: (cx) => this.refresh(cx),
+            refreshIcon: "mods/jig-review/refresh.svg",
+        });
+    }
+
+    /** The side panel's repository chooser when the followed folder holds several. */
+    repoChooser(t) {
+        if ((this.repos?.length ?? 0) < 2) return null;
+        const current = this.repos.find((r) => r.path === this.repo);
+        return v_flex()
+            .flex_none()
+            .border_b(1)
+            .border_color(t.border)
+            .child(
+                h_flex()
+                    .id("review-repo-pick")
+                    .h(24)
+                    .px(12)
+                    .gap(6)
+                    .items_center()
+                    .text_size(11)
+                    .text_color(t.muted)
+                    .cursor_pointer()
+                    .hover((s) => s.bg(t.hover).text_color(t.foreground))
+                    .on_click((_e, cx) => {
+                        this.picking = !this.picking;
+                        cx.notify();
+                    })
+                    .child(svg(ICON("folder")).size(11).flex_none())
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w(0)
+                            .truncate()
+                            .child(repoName(current?.path ?? this.repo)),
+                    )
+                    .child(
+                        div()
+                            .flex_none()
+                            .child(this.picking ? "▴" : "▾"),
+                    ),
+            )
+            .when(this.picking, (el) =>
+                el.child(
+                    v_flex()
+                        .id("review-repos")
+                        .flex_none()
+                        .max_h(160)
+                        .overflow_y_scrollbar()
+                        .children(
+                            this.repos.map((repo) =>
+                                div()
+                                    .id(`review-repo-${repo.path}`)
+                                    .h(24)
+                                    .px(12)
+                                    .flex()
+                                    .items_center()
+                                    .gap(6)
+                                    .truncate()
+                                    .text_size(11.5)
+                                    .text_color(repo.path === this.repo ? t.foreground : t.muted)
+                                    .when(repo.path === this.repo, (row) => row.bg(t.hover))
+                                    .hover((row) => row.bg(t.hover).text_color(t.foreground))
+                                    .on_click((_e, cx) => {
+                                        this.repo = repo.path;
+                                        this.name = repoName(repo.path);
+                                        this.picking = false;
+                                        try {
+                                            localStorage.setItem("jig-review.repo", repo.path);
+                                        } catch {
+                                            // storage unavailable: the chooser still works this session
+                                        }
+                                        this.resetRepo();
+                                        this.refresh(cx);
+                                        cx.notify();
+                                    })
+                                    .child(div().truncate().child(repoName(repo.path)))
+                                    .when(repo.linked, (cell) =>
+                                        cell.child(div().text_size(9.5).text_color(t.dim).child("worktree")),
+                                    ),
+                            ),
+                        ),
+                ),
+            );
+    }
+
     // Left column: repo name + Refresh, branch + file count, then the changed files.
     sidebar(t) {
         const more = this.total - this.files.length;
@@ -702,15 +919,8 @@ export default class RepoReview extends View {
             .size_full()
             .border_r(1)
             .border_color(t.border)
-            .child(
-                panelHeader(t, {
-                    title: this.name,
-                    readAt: this.last,
-                    busy: this.loading,
-                    onRefresh: (cx) => this.refresh(cx),
-                    refreshIcon: "mods/jig-review/refresh.svg",
-                }),
-            )
+            .child(this.header(t))
+            .when(Boolean(this.repoChooser(t)), (el) => el.child(this.repoChooser(t)))
             .child(
                 h_flex()
                     .h(22)
@@ -1035,8 +1245,24 @@ export default class RepoReview extends View {
             );
     }
 
+    /** No repository under the followed folder, and no prop: say where a review starts. */
+    noRepo(t) {
+        const text = this.loadingRepos
+            ? "Reading repositories…"
+            : "Not in a git repository. Open a diff from Git, or cd into a repository.";
+        return v_flex()
+            .id("jig-review")
+            .size_full()
+            .min_h(0)
+            .bg(t.background)
+            .text_color(t.foreground)
+            .child(this.header(t))
+            .child(div().p(12).text_color(t.dim).child(text));
+    }
+
     render(_cx) {
         const t = theme();
+        if (!this.fixed && !this.repo) return this.noRepo(t);
         return h_flex()
             .id("jig-review")
             .size_full()
@@ -1046,6 +1272,11 @@ export default class RepoReview extends View {
             .text_color(t.foreground)
             .text_size(13)
             .track_focus(this.handle)
+            .on_size_change((size, cx) => {
+                if (Math.round(size.width) === Math.round(this.width)) return;
+                this.width = size.width;
+                cx.notify();
+            })
             .on_key_down((e, cx) => this.key(e, cx))
             .on_modifiers_changed((e) => {
                 this.shift = e.modifiers.shift;
@@ -1059,14 +1290,25 @@ export default class RepoReview extends View {
                 if (this.pane === "diff") this.handle.focus();
             })
             .child(
-                h_resizable("review-split")
-                    .size_full()
-                    .on_resize((sizes) => {
-                        this.sideWidth = sizes[0];
-                        saveSideWidth(sizes[0]);
-                    })
-                    .child(resizable_panel().size(this.sideWidth).size_range(SIDE_MIN, SIDE_MAX).child(this.sidebar(t)))
-                    .child(resizable_panel().child(this.diffPanel(t))),
+                this.width > 0 && this.width < 640
+                    ? v_flex()
+                          .size_full()
+                          .min_h(0)
+                          .child(v_flex().flex_none().max_h(240).child(this.sidebar(t)))
+                          .child(v_flex().flex_1().min_h(0).child(this.diffPanel(t)))
+                    : h_resizable("review-split")
+                          .size_full()
+                          .on_resize((sizes) => {
+                              this.sideWidth = sizes[0];
+                              saveSideWidth(sizes[0]);
+                          })
+                          .child(
+                              resizable_panel()
+                                  .size(this.sideWidth)
+                                  .size_range(SIDE_MIN, SIDE_MAX)
+                                  .child(this.sidebar(t)),
+                          )
+                          .child(resizable_panel().child(this.diffPanel(t))),
             );
     }
 }
