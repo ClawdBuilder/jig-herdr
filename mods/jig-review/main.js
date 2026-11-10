@@ -169,6 +169,7 @@ export default class RepoReview extends View {
         this.loadingRepos = false;
         this.loadedContext = this.fixed ? JSON.stringify(["fixed", this.repo, this.on]) : null;
         this.contextKey = this.fixed ? this.loadedContext : contextKeyOf(this.where);
+        this.contextAt = Date.now();
         this.repoError = null;
         this.picking = false;
         this.width = 0;
@@ -228,7 +229,13 @@ export default class RepoReview extends View {
     // Cheap check twice a second: a new "open this file" request, and the 5 s re-list while shown.
     // Not from render: both notify, and render may not.
     tick(cx) {
-        if (!this.fixed) this.followTick(cx);
+        if (!this.fixed) {
+            this.followTick(cx);
+            if (this.contextKey !== this.loadedContext && Date.now() - (this.contextAt ?? 0) > 1000) {
+                this.loadingRepos = false;
+                this.loadRepos(cx, true);
+            }
+        }
         const open = shared("jig-review.open");
         if (open && open.repo === this.repo && open.at > this.handled) {
             this.handled = open.at;
@@ -270,13 +277,21 @@ export default class RepoReview extends View {
             this.where = where;
             this.on = where.on;
             this.contextKey = contextKeyOf(where);
+            this.contextAt = Date.now();
             this.loadedContext = null;
             this.refreshState.cancel();
             this.readGeneration = (this.readGeneration ?? 0) + 1;
             this.loading = false;
+            this.loadingRepos = false;
+            this.loadedContext = null;
             this.repo = "";
             this.repos = null;
             this.reposAt = 0;
+            try {
+                localStorage.removeItem("jig-review.repo");
+            } catch {
+                // storage unavailable: the dirty/first repo is still a fine default
+            }
             this.resetRepo();
             this.loadRepos(cx, true);
             return;
@@ -289,13 +304,13 @@ export default class RepoReview extends View {
         if (this.loadingRepos || !this.where?.root) return;
         this.loadingRepos = true;
         this.reposAt = Date.now();
-        const context = JSON.stringify([this.where.root, this.where.on]);
+        const context = this.contextKey;
         cx.spawn(async (cx) => {
             try {
                 const found = await runCommand(exec, "sh", ["-c", REPO_SCRIPT, "sh", this.where.root], {
                     on: this.where.on,
                 });
-                if (context !== JSON.stringify([this.where?.root, this.where?.on])) return;
+                if (context !== this.contextKey) return;
                 if (found.code !== 0) throw new Error((found.stderr || `exit ${found.code}`).trim().split("\n")[0]);
                 const { repos } = parseRepoList(found.stdout);
                 this.repos = repos;
@@ -308,7 +323,7 @@ export default class RepoReview extends View {
                 } catch {
                     // storage unavailable: the first repository is a fine default
                 }
-                const choice = chooseRepo(repos, this.repo, remembered);
+                const choice = initial ? chooseRepo(repos, "", null) : chooseRepo(repos, this.repo, remembered);
                 if (choice !== this.repo) {
                     this.repo = choice ?? "";
                     this.name = repoName(this.repo);
@@ -326,6 +341,9 @@ export default class RepoReview extends View {
 
     /** A new repository: forget the old rows and diff, keep the view choice. */
     resetRepo() {
+        this.readGeneration = (this.readGeneration ?? 0) + 1;
+        this.loading = false;
+        this.again = false;
         this.loaded = false;
         this.error = null;
         this.files = [];
@@ -345,6 +363,7 @@ export default class RepoReview extends View {
         this.comments = [];
         this.commentsAt = null;
         this.draft = null;
+        this.name = this.fixed ? this.name : "Review";
         this.syncComments();
     }
 
@@ -373,6 +392,9 @@ export default class RepoReview extends View {
             return;
         }
         this.loading = true;
+        const run = ++this.readGeneration;
+        const repo = this.repo;
+        const context = this.contextKey;
         cx.spawn(async (cx) => {
             try {
                 const r = await runCommand(
@@ -381,6 +403,7 @@ export default class RepoReview extends View {
                     [...READ, "-c", "core.quotePath=false", "status", "--porcelain=v1", "-b", "--no-renames"],
                     { cwd: this.repo, on: this.on },
                 );
+                if (run !== this.readGeneration || repo !== this.repo || context !== this.contextKey) return;
                 if (r.code !== 0) throw Object.assign(new Error(r.stderr || `exit ${r.code}`), r);
                 const s = parseStatus(r.stdout);
                 // The base costs a dozen git calls: find it again only when HEAD moves, or after a minute (a fetch).
@@ -410,6 +433,7 @@ export default class RepoReview extends View {
                     );
                     if (d.code === 0) committed = parseNameStatus(d.stdout);
                 }
+                if (run !== this.readGeneration || repo !== this.repo || context !== this.contextKey) return;
                 Object.assign(this, {
                     branch: s.branch,
                     ahead: s.ahead,
@@ -428,11 +452,16 @@ export default class RepoReview extends View {
                 this.fixSelection();
                 await this.loadDiff();
             } catch (e) {
-                this.error = friendlyError(e, { what: "Reading" });
+                if (run === this.readGeneration && repo === this.repo && context === this.contextKey)
+                    this.error = friendlyError(e, { what: "Reading" });
             } finally {
-                this.loading = false;
-                this.last = this.again ? 0 : Date.now();
-                this.again = false;
+                if (run === this.readGeneration) {
+                    this.loading = false;
+                    this.last = this.again ? 0 : Date.now();
+                    const again = this.again;
+                    this.again = false;
+                    if (again) this.refresh(cx);
+                }
                 cx.notify();
             }
         });
@@ -879,7 +908,7 @@ export default class RepoReview extends View {
 
     header(t) {
         return panelHeader(t, {
-            title: this.name,
+            title: "Review",
             readAt: this.last,
             busy: this.loading,
             onRefresh: (cx) => this.refresh(cx),
@@ -891,6 +920,7 @@ export default class RepoReview extends View {
     repoChooser(t) {
         if ((this.repos?.length ?? 0) < 2) return null;
         const current = this.repos.find((r) => r.path === this.repo);
+        const branch = current?.branch || this.branch;
         return v_flex()
             .flex_none()
             .border_b(1)
@@ -979,7 +1009,7 @@ export default class RepoReview extends View {
             .when(!this.fixed, (el) =>
                 el.child(
                     contextCard(t, {
-                        name: this.repo.split("/").pop() || "Review",
+                        name: (this.where?.root ?? "").split("/").filter(Boolean).pop() || "Review",
                         follow: this.follow,
                         onFollow: (cx) => this.toggleFollow(cx),
                         machine: this.on ?? null,
@@ -1621,7 +1651,20 @@ export default class RepoReview extends View {
             noFolder: !this.repo || !this.where?.root,
         });
         if (!this.fixed && context.pending)
-            return v_flex().id("jig-review").size_full().bg(t.background).child(this.header(t)).child(skeleton(t));
+            return v_flex()
+                .id("jig-review")
+                .size_full()
+                .bg(t.background)
+                .child(this.header(t))
+                .child(
+                    contextCard(t, {
+                        name: (this.where?.root ?? "").split("/").filter(Boolean).pop() || "Review",
+                        follow: this.follow,
+                        onFollow: (cx) => this.toggleFollow(cx),
+                        machine: this.on ?? null,
+                    }),
+                )
+                .child(skeleton(t));
         if (!this.fixed && !this.repo) return this.noRepo(t);
         return h_flex()
             .id("jig-review")
