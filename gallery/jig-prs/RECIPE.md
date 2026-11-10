@@ -37,9 +37,10 @@ The standalone listing has `"place": "none"`, so a layout block with `content.mo
 activity bar there is no badge. The panel has the **Terminal/Space** switch (per space): Terminal follows the focused
 terminal's folder, Space uses the space's folder. Built from Herdr's `mods/workspace-chrome/*.svg` icons.
 
-**Header:** all git panels use one 42 px shared header: title, optional Terminal/Space switch, and a Refresh whose
-tooltip says `Refresh · read N ago` (`Refresh` before the first read, `Reading…` while busy). Git, History, PR & CI, Worktrees and the
-side-panel Review show the switch; a Review tab has title and Refresh only. An error line sits under the header, above the kept rows.
+**Header:** all git panels use one 42 px shared header: title and Refresh, whose tooltip says `Refresh · read N ago`
+(`Refresh` before the first read, `Reading…` while busy). Git, Worktrees and Review's side panel put the Terminal/Space
+switch in a 32 px context card under the header; a Review tab has title and Refresh only. History and PR & CI keep the
+switch in the header until their follow-up. An error line sits under the header, above the kept rows.
 
 **Watch out:**
 

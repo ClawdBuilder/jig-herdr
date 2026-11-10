@@ -100,6 +100,16 @@ export function worktreeTitle(count) {
     return n === 0 ? "Worktrees" : `${n} worktree${n === 1 ? "" : "s"}`;
 }
 
+/** Ready, in-progress, and the main checkout last; a main checkout is never offered for removal. */
+export function groupWorktrees(rows) {
+    const linked = (rows ?? []).filter((row) => row.path !== row.main);
+    return {
+        ready: linked.filter((row) => row.ready),
+        progress: linked.filter((row) => !row.ready),
+        main: (rows ?? []).filter((row) => row.path === row.main),
+    };
+}
+
 /** A number from the script's output; empty, "?" (git failed) and missing all give null. */
 const num = (text) => (text === "" || text === "?" || text === undefined ? null : Number(text));
 

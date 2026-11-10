@@ -50,6 +50,7 @@ import {
     filterGroups,
     focusedCheckout,
     foldMap,
+    groupCheckouts,
     groupRepos,
     holdsLock,
     isClean,
@@ -80,6 +81,18 @@ import {
     worktreeSignal,
 } from "./lib.js";
 import { panelError, panelHeader } from "./panel-header.js";
+import {
+    contextCard,
+    dangerButton,
+    emptyLine,
+    footer,
+    groupHeader,
+    moveActive,
+    primaryButton,
+    row,
+    secondaryButton,
+    statusLine,
+} from "./panel-kit.js";
 import { BranchPicker, DONE } from "./picker.js";
 import { PushConfirm } from "./push.js";
 import {
@@ -213,6 +226,7 @@ export default class RepoChanges extends View {
         this.folds = foldMap(shared(FOLD_KEY));
         this.cleanOpen = false;
         this.hover = null; // the checkout row under the pointer
+        this.activeRepo = null; // the keyboard-active checkout
         this.hoverFile = null; // the file row under the pointer
         this.confirm = null; // { key, repo, file, kind }: a discard waiting for its second click
         this.fetching = false; // the header's Fetch every repo
@@ -406,6 +420,7 @@ export default class RepoChanges extends View {
                 if (run !== this.readGeneration || context !== this.context) return;
                 if (r.code !== 0) throw Object.assign(new Error(r.stderr || `exit ${r.code}`), r);
                 this.repos = parseRepos(r.stdout, root);
+                this.loadedRoot = root;
                 this.error = null;
                 this.loaded = true;
                 this.switching = false;
@@ -1389,69 +1404,187 @@ export default class RepoChanges extends View {
             : row(v_flex()).gap(6).child(field()).child(h_flex().gap(6).justify_end().children(buttons()));
     }
 
-    // The list: groups with changes first (a main checkout, then its worktrees), then the clean group, folded.
-    list(t) {
-        const q = this.filter.trim() !== "",
-            groups = filterGroups(groupRepos(this.repos), this.filter),
-            focus = focusedCheckout(this.repos, this.loc?.root ?? ""),
-            foldedOf = (g) => this.foldedGroup(g),
-            // Tags are computed over the rows that are actually visible: folding a repo removes its worktrees' names.
-            visible = groups.flatMap((g) =>
-                foldedOf(g)
-                    ? [{ repo: g.main, main: null }]
-                    : [{ repo: g.main, main: null }, ...g.worktrees.map((w) => ({ repo: w, main: g.main }))],
-            ),
-            tags = disambiguators(
-                visible.map((v) => ({ path: v.repo.path, name: rowName(v.repo, { main: v.main }).name })),
-            ),
-            rows = (g) => {
-                const folded = foldedOf(g),
-                    one = (repo, main) =>
-                        this.checkout(
-                            t,
-                            repo,
-                            q,
-                            Boolean(main),
-                            g,
-                            main ? null : (tags.get(repo.path) ?? null),
-                            focus,
-                            folded,
-                        );
-                return folded ? [one(g.main, null)] : [one(g.main, null), ...g.worktrees.map((w) => one(w, g.main))];
-            },
-            changed = groups.filter((g) => !isClean(g)),
-            clean = groups.filter((g) => isClean(g)),
-            open = q || this.cleanOpen,
-            items = changed.flatMap(rows);
-        if (clean.length) {
-            items.push(
-                h_flex()
-                    .id("clean-group")
-                    .h(26)
-                    .flex_none()
-                    .mt(6)
-                    .px(6)
-                    .gap(6)
-                    .items_center()
-                    .rounded(7)
-                    .cursor_pointer()
-                    .text_color(t.muted)
-                    .hover((s) => s.bg(t.hover))
-                    .on_click((_e, cx) => {
-                        this.cleanOpen = !this.cleanOpen;
-                        cx.notify();
-                    })
+    /** A repo as the kit's 48 px row; opening it shows files, commit box and actions. */
+    kitCheckout(t, repo, color, nested, group, dir) {
+        const open = this.opened.has(repo.path),
+            focus = repo.files.length > 0,
+            detail = [
+                repo.branch || (repo.detached ? "detached" : "?"),
+                badgeText(repo),
+                repo.total ? `${repo.total} file${repo.total === 1 ? "" : "s"}` : null,
+            ]
+                .filter(Boolean)
+                .join(" · ");
+        const files = repo.files.flatMap((file) => this.fileRows(t, repo, file, nested ? 16 : 0));
+        const details = v_flex()
+            .p(8)
+            .gap(6)
+            .children(files)
+            .when(repo.total > repo.files.length, (el) =>
+                el.child(
+                    div()
+                        .pl(12)
+                        .text_size(11)
+                        .text_color(t.dim)
+                        .child(`+${repo.total - repo.files.length} more`),
+                ),
+            )
+            .when(repo.staged > 0 && this.commits.has(repo.path), (el) => el.child(this.commitBox(t, repo, 0)))
+            .when(this.confirm?.key === `all:${repo.path}`, (el) =>
+                el
                     .child(
                         div()
-                            .flex_none()
-                            .text_color(t.dim)
-                            .child(svg(ICON(open ? "chevron-down" : "chevron-right")).size(12)),
+                            .text_size(12)
+                            .text_color(t.blocked)
+                            .child(
+                                `Discard all ${repo.files.length} changed files in ${repo.name}? Untracked files are deleted.`,
+                            ),
                     )
-                    .child(div().font_semibold().child(`Clean (${clean.length})`)),
+                    .child(
+                        h_flex()
+                            .gap(6)
+                            .justify_end()
+                            .child(
+                                secondaryButton(
+                                    t,
+                                    `discard-all-no-${repo.path}`,
+                                    "Cancel",
+                                    (cx) => {
+                                        this.confirm = null;
+                                        cx.notify();
+                                    },
+                                    { h: 26 },
+                                ),
+                            )
+                            .child(
+                                dangerButton(
+                                    t,
+                                    `discard-all-yes-${repo.path}`,
+                                    "Discard all",
+                                    (cx) => this.discardAll(repo, cx),
+                                    { h: 26 },
+                                ),
+                            ),
+                    ),
+            )
+            .child(
+                h_flex()
+                    .gap(6)
+                    .justify_end()
+                    .child(
+                        primaryButton(t, `commit-${repo.path}`, "Commit", (cx) => this.commitNow(cx, repo), { h: 26 }),
+                    )
+                    .child(
+                        secondaryButton(
+                            t,
+                            `push-${repo.path}`,
+                            repo.ahead ? "Push" : "Sync",
+                            (cx) => this.syncNow(cx, repo, "push"),
+                            { h: 26 },
+                        ),
+                    )
+                    .child(
+                        secondaryButton(t, `branch-${repo.path}`, "Branch", (cx) => this.openPicker(repo, cx), {
+                            h: 26,
+                        }),
+                    )
+                    .child(
+                        dangerButton(t, `discard-${repo.path}`, "Discard all…", (cx) => this.confirmAll(repo, cx), {
+                            h: 26,
+                        }),
+                    ),
             );
-            if (open) items.push(...clean.flatMap(rows));
+        return row(t, {
+            id: repo.path,
+            color,
+            active: this.activeRepo === repo.path,
+            title: `${"  ".repeat(nested ? 1 : 0)}${rowName(repo, { main: nested ? group.main : null, dir }).name}`,
+            detail,
+            open,
+            onToggle: (cx) => {
+                if (open) this.opened.delete(repo.path);
+                else this.opened.add(repo.path);
+                cx.notify();
+            },
+            details: focus ? details : null,
+        });
+    }
+
+    /** Inline confirm for the bulk discard. Each file still goes through discardFile's own check. */
+    confirmAll(repo, cx) {
+        if (!repo.files.length) return;
+        this.confirm = { key: `all:${repo.path}`, kind: "all" };
+        cx.notify();
+    }
+
+    discardAll(repo, cx) {
+        this.confirm = null;
+        this.act(
+            cx,
+            repo,
+            async (git) => {
+                for (const file of repo.files)
+                    await discardFile(git, { checkout: repo.path, file: file.path, expect: discardKind(file.xy) });
+                return { ok: true, message: `Discarded ${repo.files.length} files.` };
+            },
+            false,
+            "Discarding",
+        );
+    }
+
+    // The list: checkout groups, with a worktree indented under its main row.
+    list(t) {
+        const groups = groupRepos(this.repos),
+            states = groupCheckouts(this.repos),
+            items = [];
+        const specs = [
+            ["needs", "Needs you", t.ansi1],
+            ["changed", "Changed", t.accent],
+            ["ahead", "Ahead or behind", t.blocked],
+            ["clean", "Clean", t.muted],
+        ];
+        for (const [key, label, color] of specs) {
+            const rows = states[key];
+            if (!rows.length) continue;
+            const folded = key === "clean" && !this.cleanOpen;
+            const one = key === "changed" && groups.length === 1;
+            const action =
+                key === "changed" && one
+                    ? secondaryButton(
+                          t,
+                          "stage-all-group",
+                          "Stage all",
+                          (cx) => {
+                              const repo = rows[0];
+                              this.act(cx, repo, (git) => stageAll(git, { checkout: repo.path }), true, "Staging");
+                          },
+                          { h: 26 },
+                      )
+                    : key === "ahead"
+                      ? secondaryButton(t, "fetch-group", "Fetch", (cx) => this.fetchAll(cx), { h: 26 })
+                      : key === "clean"
+                        ? secondaryButton(
+                              t,
+                              "toggle-clean",
+                              folded ? "Show" : "Hide",
+                              (cx) => {
+                                  this.cleanOpen = !this.cleanOpen;
+                                  cx.notify();
+                              },
+                              { h: 26 },
+                          )
+                        : null;
+            items.push(groupHeader(t, key, label, rows.length, color, action));
+            if (folded) continue;
+            for (const repo of rows) {
+                const main = groups.find((g) => g.main.path === repo.main)?.main;
+                const parent = repo.linked ? (main ?? null) : null;
+                items.push(
+                    this.kitCheckout(t, repo, color, Boolean(parent), parent ?? { main: repo, worktrees: [] }, null),
+                );
+            }
         }
-        return items;
+        return items.length ? items : [emptyLine(this.emptyState(null) ?? "No repos here.", t)];
     }
 
     /** The header's fold-all button: fold every repo, or unfold every repo when any is folded. */
@@ -1567,10 +1700,8 @@ export default class RepoChanges extends View {
             })
             .child(
                 panelHeader(t, {
-                    title: loc.root ? lastSegment(loc.root) || "/" : "Git",
+                    title: "Git",
                     titleTooltip: loc.root || "No folder",
-                    follow: this.follow,
-                    onFollow: (cx) => this.setFollow(!this.follow, cx),
                     readAt: this.last,
                     busy: this.refreshState.busy,
                     onRefresh: (cx) => {
@@ -1591,6 +1722,14 @@ export default class RepoChanges extends View {
                               )
                             : null,
                     ].filter(Boolean),
+                }),
+            )
+            .child(
+                contextCard(t, {
+                    name: loc.root ? lastSegment(loc.root) || "/" : "No folder",
+                    follow: this.follow,
+                    onFollow: (cx) => this.setFollow(!this.follow, cx),
+                    machine: loc.on ?? null,
                 }),
             )
             .when(Boolean(this.error), (el) => el.child(panelError(t, this.error)))
@@ -1634,11 +1773,6 @@ export default class RepoChanges extends View {
                             .child(Input.new(this.input).h_full().w_full().text_size(12).text_color(t.foreground)),
                     ),
             )
-            .when(Boolean(this.error), (el) =>
-                el.child(
-                    div().flex_none().px(12).py(3).truncate().text_size(11).text_color(t.blocked).child(this.error),
-                ),
-            )
             .child(
                 v_flex()
                     .id("repos-list")
@@ -1646,6 +1780,27 @@ export default class RepoChanges extends View {
                     .min_h(0)
                     .p(6)
                     .overflow_y_scrollbar()
+                    .track_focus(this.keys)
+                    .on_key_down((e, cx) => {
+                        const ids = Object.values(groupCheckouts(this.repos))
+                            .flat()
+                            .map((r) => r.path);
+                        if (e.key === "up" || e.key === "down") {
+                            this.activeRepo = moveActive(ids, this.activeRepo, e.key === "up" ? -1 : 1);
+                            cx.stop_propagation();
+                            cx.notify();
+                        } else if ((e.key === "enter" || e.key === "space") && this.activeRepo) {
+                            if (this.opened.has(this.activeRepo)) this.opened.delete(this.activeRepo);
+                            else this.opened.add(this.activeRepo);
+                            cx.stop_propagation();
+                            cx.notify();
+                        } else if (e.key === "escape") {
+                            this.opened.clear();
+                            this.activeRepo = null;
+                            cx.stop_propagation();
+                            cx.notify();
+                        }
+                    })
                     .when(Boolean(empty), (el) =>
                         el.child(
                             v_flex()
@@ -1663,6 +1818,34 @@ export default class RepoChanges extends View {
                         ),
                     )
                     .children(items),
+            )
+            .when(Boolean(this.fetchNote || this.error), (el) =>
+                el.child(
+                    statusLine(
+                        t,
+                        this.fetchNote
+                            ? { text: this.fetchNote.text, tone: "done" }
+                            : { text: this.error, tone: "error" },
+                    ),
+                ),
+            )
+            .child(
+                footer(t, {
+                    summary: (() => {
+                        const focused = focusedCheckout(this.repos, loc?.root ?? "");
+                        const repo = this.repos.find((r) => r.path === focused) ?? this.repos[0];
+                        if (!repo) return "No repositories here";
+                        return [
+                            repo.name,
+                            repo.branch,
+                            badgeText(repo),
+                            repo.total ? `${repo.total} uncommitted` : null,
+                        ]
+                            .filter(Boolean)
+                            .join(" · ");
+                    })(),
+                    action: null,
+                }),
             );
     }
 

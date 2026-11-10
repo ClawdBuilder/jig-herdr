@@ -60,6 +60,10 @@ function copyListing(id: string, out: string): void {
     cpSync(path.join(ROOT, "gallery", id, "RECIPE.md"), path.join(target, "RECIPE.md"));
     cpSync(path.join(ROOT, "gallery", id, "preview.png"), path.join(target, "preview.png"));
     cpSync(path.join(ROOT, "LICENSE"), path.join(target, "LICENSE"));
+    const kit = [id, ...(DEPENDENCIES[id] ?? [])].some((mod) =>
+        existsSync(path.join(ROOT, "mods", mod, "panel-kit.js")),
+    );
+    if (kit) cpSync(path.join(ROOT, "licenses", "skillshare-MIT.txt"), path.join(target, "LICENSE-SKILLSHARE"));
     if (id === LAYOUT) {
         copy(path.join(ROOT, "layouts", "jig-workbench.json"), path.join(target, "layouts", "jig-workbench.json"));
         copy(path.join(ROOT, "layouts", "jig-workbench.svg"), path.join(target, "layouts", "jig-workbench.svg"));
@@ -79,6 +83,12 @@ function copyListing(id: string, out: string): void {
             )}\n`,
         );
     }
+    if (kit && id !== LAYOUT) {
+        writeFileSync(
+            path.join(target, "NOTICE"),
+            "The panel kit's patterns are adapted from runkids/skillshare, Copyright (c) 2025 runkids, MIT License (LICENSE-SKILLSHARE).\n",
+        );
+    }
     if ([id, ...dependencies].some((one) => DERIVED.has(one))) {
         cpSync(path.join(ROOT, "licenses", "Apache-2.0.txt"), path.join(target, "LICENSE-APACHE"));
         writeFileSync(
@@ -92,6 +102,9 @@ function copyListing(id: string, out: string): void {
                 "prefixes, and Files opens a file in a jig-file-view tab instead of previewing it inside the panel.",
                 "Everything else in this folder is MIT (LICENSE). Herdr ships no THIRD-PARTY-NOTICES file here; if",
                 "upstream supplies one, include it unchanged. The upstream source headers are kept.",
+                "",
+                "The panel kit's patterns are adapted from runkids/skillshare, Copyright (c) 2025 runkids,",
+                "MIT License (LICENSE-SKILLSHARE).",
                 "",
             ].join("\n"),
         );

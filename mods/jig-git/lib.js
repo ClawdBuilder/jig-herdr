@@ -252,6 +252,24 @@ export function groupRepos(repos) {
 /** The checkouts of a group, main first. */
 export const checkoutsOf = (group) => [group.main, ...group.worktrees];
 
+/** The list groups: a checkout is in the first group that applies. */
+export function groupCheckouts(repos) {
+    const groups = { needs: [], changed: [], ahead: [], clean: [] };
+    for (const repo of repos ?? []) {
+        const conflict = (repo.files ?? []).some((file) => file.status === "U" || file.conflict);
+        const key =
+            repo.error || conflict || isDiverged(repo)
+                ? "needs"
+                : repo.files?.length
+                  ? "changed"
+                  : !repo.detached && (repo.ahead || repo.behind || repo.base)
+                    ? "ahead"
+                    : "clean";
+        groups[key].push(repo);
+    }
+    return groups;
+}
+
 /** A group is clean when its main checkout and every worktree has no change, no error and no commit over its base branch. */
 export const isClean = (group) => checkoutsOf(group).every((r) => !r.error && !r.files.length && !r.base);
 

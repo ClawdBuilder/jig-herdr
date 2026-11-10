@@ -6,7 +6,8 @@
 
 - PR & CI no longer asks GitHub about local-path remotes or known non-GitHub hosts: those repositories are parked as
   "no remote". A GraphQL "Could not resolve to a Repository" answer parks as "not on GitHub" instead of the red error line.
-- Review in the side panel now follows the focused terminal's repository, offers the Terminal/Space switch and a repository
+- Review in the side panel now follows the focused terminal's repository, offers the Terminal/Space switch in its context
+  card and a repository
   chooser, says where to start when no repository exists, and stacks the file list over the diff below 640 px.
 
 - Listing recipes now match the built panels: Review's header is title and Refresh (Copy and Diff/File/Patch are body
@@ -15,6 +16,11 @@
 
 
 ### Changed
+
+- A shared `panel-kit.js` now gives Git, Worktrees and Review's side panel one type scale, status dot, buttons, pills, segmented controls,
+  group headers, rows, context cards, footer and status line. Git groups checkouts as Needs you, Changed, Ahead or
+  behind and Clean; Worktrees groups Ready, In progress and Main checkout. The Terminal/Space switch moves to a context
+  card for these two panels. Patterns adapted from runkids/skillshare (MIT); see NOTICE and LICENSE-SKILLSHARE.
 
 - The mod-folder `RECIPE.md` and `preview.png` of `jig-git` and `jig-keep-awake` are no longer installed; the installer
   removes files from earlier versions.

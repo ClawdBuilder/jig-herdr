@@ -25,6 +25,7 @@ import { location, readFollow, writeFollow } from "./follow.js";
 import {
     cancelPrune,
     dangerousIgnored,
+    groupWorktrees,
     isOnScreen,
     liveReady,
     nameOf,
@@ -43,6 +44,17 @@ import {
     worktreeTitle,
 } from "./lib.js";
 import { panelError, panelHeader } from "./panel-header.js";
+import {
+    contextCard,
+    dangerButton,
+    footer,
+    groupHeader,
+    moveActive,
+    primaryButton,
+    row,
+    secondaryButton,
+    statusLine,
+} from "./panel-kit.js";
 import {
     focusRegained,
     friendlyError,
@@ -124,7 +136,9 @@ export default class RepoWorktrees extends View {
         this.error = null;
         this.tookMs = null;
         this.confirming = null; // the path whose Remove is waiting for a second click
-        this.menu = null; // the row whose ⋯ actions are open
+        this.opened = new Set();
+        this.activeTree = null;
+        this.keys = cx.focus_handle();
         this.removing = null; // the path being removed now
         this.notices = [];
         this.rowErrors = {};
@@ -382,166 +396,123 @@ export default class RepoWorktrees extends View {
         return facts;
     }
 
-    row(t, tree) {
+    openTab(tree) {
+        const space = spaces().find((s) => s.active)?.id;
+        run("tab.new", { space, folder: tree.path });
+    }
+
+    row(t, tree, color) {
         const asking = this.confirming === tree.path;
-        const inProgress = this.removing === tree.path;
-        const dot = tree.busy ? t.working : tree.open ? t.dim : null;
-        const where = relName(tree.path, this.where.root);
-        const canAsk = Boolean(tree.ready) && !asking && !inProgress && !this.removing;
-        const title = h_flex()
-            .gap(8)
-            .items_center()
-            .child(
-                div()
-                    .flex_1()
-                    .min_w(0)
-                    .truncate()
-                    .tooltip(tree.path)
-                    .child(tree.branch || `(detached ${tree.head})`),
+        const main = tree.path === tree.main;
+        const open = this.opened.has(tree.path);
+        const detail = [
+            nameOf(tree.main),
+            tree.ahead ? `↑${tree.ahead}` : null,
+            tree.behind ? `↓${tree.behind}` : null,
+            tree.unpushed && tree.upstream ? `${tree.unpushed} unpushed` : null,
+            tree.date ? since(tree.date) : null,
+        ]
+            .filter(Boolean)
+            .join(" · ");
+        const details = v_flex()
+            .p(8)
+            .gap(6)
+            .child(div().text_size(12).text_color(t.muted).child(tree.path))
+            .when(Boolean(tree.ready), (el) =>
+                el.child(div().text_size(12).text_color(t.muted).child(REASON[tree.ready])),
             )
-            .when(dot !== null, (el) => el.child(div().flex_none().text_color(dot).child("●")))
-            .child(
-                div()
-                    .flex_none()
-                    .h(17)
-                    .px(6)
-                    .flex()
-                    .items_center()
-                    .rounded(5)
-                    .text_size(10.5)
-                    .text_color(tree.ready ? t.done : t.dim)
-                    .when(Boolean(tree.ready), (el) => el.bg(t.raised))
-                    .child(
-                        tree.path === tree.main
-                            ? "main checkout"
-                            : tree.ready
-                              ? "Ready to remove"
-                              : tree.baseAhead === 0 && !tree.unpushed && !tree.upstream
-                                ? "no commits yet"
-                                : "In progress",
-                    ),
-            )
-            .when(canAsk, (el) =>
-                el.child(
-                    button(t, `rm-${tree.path}`, "Remove", () => {
-                        this.confirming = tree.path;
-                    }),
-                ),
-            )
-            .when(inProgress, (el) => el.child(div().flex_none().text_size(11.5).text_color(t.dim).child("Removing…")))
-            .child(
-                div()
-                    .id(`menu-${tree.path}`)
-                    .flex_none()
-                    .w(18)
-                    .h(18)
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .rounded(5)
-                    .cursor_pointer()
-                    .hover((st) => st.bg(t.raised).text_color(t.foreground))
-                    .tooltip("Actions")
-                    .on_click((_e, cx) => {
-                        cx.stop_propagation();
-                        this.menu = this.menu === tree.path ? null : tree.path;
-                        cx.notify();
-                    })
-                    .child("⋯"),
-            );
-        const confirmText = `Remove worktree ${tree.path}? Branch ${tree.branch || "(none)"} is deleted only if fully merged.${tree.open ? " A space is open there; it stays open." : ""}`;
-        return v_flex()
-            .id(`wt-${tree.path}`)
-            .flex_none()
-            .px(8)
-            .py(5)
-            .gap(3)
-            .rounded(7)
-            .cursor_pointer()
-            .hover((s) => s.bg(t.hover))
-            .on_click(() => this.openRow(tree))
-            .tooltip(`${tree.path}\n${tree.subject || ""}`)
-            .child(title)
-            .when(this.menu === tree.path, (el) =>
-                el.child(
-                    h_flex()
-                        .id(`actions-${tree.path}`)
-                        .gap(6)
-                        .pl(20)
-                        .child(button(t, `open-${tree.path}`, "Open", () => this.openRow(tree)))
-                        .when(tree.ready && tree.path !== tree.main, (row) =>
-                            row.child(
-                                button(t, `rm-${tree.path}`, "Remove", () => {
-                                    this.confirming = tree.path;
-                                    this.menu = null;
-                                }),
-                            ),
-                        ),
-                ),
+            .when(Boolean(tree.subject), (el) =>
+                el.child(div().text_size(12).text_color(t.muted).truncate().child(tree.subject)),
             )
             .child(
                 h_flex()
-                    .gap(8)
-                    .items_center()
-                    .text_size(10.5)
-                    .text_color(t.muted)
-                    .child(div().flex_1().min_w(0).truncate().text_color(t.dim).tooltip(tree.path).child(where))
-                    .children(this.facts(t, tree).map((fact) => fact.flex_none())),
-            )
-            .when(Boolean(tree.ready), (el) =>
-                el.child(div().text_size(10.5).text_color(t.dim).truncate().child(REASON[tree.ready])),
+                    .gap(6)
+                    .justify_end()
+                    .child(primaryButton(t, `open-${tree.path}`, "Open space", () => this.openRow(tree), { h: 26 }))
+                    .child(
+                        secondaryButton(t, `tab-${tree.path}`, "Open in new tab", () => this.openTab(tree), { h: 26 }),
+                    )
+                    .when(!main, (el) =>
+                        el.child(
+                            dangerButton(
+                                t,
+                                `rm-${tree.path}`,
+                                "Remove…",
+                                () => {
+                                    if (!tree.ready) return;
+                                    this.confirming = tree.path;
+                                },
+                                { h: 26, disabled: !tree.ready },
+                            ),
+                        ),
+                    ),
             )
             .when(asking, (el) =>
-                el.child(
-                    v_flex()
-                        .pt(4)
-                        .gap(6)
-                        .text_size(11.5)
-                        .child(div().text_color(t.muted).child(confirmText))
-                        .child(
-                            h_flex()
-                                .gap(6)
-                                .justify_end()
-                                .child(
-                                    button(t, `no-${tree.path}`, "Cancel", () => {
+                el
+                    .child(
+                        div()
+                            .text_size(12)
+                            .text_color(t.blocked)
+                            .child(
+                                `Remove worktree ${tree.path}? Branch ${tree.branch || "(none)"} is deleted only if fully merged.${tree.open ? " A space is open there; it stays open." : ""}`,
+                            ),
+                    )
+                    .child(
+                        h_flex()
+                            .gap(6)
+                            .justify_end()
+                            .child(
+                                secondaryButton(
+                                    t,
+                                    `no-${tree.path}`,
+                                    "Cancel",
+                                    (cx) => {
                                         this.confirming = null;
-                                    }),
-                                )
-                                .child(button(t, `yes-${tree.path}`, "Remove", (cx) => this.remove(cx, tree), true)),
-                        ),
-                ),
+                                        cx.notify();
+                                    },
+                                    { h: 26 },
+                                ),
+                            )
+                            .child(
+                                dangerButton(t, `yes-${tree.path}`, "Remove", (cx) => this.remove(cx, tree), { h: 26 }),
+                            ),
+                    ),
             )
             .when(Boolean(this.rowErrors[tree.path]), (el) =>
-                el.child(div().text_size(11).text_color(t.blocked).child(this.rowErrors[tree.path])),
+                el.child(div().text_size(12).text_color(t.blocked).child(this.rowErrors[tree.path])),
             );
+        return row(t, {
+            id: tree.path,
+            color,
+            active: this.activeTree === tree.path,
+            title: tree.branch || `detached ${String(tree.head ?? "").slice(0, 7)}`,
+            detail,
+            open,
+            onToggle: (cx) => {
+                if (open) this.opened.delete(tree.path);
+                else this.opened.add(tree.path);
+                cx.notify();
+            },
+            details,
+        });
     }
 
-    /** One line per repository, then its worktrees. */
+    /** Ready, in progress, then main: one kit header per group. */
     groupRows(t, rows) {
-        const names = new Map(rows.map((row) => [row.main, nameOf(row.main)]));
-        const groups = [...names]
-            .sort((a, b) => a[1].localeCompare(b[1]))
-            .map(([main, name]) => ({ name, rows: rows.filter((row) => row.main === main) }));
-        return groups.flatMap((group) => {
-            const ready = group.rows.filter((row) => row.ready).length;
-            const heading = h_flex()
-                .flex_none()
-                .px(8)
-                .pt(10)
-                .pb(4)
-                .gap(6)
-                .items_center()
-                .text_size(10.5)
-                .font_semibold()
-                .text_color(t.dim)
-                .child(div().child(group.name))
-                .child(
-                    div()
-                        .font_normal()
-                        .child(ready ? `${group.rows.length} · ${ready} ready` : `${group.rows.length}`),
-                );
-            return [...(this.single ? [] : [heading]), ...group.rows.map((row) => this.row(t, row))];
-        });
+        const groups = groupWorktrees(rows);
+        const sections = [
+            ["ready", "Ready to remove", t.ansi2],
+            ["progress", "In progress", t.accent],
+            ["main", "Main checkout", t.muted],
+        ];
+        return sections.flatMap(([key, label, color]) =>
+            groups[key].length
+                ? [
+                      groupHeader(t, `wt-${key}`, label, groups[key].length, color),
+                      ...groups[key].map((tree) => this.row(t, tree, color)),
+                  ]
+                : [],
+        );
     }
 
     render(_cx) {
@@ -554,13 +525,8 @@ export default class RepoWorktrees extends View {
         const space = spaces().find((s) => s.active);
         const follow = readFollow(space?.id);
         const header = panelHeader(t, {
-            title: worktreeTitle(rows.length),
+            title: "Worktrees",
             titleTooltip: `${title} · ${count}`,
-            follow,
-            onFollow: (cx) => {
-                writeFollow(space?.id, !follow);
-                this.load(cx, true);
-            },
             readAt: this.loadedAt,
             busy: this.refreshState.busy,
             onRefresh: (cx) => this.load(cx, true),
@@ -660,6 +626,19 @@ export default class RepoWorktrees extends View {
             .text_color(t.foreground)
             .text_size(13)
             .child(header)
+            .child(
+                contextCard(t, {
+                    name: this.where?.root
+                        ? (this.where.root.split(/[\\/]/).filter(Boolean).pop() ?? "No folder")
+                        : "No folder",
+                    follow,
+                    onFollow: (cx) => {
+                        writeFollow(space?.id, !follow);
+                        this.load(cx, true);
+                    },
+                    machine: this.where?.on ?? null,
+                }),
+            )
             .when(Boolean(pruneBanner), (el) => el.child(pruneBanner))
             .child(
                 v_flex()
@@ -668,6 +647,28 @@ export default class RepoWorktrees extends View {
                     .min_h(0)
                     .p(6)
                     .overflow_y_scrollbar()
+                    .track_focus(this.keys)
+                    .on_key_down((e, cx) => {
+                        const ids = (() => {
+                            const groups = groupWorktrees(this.rows());
+                            return [...groups.ready, ...groups.progress, ...groups.main].map((tree) => tree.path);
+                        })();
+                        if (e.key === "up" || e.key === "down") {
+                            this.activeTree = moveActive(ids, this.activeTree, e.key === "up" ? -1 : 1);
+                            cx.stop_propagation();
+                            cx.notify();
+                        } else if ((e.key === "enter" || e.key === "space") && this.activeTree) {
+                            if (this.opened.has(this.activeTree)) this.opened.delete(this.activeTree);
+                            else this.opened.add(this.activeTree);
+                            cx.stop_propagation();
+                            cx.notify();
+                        } else if (e.key === "escape") {
+                            this.opened.clear();
+                            this.activeTree = null;
+                            cx.stop_propagation();
+                            cx.notify();
+                        }
+                    })
                     .children(notices)
                     .when(Boolean(this.error), (el) => el.child(panelError(t, this.error)))
                     .when(Boolean(this.refreshProblem), (el) => el.child(message(this.refreshProblem, t.muted)))
@@ -683,6 +684,8 @@ export default class RepoWorktrees extends View {
                         ),
                     )
                     .children(this.groupRows(t, rows)),
-            );
+            )
+            .when(Boolean(this.error), (el) => el.child(statusLine(t, { text: this.error, tone: "error" })))
+            .child(footer(t, { summary: `${rows.length} worktree${rows.length === 1 ? "" : "s"} · ${ready} ready` }));
     }
 }

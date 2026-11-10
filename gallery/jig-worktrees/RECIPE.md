@@ -7,12 +7,14 @@ ones. From Jig (https://github.com/ClawdBuilder/jig). No Jig required.
 
 **What you see:**
 
-A header whose title is the worktree count (`15 worktrees`, `1 worktree`, or `Worktrees` before the first read; the full
-repo · count is the tooltip), **Prune merged (N)** when N ready rows exist; repository groups, each with worktree rows:
-name, branch, head, base, last commit, status, and a **Ready to remove** / **In progress** label plus the reason (`merged
-into base`, `remote branch deleted`, uncommitted changes, locked, an agent working). The main checkout is labelled. A row's
-`⋯` menu offers Remove, and Remove asks inline first; the prune banner asks once for all ready rows. Empty and no-git
-states are one line.
+A 42 px header titled **Worktrees** (the worktree count is the tooltip), **Prune merged (N)** when N ready rows exist,
+and Refresh. A 32 px context card under
+it names the folder, toggles **Terminal**/**Space**, and carries the machine name. Rows are grouped **Ready to remove**,
+**In progress**, and **Main checkout** last, each with its count: name, branch, head, base, last commit, status, and the
+reason (`merged into base`, `remote branch deleted`, uncommitted changes, locked, an agent working). A row opens in place
+with **Open space** (primary), **Open in new tab** (secondary) and, when ready and not the main checkout, **Remove…**
+(danger); Remove asks inline first. The prune banner asks once for all ready rows. A 40 px footer counts the
+worktrees and ready ones. Empty and no-git states are one line.
 
 **How it behaves:**
 
@@ -33,9 +35,10 @@ Programs: `git worktree list`, `git status`, `git rev-list`, `git reflog`, `git 
 `git branch -d`, `sh` for the script, `timeout`/`gtimeout` when present (20 s). Network: none. Files read: the repository's
 `.git` metadata and the worktree folders; the only write is the explicit Remove.
 
-**Header:** all git panels use one 42 px shared header: title, optional Terminal/Space switch, and a Refresh whose
-tooltip says `Refresh · read N ago` (`Refresh` before the first read, `Reading…` while busy). Git, History, PR & CI, Worktrees and the
-side-panel Review show the switch; a Review tab has title and Refresh only. An error line sits under the header, above the kept rows.
+**Header:** all git panels use one 42 px shared header: title and Refresh, whose tooltip says `Refresh · read N ago`
+(`Refresh` before the first read, `Reading…` while busy). Git, Worktrees and Review's side panel put the Terminal/Space
+switch in a 32 px context card under the header; a Review tab has title and Refresh only. History and PR & CI keep the
+switch in the header until their follow-up. An error line sits under the header, above the kept rows.
 
 **Watch out:**
 

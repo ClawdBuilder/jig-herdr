@@ -54,6 +54,7 @@ import {
     unstageFile,
 } from "./lib.js";
 import { panelError, panelHeader } from "./panel-header.js";
+import { contextCard } from "./panel-kit.js";
 import { friendlyError, GIT_READ, run as runCommand } from "./refresh.js";
 
 const EVERY = 5000; // re-list the files this often while the tab is shown
@@ -822,8 +823,6 @@ export default class RepoReview extends View {
     header(t) {
         return panelHeader(t, {
             title: this.name,
-            follow: this.fixed ? undefined : this.follow,
-            onFollow: this.fixed ? undefined : (cx) => this.toggleFollow(cx),
             readAt: this.last,
             busy: this.loading,
             onRefresh: (cx) => this.refresh(cx),
@@ -920,6 +919,16 @@ export default class RepoReview extends View {
             .border_r(1)
             .border_color(t.border)
             .child(this.header(t))
+            .when(!this.fixed, (el) =>
+                el.child(
+                    contextCard(t, {
+                        name: this.repo.split("/").pop() || "Review",
+                        follow: this.follow,
+                        onFollow: (cx) => this.toggleFollow(cx),
+                        machine: this.on ?? null,
+                    }),
+                ),
+            )
             .when(Boolean(this.repoChooser(t)), (el) => el.child(this.repoChooser(t)))
             .child(
                 h_flex()
