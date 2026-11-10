@@ -44,7 +44,15 @@ export const exec = (cmd, args, options) => C.exec(cmd, args, options);
 export const focused = () => C.focused;
 export const hc = async () => ({ code: 0, stdout: "", stderr: "" });
 export const home = "/tmp";
-export const layout = () => ({ children: [] });
+export const layout = () =>
+    C.shown
+        ? {
+              type: "stack",
+              id: "panel-body",
+              active: C.shown,
+              children: [{ id: C.shown, type: "block", content: { mod: C.shown } }],
+          }
+        : { children: [] };
 export const nextCommand = () => new Promise(() => {});
 export const notify = noop;
 export const openOverlay = noop;

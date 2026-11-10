@@ -10,6 +10,10 @@
 
 ### Changed
 
+- PR & CI, History and Worktrees start a context read from render, drop the old folder's data first, and skip
+  parse/rebuild/notify when a read repeats the last output. Their idle shown backstops are PR & CI 1, History 2,
+  Worktrees 3 and Review 36 over 180 s.
+
 - The git scan starts up to 4 × CPU jobs per wave (32 on a 4-CPU machine) instead of fixed 8-job waves, so 17–20 repos
   finish in one wave. Bench (7 runs, uneven repo sizes): 20 repos 243 → 218 ms; 50 repos 1245 → 522 ms.
 

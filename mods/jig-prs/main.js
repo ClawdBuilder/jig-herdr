@@ -192,6 +192,7 @@ export default class RepoPullRequests extends View {
         this.where = where;
         this.contextKey = contextKeyOf(where);
         this.loadedContext = null;
+        this.lastRaw = {};
         this.readGeneration++;
         this.refreshState.cancel();
         this.loading = false;
@@ -282,6 +283,8 @@ export default class RepoPullRequests extends View {
         if (!this.refreshState.start({ user, first: this.data[tab] === undefined, notify: () => cx.notify() })) return;
         this.refreshScheduler.sweep();
         this.loading = true;
+        const pendingBefore = this.loadedContext !== contextKey;
+        this.changedThisRead = false;
         this.triedAt[tab] = Date.now();
         const run = ++this.readGeneration;
         cx.spawn(async (cx) => {
@@ -301,25 +304,33 @@ export default class RepoPullRequests extends View {
                     if (run !== this.readGeneration || contextKey !== this.contextKey) return;
                     this.error = null;
                     if (!currentGeneration(generation, this.generation)) return;
-                    this.data[tab] = data;
+                    const raw = JSON.stringify(data);
+                    const same = this.lastRaw[tab] === raw && this.loadedContext === contextKey;
                     this.loadedContext = contextKey;
                     this.loadedAt[tab] = Date.now();
-                    saveCache(remember(this.cache, this.cacheKey(tab), data));
+                    if (!same) {
+                        this.lastRaw[tab] = raw;
+                        this.data[tab] = data;
+                        this.changedThisRead = true;
+                        saveCache(remember(this.cache, this.cacheKey(tab), data));
+                    } else if (pendingBefore) this.changedThisRead = true;
                 })();
                 await work;
             } catch (e) {
                 if (run === this.readGeneration && contextKey === this.contextKey) {
                     this.error = friendlyError(e, { what: "Reading", follow: true });
+                    this.changedThisRead = true;
                     this.loading = false;
                 }
             } finally {
                 if (run === this.readGeneration) {
                     this.loading = false;
+                    const wasBusy = this.refreshState.busy;
                     if (this.refreshState.finish()) {
                         this.triedAt[tab] = 0;
                         this.refreshScheduler.trigger();
                     }
-                    cx.notify();
+                    if (this.changedThisRead || wasBusy) cx.notify();
                 }
             }
         });
@@ -343,6 +354,7 @@ export default class RepoPullRequests extends View {
     async loadWorkspace(cx, discovery, root, contextKey) {
         const repos = workspaceRowsFor(discovery, root);
         const data = { repos };
+        this.workspaceGroups = prGroups(repos);
         this.data.main = data;
         cx.notify();
         // Worktrees of one branch share a lookup.
@@ -427,7 +439,7 @@ export default class RepoPullRequests extends View {
     async loadOne(discovery, tab) {
         const repo = discovery.repos[0];
         const on = this.where.on;
-        if (!repo?.slug) throw new Error("No GitHub remote.");
+        if (!repo?.slug) return { none: true, branch: null, here: null, list: [], runs: null };
         const listArgs = [
             "pr",
             "list",
@@ -701,7 +713,7 @@ export default class RepoPullRequests extends View {
     workspaceRows(t) {
         const data = this.data.main;
         if (!data) return [this.note(t, this.error ? "" : "Looking for repos…")];
-        const groups = prGroups(data.repos);
+        const groups = this.workspaceGroups ?? prGroups(data.repos);
         const items = [];
         const openedGroups = [
             groups.needs,
@@ -840,6 +852,7 @@ export default class RepoPullRequests extends View {
         const data = this.data[this.tab];
         if (!data) return [this.note(t, this.error ? "" : "Reading…")];
         const rows = [];
+        if (data.none) return [this.note(t, "No GitHub remote.")];
         if (data.here)
             rows.push(
                 this.heading(t, "This branch", "here"),
@@ -919,7 +932,14 @@ export default class RepoPullRequests extends View {
         if (onScreen() && this.data[id] === undefined) this.load(cx, true);
     }
 
-    render(_cx) {
+    render(cx) {
+        const where = whereToLook();
+        if (contextKeyOf(where) !== this.contextKey) {
+            this.enter(where);
+            this.refreshScheduler.trigger();
+            this.contextChanged = false;
+            cx.timer.after(0, (cx) => this.load(cx));
+        }
         const t = theme();
         let rows;
         const state = viewForContext(this.contextKey, this.loadedContext, this.data[this.tab]?.repos ?? [], {

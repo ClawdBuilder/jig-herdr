@@ -88,17 +88,19 @@ function whereToLook() {
 
 /** Who is at a checkout: the space that was opened on it, any other space with a terminal in it, and whether an agent
  * there is working or blocked (a pane's own state, or its space's when the space was made there). */
-function whoIsAt(path, machine) {
+function whoIsAt(path, machine, world = null) {
     const within = (cwd) => sameOrInside(path, cwd);
-    const spacesHere = spaces().filter((s) => (s.machine ?? null) === (machine ?? null));
+    const allSpaces = world?.spaces ?? spaces();
+    const allPanes = world?.panes ?? panes();
+    const spacesHere = allSpaces.filter((s) => (s.machine ?? null) === (machine ?? null));
     const hasTerminalThere = (space) =>
-        space.tabs.some((tab) => panes().some((p) => p.tab === tab.id && within(p.cwd)));
+        space.tabs.some((tab) => allPanes.some((p) => p.tab === tab.id && within(p.cwd)));
     const openedThere = spacesHere.find((s) => within(s.folder));
     const otherSpace = spacesHere.find((s) => !s.active && hasTerminalThere(s));
     const busy = spacesHere.some(
         (s) =>
             (within(s.folder) && WORKING.has(s.status)) ||
-            panes().some((p) => within(p.cwd) && WORKING.has(p.status) && s.tabs.some((tab) => tab.id === p.tab)),
+            allPanes.some((p) => within(p.cwd) && WORKING.has(p.status) && s.tabs.some((tab) => tab.id === p.tab)),
     );
     const anyone = openedThere || spacesHere.find(hasTerminalThere);
     return { space: openedThere ?? otherSpace ?? null, open: Boolean(anyone), busy };
@@ -176,6 +178,7 @@ export default class RepoWorktrees extends View {
         this.loadedContext = null;
         this.generation = (this.generation ?? 0) + 1;
         this.trees = null;
+        this.lastRaw = null;
         this.error = null;
         this.confirming = null;
         this.pruning = null;
@@ -237,10 +240,11 @@ export default class RepoWorktrees extends View {
         const { root, on } = this.where;
         const contextKey = this.contextKey;
         const started = Date.now();
-        const _generation = ++this.generation;
         if (!this.refreshState.start({ user, first: this.trees === null, notify: () => cx.notify() })) return;
         this.refreshScheduler.sweep();
         this.loading = true;
+        const pendingBefore = this.loadedContext !== contextKey;
+        this.changedThisRead = false;
         this.triedAt = started;
         const run = ++this.readGeneration;
         cx.spawn(async (cx) => {
@@ -251,12 +255,20 @@ export default class RepoWorktrees extends View {
                     if (result.code !== 0)
                         throw Object.assign(new Error(result.stderr || `exit ${result.code}`), result);
                     const parsed = parseTrees(result.stdout);
-                    this.single = parsed.single;
-                    this.trees = parsed.trees;
+                    const same = this.lastRaw === result.stdout && this.loadedContext === contextKey;
+                    this.lastRaw = result.stdout;
                     this.loadedContext = contextKey;
                     this.error = null;
                     this.loadedAt = Date.now();
                     this.tookMs = this.loadedAt - started;
+                    if (same) {
+                        this.single = parsed.single;
+                        if (pendingBefore) this.changedThisRead = true;
+                    } else {
+                        this.single = parsed.single;
+                        this.trees = parsed.trees;
+                        this.changedThisRead = true;
+                    }
                 })();
                 await work;
             } catch (e) {
@@ -265,26 +277,31 @@ export default class RepoWorktrees extends View {
             } finally {
                 if (run === this.readGeneration) {
                     this.loading = false;
+                    const wasBusy = this.refreshState.busy;
                     if (this.refreshState.finish()) {
                         this.triedAt = 0;
                         this.refreshScheduler.trigger();
                     }
-                    cx.notify();
+                    if (this.changedThisRead || wasBusy) cx.notify();
                 }
             }
         });
-        cx.notify();
     }
 
     /** The loaded worktrees with who is at each and whether it is ready, newest commit first. Worked out on every call, so a
      * row stops being ready the moment an agent starts working there. */
     rows() {
+        const world = { spaces: spaces(), panes: panes() };
+        const key = JSON.stringify([this.where?.on, this.trees, world]);
+        if (this.rowsCache?.key === key) return this.rowsCache.rows;
         const machine = this.where?.on;
         const withState = (this.trees ?? []).map((tree) => {
-            const presence = whoIsAt(tree.path, machine);
+            const presence = whoIsAt(tree.path, machine, world);
             return { ...tree, ...presence, ready: readiness(tree, presence.busy) };
         });
-        return withState.sort((a, b) => Date.parse(b.date ?? 0) - Date.parse(a.date ?? 0));
+        const rows = withState.sort((a, b) => Date.parse(b.date ?? 0) - Date.parse(a.date ?? 0));
+        this.rowsCache = { key, rows };
+        return rows;
     }
 
     /** The count on this panel's icon: worktrees ready to remove. Set only on a change, since setting shared state
@@ -507,7 +524,14 @@ export default class RepoWorktrees extends View {
         );
     }
 
-    render(_cx) {
+    render(cx) {
+        const where = whereToLook();
+        if (contextKeyOf(where) !== this.contextKey) {
+            this.enter(where);
+            this.refreshScheduler.trigger();
+            this.contextChanged = false;
+            cx.timer.after(0, (cx) => this.load(cx, true));
+        }
         const t = theme();
         const context = viewForContext(this.contextKey, this.loadedContext, this.trees, {
             error: this.error,

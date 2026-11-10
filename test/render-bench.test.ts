@@ -46,3 +46,22 @@ test("jig-git: 50 rows and one open 200-file repo stay bounded", () => {
     assert.ok(calls > 0);
     assert.ok(calls < 5200, `jig-git: ${calls} element calls per render`);
 });
+
+for (const [mod, ceiling] of [
+    ["jig-prs", 400],
+    ["jig-history", 400],
+    ["jig-worktrees", 150],
+] as const) {
+    test(`${mod}: element calls per render stay bounded`, () => {
+        const result = spawnSync(process.execPath, ["test/support/evaluate-one.mjs", mod], {
+            cwd: new URL("..", import.meta.url),
+            encoding: "utf8",
+            env: { ...process.env, JIG_BENCH: "1" },
+        });
+        assert.equal(result.status, 0, result.stderr);
+        const line = result.stdout.split("\n").find((row) => row.startsWith(`BENCHEL ${mod} `));
+        assert.ok(line, result.stdout);
+        const calls = Number(line.split(" ").pop());
+        assert.ok(calls > 0 && calls < ceiling, `${mod}: ${calls} element calls`);
+    });
+}
