@@ -532,7 +532,7 @@ export default class RepoWorktrees extends View {
             onRefresh: (cx) => this.load(cx, true),
             refreshIcon: "mods/jig-worktrees/refresh.svg",
             extra: [
-                this.rows().filter((row) => row.ready && row.path !== row.main).length > 0
+                rows.filter((row) => row.ready && row.path !== row.main).length > 0
                     ? div()
                           .id("wt-prune")
                           .flex_none()
@@ -541,14 +541,12 @@ export default class RepoWorktrees extends View {
                           .cursor_pointer()
                           .hover((st) => st.text_color(t.foreground))
                           .on_click((_e, cx) => {
-                              this.pruning = this.rows()
+                              this.pruning = rows
                                   .filter((row) => row.ready && row.path !== row.main)
                                   .map((tree) => ({ tree, on: this.where.on, contextKey: this.contextKey }));
                               cx.notify();
                           })
-                          .child(
-                              `Prune merged (${this.rows().filter((row) => row.ready && row.path !== row.main).length})`,
-                          )
+                          .child(`Prune merged (${rows.filter((row) => row.ready && row.path !== row.main).length})`)
                     : null,
             ].filter(Boolean),
         });
@@ -650,7 +648,7 @@ export default class RepoWorktrees extends View {
                     .track_focus(this.keys)
                     .on_key_down((e, cx) => {
                         const ids = (() => {
-                            const groups = groupWorktrees(this.rows());
+                            const groups = groupWorktrees(rows);
                             return [...groups.ready, ...groups.progress, ...groups.main].map((tree) => tree.path);
                         })();
                         if (e.key === "up" || e.key === "down") {

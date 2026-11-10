@@ -1,0 +1,22 @@
+// A loose render bench: catches accidental quadratic work, not machine speed. The ceiling is deliberately far above the
+// measured milliseconds so a slow CI runner does not flake.
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { test } from "node:test";
+
+const CEILING_MS = 25;
+for (const name of ["jig-worktrees", "jig-review", "jig-history", "jig-prs", "jig-keep-awake"]) {
+    test(`${name}: render stays under the loose bench ceiling`, () => {
+        const result = spawnSync(process.execPath, ["test/support/evaluate-one.mjs", name], {
+            cwd: new URL("..", import.meta.url),
+            encoding: "utf8",
+            env: { ...process.env, JIG_BENCH: "1" },
+        });
+        assert.equal(result.status, 0, result.stderr);
+        const line = result.stdout.split("\n").find((line) => line.startsWith(`BENCH ${name} `));
+        assert.ok(line, result.stdout);
+        const ms = Number(line.split(" ").pop());
+        assert.ok(Number.isFinite(ms), line);
+        assert.ok(ms < CEILING_MS, `${name}: ${ms.toFixed(2)} ms`);
+    });
+}
