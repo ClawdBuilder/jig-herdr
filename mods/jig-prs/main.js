@@ -24,6 +24,7 @@ import {
     checkCount,
     checkSummary,
     checksOf,
+    contextKeyOf,
     countOf,
     currentGeneration,
     ghError,
@@ -32,6 +33,8 @@ import {
     isOnScreen,
     loadRuns,
     parseRepos,
+    prGroups,
+    prRowDetail,
     REVIEW,
     relName,
     remember,
@@ -39,10 +42,25 @@ import {
     shapePr,
     shapeRuns,
     since,
+    viewForContext,
     watchdog,
+    workspaceRowsFor,
     workspaceSplit,
 } from "./lib.js";
 import { panelError, panelHeader } from "./panel-header.js";
+import {
+    contextCard,
+    footer,
+    groupHeader,
+    groupOpen,
+    moveActive,
+    pill,
+    primaryButton,
+    row,
+    secondaryButton,
+    segmented,
+    skeleton,
+} from "./panel-kit.js";
 import {
     focusRegained,
     friendlyError,
@@ -59,7 +77,7 @@ const GH_AT_ONCE = 4;
 const MINE_UP_FRONT = 15; // "Mine": pull requests whose checks load without a click
 const OPEN_PAGE = 30;
 const JSON_FIELDS =
-    "number,title,url,state,isDraft,reviewDecision,statusCheckRollup,headRefName,updatedAt,author,mergeable";
+    "number,title,url,state,isDraft,reviewDecision,statusCheckRollup,headRefName,updatedAt,author,mergeable,additions,deletions,changedFiles";
 const icon = (name) => `mods/workspace-chrome/${name}.svg`;
 const lastSegment = (path) => path.replace(/\/+$/, "").split("/").pop();
 const MARK = { fail: "×", pending: "•", pass: "✓", skip: "–" };
@@ -158,6 +176,10 @@ export default class RepoPullRequests extends View {
         this.folded = new Set();
         this.showDefaults = false;
         this.showNoPr = false;
+        this.showParked = false;
+        this.opened = new Set();
+        this.activePr = null;
+        this.keys = cx.focus_handle();
         this.fetching = new Set();
         this.refreshState = new RefreshState();
         this.configAt = 0;
@@ -183,7 +205,12 @@ export default class RepoPullRequests extends View {
     /** A new folder or machine: forget what was shown and take what the cache has for it. */
     enter(where) {
         this.where = where;
-        this.contextKey = JSON.stringify([where.root, where.on]);
+        this.contextKey = contextKeyOf(where);
+        this.loadedContext = null;
+        this.readGeneration++;
+        this.refreshState.cancel();
+        this.loading = false;
+        this.contextChanged = true;
         this.error = null;
         this.data = {};
         this.loadedAt = {};
@@ -197,6 +224,7 @@ export default class RepoPullRequests extends View {
                 this.loadedAt[tab] = cached.at;
             }
         }
+        if (Object.keys(this.data).length) this.loadedContext = this.contextKey;
     }
 
     cacheKey(tab) {
@@ -208,9 +236,10 @@ export default class RepoPullRequests extends View {
     tick(cx) {
         this.refreshState.tick(Date.now(), () => cx.notify());
         const where = whereToLook();
-        if (JSON.stringify([where.root, where.on]) !== this.contextKey) {
+        if (contextKeyOf(where) !== this.contextKey) {
             this.enter(where);
             this.refreshScheduler.trigger();
+            this.load(cx);
             cx.notify();
         }
         this.updateBadge();
@@ -288,12 +317,16 @@ export default class RepoPullRequests extends View {
                     this.error = null;
                     if (!currentGeneration(generation, this.generation)) return;
                     this.data[tab] = data;
+                    this.loadedContext = contextKey;
                     this.loadedAt[tab] = Date.now();
                     saveCache(remember(this.cache, this.cacheKey(tab), data));
                 })();
+                await work;
             } catch (e) {
-                if (run === this.readGeneration && contextKey === this.contextKey)
+                if (run === this.readGeneration && contextKey === this.contextKey) {
                     this.error = friendlyError(e, { what: "Reading", follow: true });
+                    this.loading = false;
+                }
             } finally {
                 if (run === this.readGeneration) {
                     this.loading = false;
@@ -323,12 +356,7 @@ export default class RepoPullRequests extends View {
     /** Workspace tab: each repository on a feature branch gets its branch's pull request and checks. The rows appear at
      * once as "Looking up…" and fill in as the calls return. */
     async loadWorkspace(cx, discovery, root, contextKey) {
-        const repos = discovery.repos.map((repo) => {
-            let status = "loading";
-            if (!repo.slug) status = "noremote";
-            else if (repo.onDefault) status = "default";
-            return { ...repo, name: relName(repo.path, root), status, pr: null, err: null };
-        });
+        const repos = workspaceRowsFor(discovery, root);
         const data = { repos };
         this.data.main = data;
         cx.notify();
@@ -703,78 +731,111 @@ export default class RepoPullRequests extends View {
             .child(text);
     }
 
-    /** Workspace tab: repositories with a pull request first (failing ones on top), then those without, then a folded
-     * group for the ones on a default branch. */
+    /** Workspace tab: the PRs by urgency, then folded No PR / parked groups. */
     workspaceRows(t) {
         const data = this.data.main;
         if (!data) return [this.note(t, this.error ? "" : "Looking for repos…")];
-        const urgency = (repo) => {
-            if (repo.pr) return countOf(repo.pr, "fail") ? 0 : countOf(repo.pr, "pending") ? 1 : 2;
-            return { error: 3 }[repo.status] ?? 5;
+        const groups = prGroups(data.repos);
+        const items = [];
+        const groupsShown = [groups.needs, groups.waiting, groups.ready, groups.noPr, groups.parked].filter(
+            (list) => list.length,
+        ).length;
+        const section = (key, label, color, rows, shown, toggle) => {
+            if (!rows.length) return;
+            const open = groupOpen(shown, groupsShown);
+            const action =
+                rows.length && groupsShown > 1 && key !== "needs" && key !== "waiting" && key !== "ready"
+                    ? secondaryButton(
+                          t,
+                          `toggle-${key}`,
+                          open ? "Hide" : "Show",
+                          (cx) => {
+                              toggle(cx);
+                          },
+                          { h: 26 },
+                      )
+                    : null;
+            items.push(groupHeader(t, key, label, rows.length, color, action));
+            if (!open) return;
+            for (const repo of rows) items.push(this.prKitRow(t, repo));
         };
-        const { featured, noPr, parked } = workspaceSplit(data.repos);
-        featured.sort((a, b) => urgency(a) - urgency(b) || a.name.localeCompare(b.name));
-        const rows = featured.map((repo) => {
-            const head = h_flex()
-                .id(`repo-${repo.path}`)
-                .flex_none()
-                .h(28)
-                .mt(4)
-                .px(8)
-                .gap(8)
-                .items_center()
-                .child(this.repoName(t, repo))
-                .child(this.branchTag(t, repo.branch));
-            if (repo.status === "pr")
-                return v_flex()
-                    .flex_none()
-                    .child(head)
-                    .child(this.prBlock(t, repo.pr, repo.path, { showBranch: false }));
-            const line = repo.status === "loading" ? "Looking up…" : repo.err;
-            const tone = repo.status === "error" ? t.blocked : t.dim;
-            return v_flex()
-                .flex_none()
-                .child(head)
-                .child(div().pl(8).pb(2).truncate().text_size(11.5).text_color(tone).child(line));
-        });
-        const group = (label, id, repos, shown, toggle) => {
-            if (!repos.length) return;
-            rows.push(this.heading(t, `${label} (${repos.length})`, id, { folded: !shown, onClick: toggle }));
-            if (!shown) return;
-            for (const repo of repos)
-                rows.push(
-                    h_flex()
-                        .id(`${id}-${repo.path}`)
-                        .flex_none()
-                        .h(24)
-                        .pl(24)
-                        .pr(8)
-                        .gap(8)
-                        .items_center()
-                        .text_color(t.muted)
-                        .child(this.repoName(t, repo))
-                        .child(this.branchTag(t, repo.branch))
-                        .when(repo.status === "noremote" || repo.status === "notgithub", (el) =>
-                            el.child(
-                                div()
-                                    .flex_none()
-                                    .text_size(10.5)
-                                    .text_color(t.dim)
-                                    .child(repo.status === "notgithub" ? "not on GitHub" : "no remote"),
-                            ),
-                        ),
-                );
-        };
-        group("No PR", "nopr-group", noPr, this.showNoPr, (cx) => {
+        section("needs", "Needs fixing", t.ansi1, groups.needs, true, () => {});
+        section("waiting", "Waiting", t.blocked, groups.waiting, true, () => {});
+        section("ready", "Ready", t.ansi2, groups.ready, true, () => {});
+        section("noPr", "No PR", t.muted, groups.noPr, this.showNoPr, (cx) => {
             this.showNoPr = !this.showNoPr;
             cx.notify();
         });
-        group("On default branch", "default-group", parked, this.showDefaults, (cx) => {
-            this.showDefaults = !this.showDefaults;
+        section("parked", "No remote / not on GitHub", t.muted, groups.parked, this.showParked, (cx) => {
+            this.showParked = !this.showParked;
             cx.notify();
         });
-        if (!data.repos.length) rows.push(this.note(t, "No git repositories here."));
-        return rows;
+        if (!data.repos.length) items.push(this.note(t, "No git repositories here."));
+        return items;
+    }
+
+    /** One repository as a kit row; opening shows the failing checks and read-only links. */
+    prKitRow(t, repo) {
+        const pr = repo.pr;
+        const open = this.opened.has(repo.path);
+        const title = pr?.title ?? repo.name;
+        const detail = prRowDetail(repo);
+        const chips = pr
+            ? [
+                  pill(checkSummary(pr.checks ?? []), t),
+                  pr.review ? pill(pr.review, t) : null,
+                  pr.additions || pr.deletions ? pill(`+${pr.additions} −${pr.deletions}`, t) : null,
+              ].filter(Boolean)
+            : [];
+        const fails = (pr?.checks ?? []).filter((c) => c.bucket === "fail");
+        const details = v_flex()
+            .p(8)
+            .gap(6)
+            .children(fails.map((check) => div().text_size(12).text_color(t.ansi1).truncate().child(`× ${check.name}`)))
+            .when(Boolean(pr?.url), (el) =>
+                el.child(
+                    h_flex()
+                        .gap(6)
+                        .justify_end()
+                        .child(
+                            primaryButton(t, `open-${repo.path}`, "Open on GitHub", () => openLink(pr.url), { h: 26 }),
+                        )
+                        .child(
+                            secondaryButton(
+                                t,
+                                `copy-${repo.path}`,
+                                "Copy link",
+                                (cx) => cx.write_to_clipboard(pr.url),
+                                { h: 26 },
+                            ),
+                        ),
+                ),
+            );
+        return row(t, {
+            id: repo.path,
+            color:
+                repo.status === "error"
+                    ? t.ansi1
+                    : pr
+                      ? countOf(pr, "fail")
+                          ? t.ansi1
+                          : countOf(pr, "pending")
+                            ? t.blocked
+                            : t.ansi2
+                      : t.muted,
+            title,
+            detail,
+            chips,
+            open,
+            active: this.activePr === repo.path,
+            onToggle: (cx) => {
+                if (!pr) return;
+                if (open) this.opened.delete(repo.path);
+                else this.opened.add(repo.path);
+                cx.notify();
+            },
+            details: pr ? details : null,
+        });
     }
 
     /** Mine tab: your open pull requests, grouped by repository. */
@@ -865,8 +926,8 @@ export default class RepoPullRequests extends View {
         const data = this.data.main;
         if (!data) return "";
         const withPr = data.repos.filter((r) => r.pr).length;
-        const onBranch = data.repos.filter((r) => ["pr", "nopr", "error", "loading"].includes(r.status)).length;
-        return `${data.repos.length} repos · ${onBranch} on branches · ${withPr} PRs`;
+        const onBranch = data.repos.filter((r) => !r.onDefault).length;
+        return `${data.repos.length} repos · ${onBranch} non-default branches · ${withPr} PRs`;
     }
 
     pickTab(id, cx) {
@@ -878,42 +939,22 @@ export default class RepoPullRequests extends View {
 
     render(_cx) {
         const t = theme();
-        const tabChip = (id, label) => {
-            const active = this.tab === id;
-            return div()
-                .id(`tab-${id}`)
-                .flex_none()
-                .h(24)
-                .px(9)
-                .flex()
-                .items_center()
-                .rounded(6)
-                .text_size(12)
-                .cursor_pointer()
-                .text_color(active ? t.foreground : t.muted)
-                .when(active, (el) => el.bg(t.raised).font_semibold())
-                .hover((s) => s.bg(t.hover))
-                .on_click((_e, cx) => this.pickTab(id, cx))
-                .child(label);
-        };
         let rows;
-        if (!this.where.root) rows = [this.note(t, "No folder.")];
+        const state = viewForContext(this.contextKey, this.loadedContext, this.data[this.tab]?.repos ?? [], {
+            error: this.error,
+            noFolder: !this.where.root,
+        });
+        if (state.pending) rows = [skeleton(t)];
+        else if (!this.where.root) rows = [this.note(t, "No folder.")];
+        else if (state.error && state.rows.length === 0) rows = [];
         else if (this.single) rows = this.oneRepoRows(t);
         else rows = this.tab === "mine" ? this.mineRows(t) : this.workspaceRows(t);
 
         const space = spaces().find((s) => s.active);
         const follow = readFollow(space?.id);
         const header = panelHeader(t, {
-            lead: h_flex()
-                .gap(4)
-                .items_center()
-                .child(tabChip("main", this.single ? "Open" : "Workspace"))
-                .child(tabChip("mine", "Mine")),
-            follow,
-            onFollow: (cx) => {
-                writeFollow(space?.id, !follow);
-                this.load(cx, true);
-            },
+            title: "PR & CI",
+            titleTooltip: this.where.root || "PR & CI",
             readAt: this.loadedAt[this.tab] ?? 0,
             busy: this.refreshState.busy,
             onRefresh: (cx) => this.load(cx, true),
@@ -931,6 +972,31 @@ export default class RepoPullRequests extends View {
             .text_color(t.foreground)
             .text_size(13)
             .child(header)
+            .child(
+                contextCard(t, {
+                    name: this.where.root
+                        ? (this.where.root.split(/[\\/]/).filter(Boolean).pop() ?? "PR & CI")
+                        : "PR & CI",
+                    follow,
+                    onFollow: (cx) => {
+                        writeFollow(space?.id, !follow);
+                        this.load(cx, true);
+                    },
+                    machine: this.where.on ?? null,
+                }),
+            )
+            .child(
+                segmented(
+                    t,
+                    "prs-tabs",
+                    [
+                        ["main", `Workspace ${this.data.main?.repos?.filter((r) => r.pr).length ?? 0}`],
+                        ["mine", `Mine ${this.data.mine?.prs?.length ?? 0}`],
+                    ],
+                    this.tab,
+                    (key, cx) => this.pickTab(key, cx),
+                ),
+            )
             .when(Boolean(this.error), (el) => el.child(panelError(t, this.error)))
             .when(Boolean(this.summaryText()), (el) =>
                 el.child(
@@ -956,6 +1022,41 @@ export default class RepoPullRequests extends View {
                         .child(this.refreshProblem),
                 ),
             )
-            .child(v_flex().id("prs-list").flex_1().min_h(0).p(6).overflow_y_scrollbar().children(rows));
+            .child(
+                v_flex()
+                    .id("prs-list")
+                    .flex_1()
+                    .min_h(0)
+                    .p(6)
+                    .overflow_y_scrollbar()
+                    .track_focus(this.keys)
+                    .on_key_down((e, cx) => {
+                        const ids = (this.data.main?.repos ?? []).map((r) => r.path);
+                        if (e.key === "up" || e.key === "down") {
+                            this.activePr = moveActive(ids, this.activePr, e.key === "up" ? -1 : 1);
+                            cx.stop_propagation();
+                            cx.notify();
+                        } else if ((e.key === "enter" || e.key === "space") && this.activePr) {
+                            if (this.opened.has(this.activePr)) this.opened.delete(this.activePr);
+                            else this.opened.add(this.activePr);
+                            cx.stop_propagation();
+                            cx.notify();
+                        } else if (e.key === "escape") {
+                            this.opened.clear();
+                            this.activePr = null;
+                            cx.stop_propagation();
+                            cx.notify();
+                        }
+                    })
+                    .children(rows),
+            )
+            .child(
+                footer(t, {
+                    summary: `${this.data.main?.repos?.filter((r) => r.pr).length ?? 0} PRs · ${
+                        this.data.main?.repos?.filter((r) => countOf(r.pr, "fail")).length ?? 0
+                    } failing`,
+                    action: null,
+                }),
+            );
     }
 }

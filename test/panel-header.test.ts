@@ -55,9 +55,17 @@ test("follow is on the repository panels and their side-panel Review", () => {
         assert.doesNotMatch(source(path.join(mods, mod, "main.js")), /follow:/, mod);
 });
 
-test("PR & CI puts its tabs in the header's lead slot", () => {
+test("PR & CI uses the kit segmented control for Workspace/Mine", () => {
     const pr = source(path.join(mods, "jig-prs/main.js"));
-    assert.match(pr, /lead: h_flex\(\)[\s\S]{0,200}tabChip\("main"/);
-    assert.doesNotMatch(pr, /extra: \[tabChip/);
-    assert.match(source(path.join(mods, "jig-prs/panel-header.js")), /lead !== undefined/);
+    assert.match(pr, /segmented\(\s*t,\s*"prs-tabs"/);
+    assert.match(pr, /Workspace \$\{/);
+    assert.match(source(path.join(mods, "jig-prs/panel-kit.js")), /export function segmented/);
+});
+
+test("PR & CI awaits its load and both title the panel", () => {
+    const pr = source(path.join(mods, "jig-prs/main.js"));
+    assert.match(pr, /const work = \(async \(\) => \{[\s\S]*?\}\)\(\);\s*await work;/);
+    assert.match(pr, /title: "PR & CI"/);
+    const history = source(path.join(mods, "jig-history/main.js"));
+    assert.match(history, /title: "History"/);
 });

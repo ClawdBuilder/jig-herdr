@@ -13,8 +13,7 @@ switch and Refresh; rows with number, title,
 branch, author, review state, age, and a check summary (`✓` pass, `×` fail, `•` pending, `–` skip, with counts). Expanding a
 PR shows checks grouped by name and the latest run, with a link that opens in the browser. The panel marks a failing check
 on the activity bar with a count and `blocked` tone. Empty, no-git, `gh` missing, signed-out and rate-limit states are one
-line. Repositories without a PR are folded into one `No PR (N)` section, like `On default branch (N)`; repos with a PR,
-failing or pending checks stay at the top.
+line. A 40 px footer counts open PRs and failing ones.
 
 **How it behaves:**
 
@@ -38,9 +37,9 @@ activity bar there is no badge. The panel has the **Terminal/Space** switch (per
 terminal's folder, Space uses the space's folder. Built from Herdr's `mods/workspace-chrome/*.svg` icons.
 
 **Header:** all git panels use one 42 px shared header: title and Refresh, whose tooltip says `Refresh · read N ago`
-(`Refresh` before the first read, `Reading…` while busy). Git, Worktrees and Review's side panel put the Terminal/Space
-switch in a 32 px context card under the header; a Review tab has title and Refresh only. History and PR & CI keep the
-switch in the header until their follow-up. An error line sits under the header, above the kept rows.
+(`Refresh` before the first read, `Reading…` while busy). Git, History, PR & CI, Worktrees and Review's side panel put
+the Terminal/Space switch in a 32 px context card under the header; a Review tab has title and Refresh only. An error
+line sits under the header, above the kept rows.
 
 **Watch out:**
 

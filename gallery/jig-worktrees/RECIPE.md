@@ -36,9 +36,9 @@ Programs: `git worktree list`, `git status`, `git rev-list`, `git reflog`, `git 
 `.git` metadata and the worktree folders; the only write is the explicit Remove.
 
 **Header:** all git panels use one 42 px shared header: title and Refresh, whose tooltip says `Refresh · read N ago`
-(`Refresh` before the first read, `Reading…` while busy). Git, Worktrees and Review's side panel put the Terminal/Space
-switch in a 32 px context card under the header; a Review tab has title and Refresh only. History and PR & CI keep the
-switch in the header until their follow-up. An error line sits under the header, above the kept rows.
+(`Refresh` before the first read, `Reading…` while busy). Git, History, PR & CI, Worktrees and Review's side panel put
+the Terminal/Space switch in a 32 px context card under the header; a Review tab has title and Refresh only. An error
+line sits under the header, above the kept rows.
 
 **Watch out:**
 

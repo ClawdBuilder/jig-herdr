@@ -16,7 +16,7 @@ test("every panel-kit.js is byte-identical and imported", () => {
             return [];
         }
     });
-    assert.equal(files.length, 3);
+    assert.equal(files.length, 5);
     for (const file of files) {
         assert.equal(file.text, files[0].text, `${file.mod}/panel-kit.js differs`);
         assert.match(readFileSync(path.join(mods, file.mod, "main.js"), "utf8"), /from "\.\/panel-kit\.js"/, file.mod);
@@ -126,4 +126,62 @@ test("the context key includes machine, folder and follow mode", async () => {
 test("a foldable group opens when it is the only group", () => {
     const source = readFileSync(path.join(mods, "jig-git/panel-kit.js"), "utf8");
     assert.match(source, /export function groupOpen\(open, groupCount\) \{\s*return groupCount <= 1 \|\| open;/);
+});
+
+test("PR groups put failures first, pending next, green+approved ready and non-PRs parked", async () => {
+    const { prGroups } = await load<{ prGroups(repos: any[]): Record<string, any[]> }>("mods/jig-prs/lib.js");
+    const groups = prGroups([
+        { status: "pr", path: "fail", pr: { checks: [{ bucket: "fail" }], review: "APPROVED" } },
+        { status: "pr", path: "wait", pr: { checks: [{ bucket: "pending" }], review: "" } },
+        { status: "pr", path: "ready", pr: { checks: [{ bucket: "pass" }], review: "APPROVED" } },
+        { status: "nopr", path: "nopr" },
+        { status: "noremote", path: "parked" },
+    ]);
+    assert.deepEqual(Object.fromEntries(Object.entries(groups).map(([k, v]) => [k, v.map((r) => r.path)])), {
+        needs: ["fail"],
+        waiting: ["wait"],
+        ready: ["ready"],
+        noPr: ["nopr"],
+        parked: ["parked"],
+    });
+});
+
+test("PR workspace with local or non-GitHub remotes lands parked, never loading", async () => {
+    const { parseRepos } = await load<Record<string, any>>("mods/jig-prs/lib.js");
+    const { prGroups, workspaceRowsFor } = await load<Record<string, any>>("mods/jig-prs/lib.js");
+    const discovery = parseRepos(`@single
+/tmp/demo/orders-api	feature/X	/tmp/demo/origins/orders-api.git	main
+/tmp/demo/gitlab-web	main	https://gitlab.com/acme/web.git	main`);
+    const rows = workspaceRowsFor(discovery, "/tmp/demo");
+    assert.deepEqual(
+        rows.map((r: any) => r.status),
+        ["noremote", "noremote"],
+    );
+    assert.equal(
+        rows.some((r: any) => r.status === "loading"),
+        false,
+    );
+    assert.deepEqual(
+        prGroups(rows).parked.map((r: any) => r.name),
+        ["orders-api", "gitlab-web"],
+    );
+});
+
+test("the kit's group rule opens a lone folded group", () => {
+    const kit = readFileSync(path.join(mods, "jig-git/panel-kit.js"), "utf8");
+    assert.match(kit, /export function groupOpen\(open, groupCount\) \{\s*return groupCount <= 1 \|\| open;/);
+    assert.match(readFileSync(path.join(mods, "jig-prs/main.js"), "utf8"), /groupOpen\(shown, groupsShown\)/);
+});
+
+test("a no-PR row's detail does not repeat the repo title", async () => {
+    const { prRowDetail } = await load<Record<string, any>>("mods/jig-prs/lib.js");
+    assert.equal(
+        prRowDetail({ name: "billing-web", branch: "feature/PROJ-124", pr: { n: 482, branch: "feature/PROJ-124" } }),
+        "billing-web · #482 · feature/PROJ-124",
+    );
+    assert.equal(
+        prRowDetail({ name: "billing-web", branch: "feature/PROJ-124", upstream: "origin/x" }),
+        "feature/PROJ-124",
+    );
+    assert.equal(prRowDetail({ name: "w", branch: "x", upstream: null }), "x · no upstream");
 });

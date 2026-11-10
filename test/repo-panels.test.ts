@@ -751,7 +751,7 @@ test("PR & CI folds every No PR repository into one group", async () => {
         ["x", "d", "e"],
     );
     const source = readFileSync(new URL("../mods/jig-prs/main.js", import.meta.url), "utf8");
-    assert.match(source, /group\("No PR", "nopr-group"/);
+    assert.match(source, /section\("noPr", "No PR"/);
     assert.match(source, /showNoPr/);
 });
 
@@ -1227,4 +1227,24 @@ test("the real worktree scan keeps a path, branch, date, creation and a subject 
     assert.equal(tree.path, wt);
     assert.match(String(tree.date), /^\d{4}-\d\d-\d\dT/);
     assert.ok(tree.created, "the creation commit is read");
+});
+
+test("jig-prs reads a local-path upstream and leaves no upstream only when @{u} fails", async (t) => {
+    const { SCRIPT, parseRepos } = await load<Lib>("mods/jig-prs/lib.js");
+    const root = scratch(t);
+    const dir = repo(root, "orders-web");
+    const origin = path.join(root, "origins", "orders-web.git");
+    mkdirSync(origin, { recursive: true });
+    git(origin, "init", "--bare", "-q", "-b", "main");
+    git(dir, "remote", "add", "origin", origin);
+    git(dir, "push", "-qu", "origin", "main");
+    git(dir, "checkout", "-qb", "feature/PROJ-1");
+    commitFile(dir, "change.txt", "change");
+    git(dir, "push", "-qu", "origin", "feature/PROJ-1");
+    const [read] = parseRepos(runScript(SCRIPT, dir)).repos;
+    assert.equal(read.upstream, "origin/feature/PROJ-1");
+
+    git(dir, "checkout", "-qb", "feature/unpublished");
+    const [unpublished] = parseRepos(runScript(SCRIPT, dir)).repos;
+    assert.equal(unpublished.upstream, null);
 });

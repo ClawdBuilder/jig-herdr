@@ -27,6 +27,7 @@ import {
     branchKey,
     colourSeed,
     commitMatches,
+    contextKeyOf,
     FORMAT,
     hiddenOriginCount,
     initialsOf,
@@ -44,9 +45,11 @@ import {
     SCRIPT,
     since,
     toggleBranchPicker,
+    viewForContext,
     visibleBranches,
 } from "./lib.js";
 import { panelError, panelHeader, ROW_FONT } from "./panel-header.js";
+import { contextCard, segmented, skeleton } from "./panel-kit.js";
 import {
     focusRegained,
     friendlyError,
@@ -207,7 +210,13 @@ export default class RepoHistory extends View {
     /** A new folder or machine: forget what was shown. */
     enter(where) {
         this.where = where;
-        this.contextKey = JSON.stringify([where.root, where.on]);
+        this.contextKey = contextKeyOf(where);
+        this.loadedContext = null;
+        this.readGeneration = (this.readGeneration ?? 0) + 1;
+        this.refreshState.cancel();
+        this.loading = false;
+        this.loadingRepos = false;
+        this.contextChanged = true;
         this.generation = (this.generation ?? 0) + 1;
         this.repos = null;
         this.single = false;
@@ -243,9 +252,10 @@ export default class RepoHistory extends View {
             this.loadLog(cx, true);
         }
         const where = whereToLook();
-        if (JSON.stringify([where.root, where.on]) !== this.contextKey) {
+        if (contextKeyOf(where) !== this.contextKey) {
             this.enter(where);
             this.refreshScheduler.trigger();
+            this.loadRepos(cx, true);
             cx.notify();
         }
         const seen = onScreen();
@@ -497,6 +507,9 @@ export default class RepoHistory extends View {
         const cwd = this.repo;
         const on = this.where.on;
         const key = this.logKey();
+        const contextKey = this.contextKey;
+        this.readGeneration = (this.readGeneration ?? 0) + 1;
+        const readGeneration = this.readGeneration;
         const logArgs = [
             "--no-optional-locks",
             "log",
@@ -519,7 +532,12 @@ export default class RepoHistory extends View {
                     runCommand(exec, "git", logArgs, { cwd, on }),
                     runCommand(exec, "git", statusArgs, { cwd, on }),
                 ]);
-                if (run !== this.logGeneration) return;
+                if (
+                    run !== this.logGeneration ||
+                    contextKey !== this.contextKey ||
+                    readGeneration !== this.readGeneration
+                )
+                    return;
                 if (key !== this.logKey()) return;
                 if (log.code !== 0) {
                     this.error = friendlyError(log, { what: "Reading", follow: true }) || "git log failed.";
@@ -531,14 +549,23 @@ export default class RepoHistory extends View {
                 this.uncommitted = status.code === 0 ? status.stdout.split("\n").filter(Boolean).length : 0;
                 this.logAt = Date.now();
                 this.logFor = key;
+                this.loadedContext = contextKey;
             } catch (e) {
-                if (run === this.logGeneration) {
+                if (
+                    run === this.logGeneration &&
+                    contextKey === this.contextKey &&
+                    readGeneration === this.readGeneration
+                ) {
                     this.error = String(e?.message ?? e);
                     this.logAt = Date.now();
                     this.logFor = key;
                 }
             } finally {
-                if (run === this.logGeneration) {
+                if (
+                    run === this.logGeneration &&
+                    contextKey === this.contextKey &&
+                    readGeneration === this.readGeneration
+                ) {
                     this.loading = false;
                     if (this.refreshState.finish()) {
                         this.logAt = 0;
@@ -702,9 +729,6 @@ export default class RepoHistory extends View {
                 .gap(8)
                 .items_center()
                 .rounded(4)
-                .cursor_pointer()
-                .hover((s) => s.bg(t.hover))
-                .on_click(() => this.openDiff(commit, file.path))
                 .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(file.path))
                 .child(
                     div()
@@ -743,7 +767,7 @@ export default class RepoHistory extends View {
             .p(10)
             .gap(8)
             .rounded(8)
-            .bg(t.surface)
+            .bg(t.raised)
             .border_1()
             .border_color(t.border)
             .text_size(12)
@@ -752,7 +776,7 @@ export default class RepoHistory extends View {
                     .gap(6)
                     .text_size(11)
                     .text_color(t.dim)
-                    .child(div().font_semibold().text_color(t.muted).child(commit.hash.slice(0, 10)))
+                    .child(div().font_semibold().text_color(t.muted).child(commit.hash))
                     .child(
                         div()
                             .id(`copy-${commit.hash}`)
@@ -764,7 +788,8 @@ export default class RepoHistory extends View {
                             .child("copy"),
                     )
                     .child(`${commit.author} · ${new Date(commit.date).toLocaleString()}`)
-                    .when(commit.parents.length > 1, (el) => el.child(`${commit.parents.length} parents`)),
+                    .child(`${commit.parents.length} parent${commit.parents.length === 1 ? "" : "s"}`)
+                    .when(commit.parents.length > 0, (el) => el.child(commit.parents.join(" "))),
             )
             .child(div().text_color(t.foreground).child(commit.subject))
             .when(Boolean(detail?.body), (el) => el.child(div().text_size(11.5).text_color(t.muted).child(detail.body)))
@@ -833,7 +858,11 @@ export default class RepoHistory extends View {
                     .min_w(0)
                     .truncate()
                     .font_semibold()
-                    .child(current ? relName(current.path, this.where.root) : (this.reposError ?? "No repo")),
+                    .child(
+                        current
+                            ? `${relName(current.path, this.where.root)}${current.branch ? ` · ${current.branch}` : ""}`
+                            : (this.reposError ?? "No repo"),
+                    ),
             )
             .when(Boolean(current?.dirty), (el) => el.child(div().flex_none().w(8).h(8).rounded(8).bg(hue(3))))
             .child(
@@ -909,44 +938,18 @@ export default class RepoHistory extends View {
         const headBranch = this.commits?.find((c) => c.head)?.refs.find((r) => r.kind === "local")?.name;
         const spaceId = spaces().find((s) => s.active)?.id;
         const follow = readFollow(spaceId);
-        const scopeButton = (id, label) =>
-            div()
-                .id(`s-${id}`)
-                .h(22)
-                .px(8)
-                .flex()
-                .items_center()
-                .rounded(6)
-                .text_size(11.5)
-                .cursor_pointer()
-                .text_color(this.scope === id ? t.foreground : t.muted)
-                .when(this.scope === id, (el) => el.bg(t.raised))
-                .on_click((_e, cx) => {
-                    if (this.scope === id) return;
-                    this.scope = id;
-                    storage.write("scope", id);
-                    this.selected = null;
-                    cx.notify();
-                })
-                .child(label);
         return v_flex()
             .flex_none()
             .px(10)
-            .py(8)
+            .pb(8)
             .gap(8)
             .border_b(1)
             .border_color(t.border)
-            .when(hasChooser, (el) => el.child(this.chooser(t, hue)))
             .child(
                 panelHeader(t, {
-                    title: this.branchFilter ?? headBranch ?? (this.commits ? "Detached HEAD" : ""),
-                    titleTooltip: "Choose a branch",
+                    title: "History",
+                    titleTooltip: this.branchFilter ?? headBranch ?? "History",
                     onTitleClick: (cx) => this.openBranchPicker(cx),
-                    follow,
-                    onFollow: (cx) => {
-                        writeFollow(spaceId, !follow);
-                        this.loadLog(cx, true);
-                    },
                     readAt: this.logAt,
                     busy: this.refreshState.busy,
                     onRefresh: (cx) => {
@@ -958,17 +961,36 @@ export default class RepoHistory extends View {
                 }),
             )
             .child(
-                h_flex()
-                    .h(24)
-                    .flex_none()
-                    .px(12)
-                    .gap(6)
-                    .items_center()
-                    .border_b(1)
-                    .border_color(t.border)
-                    .child(svg("mods/workspace-chrome/branch.svg").size(13).flex_none().text_color(t.muted))
-                    .child(scopeButton("branch", "Branch"))
-                    .child(scopeButton("all", "All")),
+                contextCard(t, {
+                    name: this.where?.root
+                        ? (this.where.root.split(/[\\/]/).filter(Boolean).pop() ?? "History")
+                        : "History",
+                    follow,
+                    onFollow: (cx) => {
+                        writeFollow(spaceId, !follow);
+                        this.loadLog(cx, true);
+                    },
+                    machine: this.where.on ?? null,
+                }),
+            )
+            .when(hasChooser, (el) => el.child(this.chooser(t, hue)))
+            .child(
+                segmented(
+                    t,
+                    "history-scope",
+                    [
+                        ["branch", `Branch ${this.commits?.length ?? 0}`],
+                        ["all", `All ${this.commits?.length ?? 0}`],
+                    ],
+                    this.scope,
+                    (id, cx) => {
+                        if (this.scope === id) return;
+                        this.scope = id;
+                        storage.write("scope", id);
+                        this.selected = null;
+                        cx.notify();
+                    },
+                ),
             )
             .child(
                 div()
@@ -1083,8 +1105,27 @@ export default class RepoHistory extends View {
         const hue = (i) => (i === null ? t.muted : palette[i % palette.length]);
         const query = this.filterBox.value();
         const width = laneColumns(Math.max(1, ...(this.rows ?? []).map((r) => r.width)));
-        const hasChooser = !this.single && (this.repos?.length ?? 0) > 0;
+        const hasChooser = !this.single && (this.repos?.length ?? 0) > 1;
         const choosing = hasChooser && this.picking;
+        const state = viewForContext(this.contextKey, this.loadedContext, this.commits ?? [], {
+            error: this.error,
+            noFolder: !this.where?.root,
+        });
+        if (state.pending) {
+            return v_flex()
+                .id("history")
+                .size_full()
+                .min_h(0)
+                .rounded(10)
+                .overflow_hidden()
+                .bg(t.background)
+                .border_1()
+                .border_color(t.border)
+                .text_color(t.foreground)
+                .text_size(13)
+                .child(this.header(t, hue, hasChooser))
+                .child(skeleton(t));
+        }
         const banner = h_flex()
             .flex_none()
             .h(28)

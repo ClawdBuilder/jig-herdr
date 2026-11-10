@@ -2,7 +2,8 @@
 
 // Run with `sh -c SCRIPT sh <root>` on the space's machine, once per load. It reads local git config only: no fetch,
 // no network. Output: an optional first line "@single" (root is inside one repository, so only that one is listed),
-// then one tab-separated line per repository: path, branch, remote url, origin's default branch.
+// then one tab-separated line per repository: path, branch, remote url, origin's default branch, upstream (empty when
+// `git rev-parse @{u}` fails, as for a local branch that was never published).
 // With no repository around root, the repositories are the folders that hold a `.git` (a folder in a clone, a file in a
 // linked worktree), up to three levels down, so `worktrees/<ticket>/<repo>` is found too. The search does not go into a
 // repository and skips `node_modules`. Eight repositories are read at a time.
@@ -28,7 +29,8 @@ describe() {
   remote=$(git -C "$1" config --get remote.origin.url 2>/dev/null)
   [ -n "$remote" ] || remote=$(git -C "$1" config --get-regexp '^remote\\..*\\.url$' 2>/dev/null | head -n1 | cut -d' ' -f2)
   default=$(git -C "$1" symbolic-ref --short -q refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')
-  printf '%s\\t%s\\t%s\\t%s\\n' "$1" "$branch" "$remote" "$default"
+  upstream=$(git -C "$1" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null)
+  printf '%s\\t%s\\t%s\\t%s\\t%s\\n' "$1" "$branch" "$remote" "$default" "$upstream"
 }
 work=$(mktemp -d) || exit 1
 trap 'rm -rf "$work"' EXIT
@@ -53,6 +55,22 @@ export function workspaceSplit(repos) {
             (repo) => repo.status === "default" || repo.status === "noremote" || repo.status === "notgithub",
         ),
     };
+}
+
+/** The PR list groups: a PR with a failure needs fixing; pending or unapproved waits; green+approved is ready. */
+export function prGroups(repos) {
+    const groups = { needs: [], waiting: [], ready: [], noPr: [], parked: [] };
+    for (const repo of repos ?? []) {
+        if (repo.status === "nopr") groups.noPr.push(repo);
+        else if (repo.status === "default" || repo.status === "noremote" || repo.status === "notgithub")
+            groups.parked.push(repo);
+        else if (repo.status === "error" || countOf(repo.pr, "fail") || repo.pr?.review === "CHANGES_REQUESTED")
+            groups.needs.push(repo);
+        else if (repo.status === "loading" || countOf(repo.pr, "pending") || repo.pr?.review !== "APPROVED")
+            groups.waiting.push(repo);
+        else groups.ready.push(repo);
+    }
+    return groups;
 }
 
 /** Hosts known not to be GitHub. Everything else is asked, including GitHub Enterprise and scp aliases. */
@@ -97,15 +115,15 @@ export function slugOf(url) {
 
 const TRUNKS = new Set(["main", "master", "develop"]);
 
-/** The script's output as `{ single, repos: [{ path, branch, remote, slug, onDefault }] }`. */
+/** The script's output as `{ single, repos: [{ path, branch, remote, slug, onDefault, upstream }] }`. */
 export function parseRepos(stdout) {
     const lines = stdout.split("\n").filter(Boolean);
     const repos = lines
         .filter((line) => !line.startsWith("@"))
         .map((line) => {
-            const [path, branch, remote = "", originHead = ""] = line.split("\t");
+            const [path, branch, remote = "", originHead = "", upstream = ""] = line.split("\t");
             const onDefault = TRUNKS.has(branch) || branch === originHead;
-            return { path, branch, remote, slug: slugOf(remote), onDefault };
+            return { path, branch, remote, slug: slugOf(remote), onDefault, upstream: upstream || null };
         });
     return { single: lines[0] === "@single", repos };
 }
@@ -180,6 +198,8 @@ export function shapePr(raw, slug) {
         mergeable: raw.mergeable ?? null,
         slug: slug ?? raw.repository?.nameWithOwner ?? null,
         checks: Array.isArray(raw.statusCheckRollup) ? checksOf(raw.statusCheckRollup) : null,
+        additions: Number(raw.additions) || 0,
+        deletions: Number(raw.deletions) || 0,
     };
 }
 
@@ -316,3 +336,35 @@ export function watchdog(after, timeout) {
 
 /** A stale load may not write: only the current generation wins. */
 export const currentGeneration = (started, current) => started === current;
+
+/** The context key: machine, folder and follow mode a read belongs to. */
+export function contextKeyOf(where) {
+    return JSON.stringify([where?.root ?? null, where?.on ?? null, where?.follow === true]);
+}
+
+/** The Workspace rows a discovery starts with: a repo with no GitHub slug is parked, never left loading. */
+export function workspaceRowsFor(discovery, root) {
+    return (discovery?.repos ?? []).map((repo) => {
+        let status = "loading";
+        if (!repo.slug) status = "noremote";
+        else if (repo.onDefault) status = "default";
+        return { ...repo, name: relName(repo.path, root), status, pr: null, err: null };
+    });
+}
+
+/** What to draw for a context: rows only when its read landed; a failed or folder-less context never keeps the skeleton. */
+export function viewForContext(shownKey, readKey, repos, { error = null, noFolder = false } = {}) {
+    if (noFolder) return { rows: [], pending: false, noFolder: true };
+    if (error) return { rows: shownKey === readKey ? (repos ?? []) : [], pending: false, error: true };
+    if (shownKey !== readKey) return { rows: [], pending: true };
+    return { rows: repos ?? [], pending: false };
+}
+
+/** The row's detail: PR rows name the repo, number and branch; a row with no PR drops the repeated title. */
+export function prRowDetail(repo) {
+    const pr = repo?.pr;
+    if (pr) return [repo.name, `#${pr.n}`, pr.branch].filter(Boolean).join(" · ");
+    return [repo.branch, repo.detached ? "detached" : null, !repo.detached && !repo.upstream ? "no upstream" : null]
+        .filter(Boolean)
+        .join(" · ");
+}
