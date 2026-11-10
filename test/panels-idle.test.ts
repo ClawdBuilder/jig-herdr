@@ -64,7 +64,7 @@ for (const [mod, tickMs, expected] of [
             await flush(20);
             calls = 0;
             const ticks = timers.filter((timer: any) => timer.ms === tickMs);
-            for (let i = 0; i < 180_000 / tickMs; i++) {
+            for (let i = 0; i <= 180_000 / tickMs; i++) {
                 clock += tickMs;
                 for (const tick of ticks) tick.fn(cx);
                 await flush(1);

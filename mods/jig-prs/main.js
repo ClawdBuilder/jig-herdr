@@ -354,6 +354,7 @@ export default class RepoPullRequests extends View {
     async loadWorkspace(cx, discovery, root, contextKey) {
         const repos = workspaceRowsFor(discovery, root);
         const data = { repos };
+        this.workspaceGroups = prGroups(repos);
         this.data.main = data;
         cx.notify();
         // Worktrees of one branch share a lookup.
@@ -438,7 +439,7 @@ export default class RepoPullRequests extends View {
     async loadOne(discovery, tab) {
         const repo = discovery.repos[0];
         const on = this.where.on;
-        if (!repo?.slug) throw new Error("No GitHub remote.");
+        if (!repo?.slug) return { none: true, branch: null, here: null, list: [], runs: null };
         const listArgs = [
             "pr",
             "list",
@@ -712,7 +713,7 @@ export default class RepoPullRequests extends View {
     workspaceRows(t) {
         const data = this.data.main;
         if (!data) return [this.note(t, this.error ? "" : "Looking for repos…")];
-        const groups = prGroups(data.repos);
+        const groups = this.workspaceGroups ?? prGroups(data.repos);
         const items = [];
         const openedGroups = [
             groups.needs,
@@ -851,6 +852,7 @@ export default class RepoPullRequests extends View {
         const data = this.data[this.tab];
         if (!data) return [this.note(t, this.error ? "" : "Reading…")];
         const rows = [];
+        if (data.none) return [this.note(t, "No GitHub remote.")];
         if (data.here)
             rows.push(
                 this.heading(t, "This branch", "here"),

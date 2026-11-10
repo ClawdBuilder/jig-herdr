@@ -88,17 +88,19 @@ function whereToLook() {
 
 /** Who is at a checkout: the space that was opened on it, any other space with a terminal in it, and whether an agent
  * there is working or blocked (a pane's own state, or its space's when the space was made there). */
-function whoIsAt(path, machine) {
+function whoIsAt(path, machine, world = null) {
     const within = (cwd) => sameOrInside(path, cwd);
-    const spacesHere = spaces().filter((s) => (s.machine ?? null) === (machine ?? null));
+    const allSpaces = world?.spaces ?? spaces();
+    const allPanes = world?.panes ?? panes();
+    const spacesHere = allSpaces.filter((s) => (s.machine ?? null) === (machine ?? null));
     const hasTerminalThere = (space) =>
-        space.tabs.some((tab) => panes().some((p) => p.tab === tab.id && within(p.cwd)));
+        space.tabs.some((tab) => allPanes.some((p) => p.tab === tab.id && within(p.cwd)));
     const openedThere = spacesHere.find((s) => within(s.folder));
     const otherSpace = spacesHere.find((s) => !s.active && hasTerminalThere(s));
     const busy = spacesHere.some(
         (s) =>
             (within(s.folder) && WORKING.has(s.status)) ||
-            panes().some((p) => within(p.cwd) && WORKING.has(p.status) && s.tabs.some((tab) => tab.id === p.tab)),
+            allPanes.some((p) => within(p.cwd) && WORKING.has(p.status) && s.tabs.some((tab) => tab.id === p.tab)),
     );
     const anyone = openedThere || spacesHere.find(hasTerminalThere);
     return { space: openedThere ?? otherSpace ?? null, open: Boolean(anyone), busy };
@@ -290,12 +292,17 @@ export default class RepoWorktrees extends View {
     /** The loaded worktrees with who is at each and whether it is ready, newest commit first. Worked out on every call, so a
      * row stops being ready the moment an agent starts working there. */
     rows() {
+        const world = { spaces: spaces(), panes: panes() };
+        const key = JSON.stringify([this.where?.on, this.trees, world]);
+        if (this.rowsCache?.key === key) return this.rowsCache.rows;
         const machine = this.where?.on;
         const withState = (this.trees ?? []).map((tree) => {
-            const presence = whoIsAt(tree.path, machine);
+            const presence = whoIsAt(tree.path, machine, world);
             return { ...tree, ...presence, ready: readiness(tree, presence.busy) };
         });
-        return withState.sort((a, b) => Date.parse(b.date ?? 0) - Date.parse(a.date ?? 0));
+        const rows = withState.sort((a, b) => Date.parse(b.date ?? 0) - Date.parse(a.date ?? 0));
+        this.rowsCache = { key, rows };
+        return rows;
     }
 
     /** The count on this panel's icon: worktrees ready to remove. Set only on a change, since setting shared state
