@@ -39,21 +39,7 @@ function chainFor(allowed) {
     return chain;
 }
 const chain = chainFor(methods.NativeElement);
-function stateFor(allowed) {
-    return new Proxy(
-        {},
-        {
-            get: (_target, key) => {
-                if (key === "then") return undefined;
-                if (typeof key !== "string") return undefined;
-                if (key === "value") return () => "";
-                if (key === "is_focused") return () => true;
-                if (!allowed.includes(key)) throw new TypeError(`${key} is not a function`);
-                return () => stateFor(allowed);
-            },
-        },
-    );
-}
+
 const source = `
 const allowedElements = new Set(${JSON.stringify(methods.NativeElement)});
 const chain = new Proxy(function () {}, {

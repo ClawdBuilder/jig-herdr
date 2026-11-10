@@ -3345,10 +3345,5 @@
         "tokens",
         "value"
     ],
-    "EditorState": [
-        "on",
-        "release",
-        "set_value",
-        "value"
-    ]
+    "EditorState": ["on", "release", "set_value", "value"]
 }

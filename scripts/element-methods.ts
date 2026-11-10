@@ -54,5 +54,8 @@ for (const name of wanted) {
     }
     found[name] = [...new Set(methods)].sort();
 }
-writeFileSync(output, `${JSON.stringify(found, null, 4)}\n`);
+const body = Object.entries(found)
+    .map(([name, list]) => `    ${JSON.stringify(name)}: ${JSON.stringify(list)}`)
+    .join(",\n");
+writeFileSync(output, `{\n${body}\n}\n`);
 console.log(`${output}: ${Object.values(found).reduce((n, list) => n + list.length, 0)} methods`);
