@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Review uses the shared panel kit for its buttons, status line and empty state, with the kit's type scale; its narrow
+  two-row toolbar and stacked file list remain.
+
+
 ### Fixed
 
 - Review fits a 380 px side panel: the file list keeps its 240 px band when stacked, and below 480 px the diff toolbar

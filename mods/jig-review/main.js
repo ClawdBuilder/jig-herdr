@@ -80,7 +80,15 @@ import {
     unstageFile,
 } from "./lib.js";
 import { panelError, panelHeader } from "./panel-header.js";
-import { contextCard } from "./panel-kit.js";
+import {
+    contextCard,
+    dangerButton,
+    emptyLine,
+    primaryButton,
+    secondaryButton,
+    sizes,
+    statusLine,
+} from "./panel-kit.js";
 import { friendlyError, GIT_READ, run as runCommand } from "./refresh.js";
 
 const EVERY = 5000; // re-list the files this often while the tab is shown
@@ -672,22 +680,8 @@ export default class RepoReview extends View {
         ].filter(Boolean);
     }
 
-    textButton(t, id, label, danger, onClick, plain = false) {
-        return div()
-            .id(id)
-            .flex_none()
-            .h(22)
-            .px(8)
-            .flex()
-            .items_center()
-            .rounded(6)
-            .text_size(11.5)
-            .cursor_pointer()
-            .bg(danger ? t.blocked : t.raised)
-            .text_color(danger ? t.background : t.foreground)
-            .hover((s) => s.opacity(0.85))
-            .on_click(onClick)
-            .child(this.acting && !plain ? "…" : label);
+    textButton(t, id, label, danger, onClick, _plain = false) {
+        return danger ? dangerButton(t, id, label, onClick) : secondaryButton(t, id, label, onClick);
     }
 
     pick(path, cx) {
@@ -1449,20 +1443,9 @@ export default class RepoReview extends View {
             .min_w(0)
             .child(this.toolbar(t, file, i, add, del, copy))
             .when(Boolean(this.note), (el) =>
-                el.child(
-                    div()
-                        .flex_none()
-                        .px(12)
-                        .py(3)
-                        .truncate()
-                        .text_size(11)
-                        .text_color(this.note.ok ? t.done : t.blocked)
-                        .child(this.note.message),
-                ),
+                el.child(statusLine(t, { tone: this.note.ok ? "done" : "error", text: this.note.message })),
             )
-            .when(Boolean(this.sendError), (el) =>
-                el.child(div().flex_none().px(12).py(3).text_size(11).text_color(t.blocked).child(this.sendError)),
-            )
+            .when(Boolean(this.sendError), (el) => el.child(statusLine(t, { tone: "error", text: this.sendError })))
             .when(this.comments.length > 0 || Boolean(this.draft), (el) =>
                 el.child(
                     v_flex()
@@ -1583,11 +1566,12 @@ export default class RepoReview extends View {
     commentFooter(t) {
         const target = this.agentTarget();
         const busy = target && (target.status === "working" || target.status === "blocked");
-        const label = this.waitingSend
-            ? "Send when idle"
-            : busy
-              ? "Send when idle"
-              : `Send review (${this.comments.length})`;
+        const label = this.waitingSend || busy ? "Send when idle" : `Send review (${this.comments.length})`;
+        const summary = target
+            ? this.waitingSend
+                ? `${target.tab_name || target.address} is ${target.status}; sending when idle.`
+                : `To ${target.tab_name || target.address}`
+            : "No agent in this space.";
         return h_flex()
             .id("review-comments-footer")
             .h(40)
@@ -1597,40 +1581,9 @@ export default class RepoReview extends View {
             .items_center()
             .border_t(1)
             .border_color(t.border)
-            .child(
-                div()
-                    .flex_1()
-                    .min_w(0)
-                    .truncate()
-                    .text_size(11)
-                    .text_color(t.dim)
-                    .child(
-                        target
-                            ? this.waitingSend
-                                ? `${target.tab_name || target.address} is ${target.status}; sending when idle.`
-                                : `To ${target.tab_name || target.address}`
-                            : "No agent in this space.",
-                    ),
-            )
-            .child(
-                div()
-                    .id("review-send")
-                    .h(28)
-                    .px(12)
-                    .flex()
-                    .items_center()
-                    .rounded(6)
-                    .bg(t.solid)
-                    .text_color(t.solid_foreground)
-                    .text_size(12.5)
-                    .font_semibold()
-                    .when(Boolean(target), (el) =>
-                        el
-                            .cursor_pointer()
-                            .hover((s) => s.opacity(0.88))
-                            .on_click((_e, cx) => this.sendReview(cx)),
-                    )
-                    .child(label),
+            .child(div().flex_1().min_w(0).truncate().text_size(sizes().secondary).text_color(t.muted).child(summary))
+            .when(Boolean(target), (el) =>
+                el.child(primaryButton(t, "review-send", label, (cx) => this.sendReview(cx))),
             );
     }
 
@@ -1646,7 +1599,7 @@ export default class RepoReview extends View {
             .bg(t.background)
             .text_color(t.foreground)
             .child(this.header(t))
-            .child(div().p(12).text_color(t.dim).child(text));
+            .child(emptyLine(text, t));
     }
 
     render(_cx) {
