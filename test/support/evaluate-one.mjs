@@ -32,6 +32,7 @@ const chain = new Proxy(function () {}, {
         if (k === "then") return undefined;
         if (typeof k !== "string") return undefined;
         if (!allowedElements.has(k)) throw new TypeError(k + " is not a function");
+        if (globalThis.__elCalls !== undefined) globalThis.__elCalls++;
         return chain;
     },
     apply: () => chain,
@@ -158,6 +159,43 @@ try {
             view.commits = commits;
             view.rows = commits.map((c, i) => ({ ...c, width: 1, lane: 0, color: i % 3 }));
             view.loadedAt = Date.now();
+        } else if (name === "jig-git") {
+            view.locate = () => "bench";
+            view.context = "bench";
+            view.loadedContext = "bench";
+            view.loc = { root: "/work", on: null, space: "s1", follow: true };
+            view.where = view.loc;
+            view.loaded = true;
+            view.width = 544;
+            view.repos = Array.from({ length: 50 }, (_, i) => ({
+                path: `/work/repo-${i}`,
+                name: `repo-${i}`,
+                folder: `repo-${i}`,
+                common: `/work/repo-${i}/.git`,
+                linked: false,
+                branch: i % 3 ? `feature/${i}` : "main",
+                detached: false,
+                upstream: "origin/main",
+                gone: false,
+                ahead: i % 3 === 0 ? 1 : 0,
+                behind: 0,
+                unborn: false,
+                head: { hash: "abc1234", subject: "s", at: Date.now() },
+                remote: "origin",
+                files: Array.from({ length: i === 0 ? 200 : 4 }, (_, j) => ({
+                    path: `src/file-${j}.ts`,
+                    status: "M",
+                    staged: i === 0 && j < 2,
+                    unstaged: true,
+                    xy: " M",
+                })),
+                total: i === 0 ? 200 : 4,
+                staged: i === 0 ? 2 : 0,
+                base: null,
+                error: null,
+            }));
+            view.opened.add("/work/repo-0");
+            view.rebuildView();
         } else if (name === "jig-prs") {
             view.where = { root: "/work", on: null };
             view.loadedAt.main = Date.now();
@@ -180,9 +218,11 @@ try {
             };
         }
         for (let i = 0; i < 3; i++) view.render(cx);
+        globalThis.__elCalls = 0;
         const start = performance.now();
         for (let i = 0; i < 20; i++) view.render(cx);
         console.log(`BENCH ${name} ${(performance.now() - start) / 20}`);
+        console.log(`BENCHEL ${name} ${globalThis.__elCalls / 20}`);
         saved.get("process").exit(0);
     }
     view.render(cx);

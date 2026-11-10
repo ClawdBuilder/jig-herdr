@@ -136,3 +136,65 @@ test("Git preview props pre-open a repo and pre-fill the filter", async () => {
     assert.equal(view.view.states.changed[0].name, "billing-web");
     view.render(cx);
 });
+
+test("stage click flips at once and re-reads only that checkout", async () => {
+    const root = "/tmp/git-harness-stage";
+    const ctx = context(root);
+    const calls: { cmd: string; args: string[] }[] = [];
+    ctx.exec = async (cmd: string, args: string[]) => {
+        calls.push({ cmd, args });
+        return { code: 0, stdout: cmd === "sh" ? scan(root) : "", stderr: "" };
+    };
+    const { view, cx } = await load("jig-git");
+    await flush();
+    calls.length = 0;
+    const repo = view.repos[0];
+    const file = repo.files[0];
+    view.stageClick(cx, repo, file, true);
+    assert.equal(view.repos[0].files.find((f: any) => f.path === file.path).staged, true);
+    await flush();
+    const git = calls.filter((c) => c.cmd === "git");
+    const scans = calls.filter((c) => c.cmd === "sh");
+    assert.equal(git.length, 1);
+    assert.equal(scans.length, 1);
+    assert.equal(scans[0].args.at(-1), repo.path);
+    assert.equal(
+        calls.some((c) => c.args.includes("sleep")),
+        false,
+    );
+});
+
+test("Git starts a context read from render without waiting for tick", async () => {
+    const root = "/tmp/git-harness-a";
+    const ctx = context(root);
+    let reads = 0;
+    ctx.exec = async (cmd: string) => {
+        if (cmd === "sh") reads++;
+        return { code: 0, stdout: cmd === "sh" ? scan(root) : "", stderr: "" };
+    };
+    const { view, cx, timers } = await load("jig-git");
+    await flush();
+    reads = 0;
+    ctx.folder = "/tmp/git-harness-b";
+    ctx.focused = { pane: "p", cwd: ctx.folder, terminal: "t", space: "s" };
+    ctx.panes = [{ pane: "p", cwd: ctx.folder }];
+    view.render(cx);
+    const kick = timers.find((t: any) => t.ms === 0);
+    assert.ok(kick, "render scheduled the new context read");
+    kick.fn(cx);
+    await flush();
+    assert.ok(reads >= 1, "the new context read started without a tick");
+});
+
+test("an identical scan output does not notify", async () => {
+    const root = "/tmp/git-harness-same";
+    const ctx = context(root);
+    ctx.exec = async (cmd: string) => ({ code: 0, stdout: cmd === "sh" ? scan(root) : "", stderr: "" });
+    const { view, cx, notifies } = await load("jig-git");
+    await flush();
+    view.lastScan = scan(root);
+    const before = notifies.count;
+    view.refresh(cx, false, true);
+    await flush();
+    assert.equal(notifies.count, before);
+});

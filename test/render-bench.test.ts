@@ -32,3 +32,17 @@ test("a context switch drops old rows and shows pending until the matching read 
     assert.equal(viewForContext(kb, ka, ["a"]).rows.length, 0);
     assert.equal(viewForContext(ka, ka, ["a"]).rows[0], "a");
 });
+
+test("jig-git: 50 rows and one open 200-file repo stay bounded", () => {
+    const result = spawnSync(process.execPath, ["test/support/evaluate-one.mjs", "jig-git"], {
+        cwd: new URL("..", import.meta.url),
+        encoding: "utf8",
+        env: { ...process.env, JIG_BENCH: "1" },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const line = result.stdout.split("\n").find((line) => line.startsWith("BENCHEL jig-git "));
+    assert.ok(line, result.stdout);
+    const calls = Number(line.split(" ").pop());
+    assert.ok(calls > 0);
+    assert.ok(calls < 5200, `jig-git: ${calls} element calls per render`);
+});

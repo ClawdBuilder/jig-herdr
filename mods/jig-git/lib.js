@@ -1372,3 +1372,20 @@ export function repoActions(repo) {
     if (repo.remote) actions.push("fetch");
     return actions;
 }
+
+/** Merge a targeted scan into the rows: replace checkouts by path, keep the rest in order. */
+export function mergeScan(repos, partial) {
+    const next = new Map((partial ?? []).map((repo) => [repo.path, repo]));
+    const merged = (repos ?? []).map((repo) => next.get(repo.path) ?? repo);
+    for (const repo of partial ?? []) if (!repos?.some((old) => old.path === repo.path)) merged.push(repo);
+    return merged;
+}
+
+/** Flip staged state for the named files at once; a re-read confirms or replaces it. */
+export function optimisticStage(repo, paths, staged) {
+    const want = paths instanceof Set ? paths : new Set(paths);
+    const files = (repo.files ?? []).map((file) =>
+        want.has(file.path) ? { ...file, staged, unstaged: !staged } : file,
+    );
+    return { ...repo, files, staged: files.filter((file) => file.staged).length };
+}
