@@ -50,6 +50,7 @@ import {
     filterGroups,
     focusedCheckout,
     foldMap,
+    groupCheckouts,
     groupRepos,
     holdsLock,
     isClean,
@@ -80,6 +81,7 @@ import {
     worktreeSignal,
 } from "./lib.js";
 import { panelError, panelHeader } from "./panel-header.js";
+import { contextCard, emptyLine, footer, groupHeader, secondaryButton, statusLine } from "./panel-kit.js";
 import { BranchPicker, DONE } from "./picker.js";
 import { PushConfirm } from "./push.js";
 import {
@@ -1389,13 +1391,12 @@ export default class RepoChanges extends View {
             : row(v_flex()).gap(6).child(field()).child(h_flex().gap(6).justify_end().children(buttons()));
     }
 
-    // The list: groups with changes first (a main checkout, then its worktrees), then the clean group, folded.
+    // The list: checkout groups, with a worktree indented under its main row.
     list(t) {
         const q = this.filter.trim() !== "",
-            groups = filterGroups(groupRepos(this.repos), this.filter),
+            groups = groupRepos(this.repos),
             focus = focusedCheckout(this.repos, this.loc?.root ?? ""),
             foldedOf = (g) => this.foldedGroup(g),
-            // Tags are computed over the rows that are actually visible: folding a repo removes its worktrees' names.
             visible = groups.flatMap((g) =>
                 foldedOf(g)
                     ? [{ repo: g.main, main: null }]
@@ -1404,54 +1405,65 @@ export default class RepoChanges extends View {
             tags = disambiguators(
                 visible.map((v) => ({ path: v.repo.path, name: rowName(v.repo, { main: v.main }).name })),
             ),
-            rows = (g) => {
-                const folded = foldedOf(g),
-                    one = (repo, main) =>
-                        this.checkout(
-                            t,
-                            repo,
-                            q,
-                            Boolean(main),
-                            g,
-                            main ? null : (tags.get(repo.path) ?? null),
-                            focus,
-                            folded,
-                        );
-                return folded ? [one(g.main, null)] : [one(g.main, null), ...g.worktrees.map((w) => one(w, g.main))];
-            },
-            changed = groups.filter((g) => !isClean(g)),
-            clean = groups.filter((g) => isClean(g)),
-            open = q || this.cleanOpen,
-            items = changed.flatMap(rows);
-        if (clean.length) {
-            items.push(
-                h_flex()
-                    .id("clean-group")
-                    .h(26)
-                    .flex_none()
-                    .mt(6)
-                    .px(6)
-                    .gap(6)
-                    .items_center()
-                    .rounded(7)
-                    .cursor_pointer()
-                    .text_color(t.muted)
-                    .hover((s) => s.bg(t.hover))
-                    .on_click((_e, cx) => {
-                        this.cleanOpen = !this.cleanOpen;
-                        cx.notify();
-                    })
-                    .child(
-                        div()
-                            .flex_none()
-                            .text_color(t.dim)
-                            .child(svg(ICON(open ? "chevron-down" : "chevron-right")).size(12)),
-                    )
-                    .child(div().font_semibold().child(`Clean (${clean.length})`)),
-            );
-            if (open) items.push(...clean.flatMap(rows));
+            states = groupCheckouts(this.repos),
+            items = [];
+        const specs = [
+            ["needs", "Needs you", t.ansi1],
+            ["changed", "Changed", t.accent],
+            ["ahead", "Ahead or behind", t.blocked],
+            ["clean", "Clean", t.muted],
+        ];
+        for (const [key, label, color] of specs) {
+            const rows = states[key];
+            if (!rows.length) continue;
+            const folded = key === "clean" && !this.cleanOpen;
+            const one = key === "changed" && groups.length === 1;
+            const action =
+                key === "changed" && one
+                    ? secondaryButton(
+                          t,
+                          "stage-all-group",
+                          "Stage all",
+                          (cx) => {
+                              const repo = rows[0];
+                              this.act(cx, repo, (git) => stageAll(git, { checkout: repo.path }), true, "Staging");
+                          },
+                          { h: 26 },
+                      )
+                    : key === "ahead"
+                      ? secondaryButton(t, "fetch-group", "Fetch", (cx) => this.fetchAll(cx), { h: 26 })
+                      : key === "clean"
+                        ? secondaryButton(
+                              t,
+                              "toggle-clean",
+                              folded ? "Show" : "Hide",
+                              (cx) => {
+                                  this.cleanOpen = !this.cleanOpen;
+                                  cx.notify();
+                              },
+                              { h: 26 },
+                          )
+                        : null;
+            items.push(groupHeader(t, key, label, rows.length, color, action));
+            if (folded) continue;
+            for (const repo of rows) {
+                const main = groups.find((g) => g.main.path === repo.main)?.main;
+                const parent = repo.linked ? (main ?? null) : null;
+                items.push(
+                    this.checkout(
+                        t,
+                        repo,
+                        q,
+                        Boolean(parent),
+                        parent ?? { main: repo, worktrees: [] },
+                        parent ? (tags.get(repo.path) ?? null) : null,
+                        focus,
+                        false,
+                    ),
+                );
+            }
         }
-        return items;
+        return items.length ? items : [emptyLine(this.emptyState(null) ?? "No repos here.", t)];
     }
 
     /** The header's fold-all button: fold every repo, or unfold every repo when any is folded. */
@@ -1569,8 +1581,6 @@ export default class RepoChanges extends View {
                 panelHeader(t, {
                     title: loc.root ? lastSegment(loc.root) || "/" : "Git",
                     titleTooltip: loc.root || "No folder",
-                    follow: this.follow,
-                    onFollow: (cx) => this.setFollow(!this.follow, cx),
                     readAt: this.last,
                     busy: this.refreshState.busy,
                     onRefresh: (cx) => {
@@ -1591,6 +1601,14 @@ export default class RepoChanges extends View {
                               )
                             : null,
                     ].filter(Boolean),
+                }),
+            )
+            .child(
+                contextCard(t, {
+                    name: loc.root ? lastSegment(loc.root) || "/" : "No folder",
+                    follow: this.follow,
+                    onFollow: (cx) => this.setFollow(!this.follow, cx),
+                    machine: loc.on ?? null,
                 }),
             )
             .when(Boolean(this.error), (el) => el.child(panelError(t, this.error)))
@@ -1634,11 +1652,6 @@ export default class RepoChanges extends View {
                             .child(Input.new(this.input).h_full().w_full().text_size(12).text_color(t.foreground)),
                     ),
             )
-            .when(Boolean(this.error), (el) =>
-                el.child(
-                    div().flex_none().px(12).py(3).truncate().text_size(11).text_color(t.blocked).child(this.error),
-                ),
-            )
             .child(
                 v_flex()
                     .id("repos-list")
@@ -1663,7 +1676,18 @@ export default class RepoChanges extends View {
                         ),
                     )
                     .children(items),
-            );
+            )
+            .when(Boolean(this.fetchNote || this.error), (el) =>
+                el.child(
+                    statusLine(
+                        t,
+                        this.fetchNote
+                            ? { text: this.fetchNote.text, tone: "done" }
+                            : { text: this.error, tone: "error" },
+                    ),
+                ),
+            )
+            .child(footer(t, { summary: summary || "No repositories here", action: null }));
     }
 
     /** Fetch every repo that has the remote, one after another, and say how many moved. */
