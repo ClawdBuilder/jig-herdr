@@ -291,3 +291,12 @@ test("direct exec classifies a rejection within one second of the deadline as a 
         Date.now = realNow;
     }
 });
+
+test("cancel lets a new context start at once", () => {
+    const state = new RefreshState();
+    assert.equal(state.start({ first: true }), true);
+    state.cancel();
+    assert.equal(state.loading, false);
+    assert.equal(state.start({ first: false }), true);
+    assert.equal(state.loading, true);
+});

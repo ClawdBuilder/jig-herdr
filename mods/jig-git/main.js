@@ -296,8 +296,14 @@ export default class RepoChanges extends View {
             // Another terminal, a `cd`, another space or the other mode. The old rows are dropped at once and the panel
             // shows its skeleton until the read for this context lands; everything belonging to the old folder is forgotten.
             this.context = context;
+            this.readGeneration++;
+            this.refreshState.cancel();
+            this.loading = false;
+            this.loadedContext = null;
             this.view = null;
             this.loaded = false;
+            this.switching = true;
+            badge(0);
             this.error = null;
             this.opened = new Set();
             this.confirm = null;
@@ -306,7 +312,7 @@ export default class RepoChanges extends View {
             this.targets = new Map();
             this.targetsAt = 0;
             this.last = 0;
-            this.switching = true;
+            this.contextChanged = true;
         }
         this.loc = loc;
         return context;
@@ -356,8 +362,10 @@ export default class RepoChanges extends View {
         this.makeCommitBoxes(cx);
         const previous = this.context;
         this.locate();
-        if (this.context !== previous) {
+        if (this.context !== previous || this.contextChanged) {
+            this.contextChanged = false;
             this.refreshScheduler.trigger();
+            this.refresh(cx);
             cx.notify();
         }
         this.loadConfig(cx);
@@ -414,6 +422,8 @@ export default class RepoChanges extends View {
             context = this.context;
         if (!root) {
             this.error = "No folder";
+            this.switching = false;
+            this.loading = false;
             return;
         }
         if (!this.refreshState.start({ user, first: !this.repos, notify: () => cx.notify() })) return;
@@ -435,8 +445,10 @@ export default class RepoChanges extends View {
                 this.switching = false;
                 badge(this.repos.filter((x) => x.files.length).length);
             } catch (e) {
-                if (run === this.readGeneration && context === this.context)
+                if (run === this.readGeneration && context === this.context) {
                     this.error = friendlyError(e, { what: "Reading", follow: true });
+                    this.switching = false;
+                }
             } finally {
                 if (run === this.readGeneration) {
                     this.loading = false;
@@ -1714,6 +1726,10 @@ export default class RepoChanges extends View {
                   .filter(Boolean)
                   .join(" · ")
             : "";
+        const pending = viewForContext(this.context, this.loadedContext, this.repos, {
+            error: this.error,
+            noFolder: !loc.root,
+        }).pending;
         const items = this.list(t);
         // Space mode's folder: the other place to look when following a terminal lands nowhere.
         const there = location(false).root;
@@ -1869,6 +1885,7 @@ export default class RepoChanges extends View {
             .child(
                 footer(t, {
                     summary: (() => {
+                        if (pending) return loc.root ? lastSegment(loc.root) || "/" : "";
                         const focused = focusedCheckout(this.repos, loc?.root ?? "");
                         const repo = this.repos.find((r) => r.path === focused) ?? this.repos[0];
                         if (!repo) return "No repositories here";
