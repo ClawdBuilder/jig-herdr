@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Worktrees and Review now key reads by machine, folder and follow mode: a switch cancels the old read, shows the kit
+  skeleton, and starts the new one at once, while a same-context refresh keeps its rows.
+
+
 ### Changed
 
 - Git shows a four-row skeleton while a new machine/folder/follow mode is read, and keeps last-good rows only for a

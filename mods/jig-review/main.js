@@ -54,6 +54,7 @@ import {
     chooseRepo,
     commentsInFile,
     commentsKey,
+    contextKeyOf,
     diffRows,
     discardFile,
     discardKind,
@@ -78,6 +79,7 @@ import {
     splitPath,
     stageFile,
     unstageFile,
+    viewForContext,
 } from "./lib.js";
 import { panelError, panelHeader } from "./panel-header.js";
 import {
@@ -87,6 +89,7 @@ import {
     primaryButton,
     secondaryButton,
     sizes,
+    skeleton,
     statusLine,
 } from "./panel-kit.js";
 import { friendlyError, GIT_READ, run as runCommand } from "./refresh.js";
@@ -164,6 +167,8 @@ export default class RepoReview extends View {
         this.repos = null;
         this.reposAt = 0;
         this.loadingRepos = false;
+        this.loadedContext = this.fixed ? JSON.stringify(["fixed", this.repo, this.on]) : null;
+        this.contextKey = this.fixed ? this.loadedContext : contextKeyOf(this.where);
         this.repoError = null;
         this.picking = false;
         this.width = 0;
@@ -261,9 +266,14 @@ export default class RepoReview extends View {
     /** The followed folder or machine changed, or its repositories need a fresh list. */
     followTick(cx) {
         const where = whereToLook();
-        if (JSON.stringify([where.root, where.on]) !== JSON.stringify([this.where?.root, this.where?.on])) {
+        if (contextKeyOf(where) !== this.contextKey) {
             this.where = where;
             this.on = where.on;
+            this.contextKey = contextKeyOf(where);
+            this.loadedContext = null;
+            this.refreshState.cancel();
+            this.readGeneration = (this.readGeneration ?? 0) + 1;
+            this.loading = false;
             this.repo = "";
             this.repos = null;
             this.reposAt = 0;
@@ -289,6 +299,7 @@ export default class RepoReview extends View {
                 if (found.code !== 0) throw new Error((found.stderr || `exit ${found.code}`).trim().split("\n")[0]);
                 const { repos } = parseRepoList(found.stdout);
                 this.repos = repos;
+                this.loadedContext = context;
                 this.reposAt = Date.now();
                 this.repoError = null;
                 let remembered = null;
@@ -412,6 +423,7 @@ export default class RepoReview extends View {
                 this.applyMode();
                 this.error = null;
                 this.loaded = true;
+                this.loadedContext = this.contextKey;
                 this.syncComments();
                 this.fixSelection();
                 await this.loadDiff();
@@ -1604,6 +1616,12 @@ export default class RepoReview extends View {
 
     render(_cx) {
         const t = theme();
+        const context = viewForContext(this.contextKey, this.loadedContext, this.files, {
+            error: this.error,
+            noFolder: !this.repo || !this.where?.root,
+        });
+        if (!this.fixed && context.pending)
+            return v_flex().id("jig-review").size_full().bg(t.background).child(this.header(t)).child(skeleton(t));
         if (!this.fixed && !this.repo) return this.noRepo(t);
         return h_flex()
             .id("jig-review")

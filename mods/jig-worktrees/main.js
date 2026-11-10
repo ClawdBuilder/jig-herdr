@@ -24,6 +24,7 @@ import {
 import { location, readFollow, writeFollow } from "./follow.js";
 import {
     cancelPrune,
+    contextKeyOf,
     dangerousIgnored,
     groupWorktrees,
     isOnScreen,
@@ -41,6 +42,7 @@ import {
     sameOrInside,
     since,
     terminalsInsideWorktree,
+    viewForContext,
     worktreeTitle,
 } from "./lib.js";
 import { panelError, panelHeader } from "./panel-header.js";
@@ -53,6 +55,7 @@ import {
     primaryButton,
     row,
     secondaryButton,
+    skeleton,
     statusLine,
 } from "./panel-kit.js";
 import {
@@ -152,6 +155,7 @@ export default class RepoWorktrees extends View {
         this.lastTerminals = terminals();
         this.windowActive = window()?.active === true;
         this.enter(whereToLook());
+        this.loadedContext = null;
         this.initialRead(cx);
         cx.timer.every(1000, (cx) => this.tick(cx));
     }
@@ -168,7 +172,11 @@ export default class RepoWorktrees extends View {
     /** A new folder or machine: forget what was shown. */
     enter(where) {
         this.where = where;
-        this.contextKey = JSON.stringify([where.root, where.on]);
+        this.contextKey = contextKeyOf(where);
+        this.refreshState.cancel();
+        this.readGeneration = (this.readGeneration ?? 0) + 1;
+        this.loading = false;
+        this.loadedContext = null;
         this.generation = (this.generation ?? 0) + 1;
         this.trees = null;
         this.error = null;
@@ -186,9 +194,9 @@ export default class RepoWorktrees extends View {
     tick(cx) {
         this.refreshState.tick(Date.now(), () => cx.notify());
         const where = whereToLook();
-        if (JSON.stringify([where.root, where.on]) !== this.contextKey) {
+        if (contextKeyOf(where) !== this.contextKey) {
             this.enter(where);
-            this.refreshScheduler.trigger();
+            this.load(cx, true);
             cx.notify();
         }
         this.updateBadge();
@@ -248,6 +256,7 @@ export default class RepoWorktrees extends View {
                     const parsed = parseTrees(result.stdout);
                     this.single = parsed.single;
                     this.trees = parsed.trees;
+                    this.loadedContext = contextKey;
                     this.error = null;
                     this.loadedAt = Date.now();
                     this.tookMs = this.loadedAt - started;
@@ -284,7 +293,8 @@ export default class RepoWorktrees extends View {
     /** The count on this panel's icon: worktrees ready to remove. Set only on a change, since setting shared state
      * redraws every mod. */
     updateBadge() {
-        const next = { count: this.rows().filter((row) => row.ready).length, tone: "done" };
+        const current = this.loadedContext === this.contextKey;
+        const next = { count: current ? this.rows().filter((row) => row.ready).length : 0, tone: "done" };
         if (JSON.stringify(shared("badge.jig-worktrees")) !== JSON.stringify(next))
             setShared("badge.jig-worktrees", next);
     }
@@ -517,7 +527,11 @@ export default class RepoWorktrees extends View {
 
     render(_cx) {
         const t = theme();
-        const rows = this.rows();
+        const context = viewForContext(this.contextKey, this.loadedContext, this.trees, {
+            error: this.error,
+            noFolder: !this.where?.root,
+        });
+        const rows = context.pending || context.noFolder ? [] : this.rows();
         const ready = rows.filter((row) => row.ready).length;
         const firstName = rows[0] ? nameOf(rows[0].main) : null;
         const title = this.single && firstName ? firstName : "Worktrees";
@@ -670,10 +684,8 @@ export default class RepoWorktrees extends View {
                     .children(notices)
                     .when(Boolean(this.error), (el) => el.child(panelError(t, this.error)))
                     .when(Boolean(this.refreshProblem), (el) => el.child(message(this.refreshProblem, t.muted)))
-                    .when(!this.error && !this.trees, (el) =>
-                        el.child(message(this.where?.root ? "Reading…" : "No folder.")),
-                    )
-                    .when(Boolean(this.trees) && rows.length === 0, (el) =>
+                    .when(context.pending, (el) => el.child(skeleton(t)))
+                    .when(!context.pending && !context.noFolder && rows.length === 0, (el) =>
                         el.child(message("No linked worktrees found.")),
                     )
                     .when(rows.length > 0 && ready === 0, (el) =>
@@ -684,6 +696,10 @@ export default class RepoWorktrees extends View {
                     .children(this.groupRows(t, rows)),
             )
             .when(Boolean(this.error), (el) => el.child(statusLine(t, { text: this.error, tone: "error" })))
-            .child(footer(t, { summary: `${rows.length} worktree${rows.length === 1 ? "" : "s"} · ${ready} ready` }));
+            .when(!context.pending && !context.noFolder, (el) =>
+                el.child(
+                    footer(t, { summary: `${rows.length} worktree${rows.length === 1 ? "" : "s"} · ${ready} ready` }),
+                ),
+            );
     }
 }

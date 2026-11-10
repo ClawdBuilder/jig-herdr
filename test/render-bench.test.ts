@@ -20,3 +20,15 @@ for (const name of ["jig-worktrees", "jig-review", "jig-history", "jig-prs", "ji
         assert.ok(ms < CEILING_MS, `${name}: ${ms.toFixed(2)} ms`);
     });
 }
+
+test("a context switch drops old rows and shows pending until the matching read lands", async () => {
+    const { contextKeyOf, viewForContext } = await import("../mods/jig-worktrees/lib.js");
+    const a = { root: "/a", on: null, follow: true };
+    const b = { root: "/b", on: null, follow: true };
+    const ka = contextKeyOf(a),
+        kb = contextKeyOf(b);
+    assert.equal(viewForContext(ka, ka, ["a"]).rows.length, 1);
+    assert.equal(viewForContext(kb, ka, ["a"]).pending, true);
+    assert.equal(viewForContext(kb, ka, ["a"]).rows.length, 0);
+    assert.equal(viewForContext(ka, ka, ["a"]).rows[0], "a");
+});
