@@ -11,8 +11,9 @@ A 42 px header titled **Worktrees** (the worktree count is the tooltip), **Prune
 and Refresh. A 32 px context card under
 it names the folder, toggles **Terminal**/**Space**, and carries the machine name. Rows are grouped **Ready to remove**,
 **In progress**, and **Main checkout** last, each with its count: name, branch, head, base, last commit, status, and the
-reason (`merged into base`, `remote branch deleted`, uncommitted changes, locked, an agent working). A row's `⋯` menu
-offers Remove, and Remove asks inline first; the prune banner asks once for all ready rows. A 40 px footer counts the
+reason (`merged into base`, `remote branch deleted`, uncommitted changes, locked, an agent working). A row opens in place
+with **Open space** (primary), **Open in new tab** (secondary) and, when ready and not the main checkout, **Remove…**
+(danger); Remove asks inline first. The prune banner asks once for all ready rows. A 40 px footer counts the
 worktrees and ready ones. Empty and no-git states are one line.
 
 **How it behaves:**

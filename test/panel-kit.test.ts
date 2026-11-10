@@ -31,13 +31,14 @@ test("Git groups a checkout into needs, changed, ahead or clean", async () => {
         { path: "needs", files: [{ status: "U" }] },
         { path: "changed", files: [{ status: "M" }] },
         { path: "ahead", files: [], ahead: 1 },
+        { path: "detached", files: [], detached: true, ahead: 1 },
         { path: "clean", files: [] },
     ]);
     assert.deepEqual(Object.fromEntries(Object.entries(groups).map(([k, v]) => [k, v.map((r) => r.path)])), {
         needs: ["needs"],
         changed: ["changed"],
         ahead: ["ahead"],
-        clean: ["clean"],
+        clean: ["detached", "clean"],
     });
 });
 

@@ -18,7 +18,13 @@ export const dot = (color, hollow = false) =>
 
 const stop = (_e, cx) => cx.stop_propagation();
 
-function button(t, id, label, onClick, { primary = false, danger = false, busy = false, h = 28 } = {}) {
+function button(
+    t,
+    id,
+    label,
+    onClick,
+    { primary = false, danger = false, busy = false, disabled = false, h = 28 } = {},
+) {
     return h_flex()
         .id(id)
         .h(h)
@@ -30,12 +36,11 @@ function button(t, id, label, onClick, { primary = false, danger = false, busy =
         .when(primary, (el) => el.bg(t.solid).text_color(t.solid_foreground).font_semibold())
         .when(!primary && !danger, (el) => el.border_1().border_color(t.border).text_color(t.foreground))
         .when(danger, (el) => el.text_color(t.ansi1))
-        .when(busy, (el) => el.text_color(t.dim).opacity(0.55))
+        .when(busy || disabled, (el) => el.text_color(t.dim).opacity(0.55))
         .text_size(size().button)
-        .cursor_pointer()
-        .hover((s) => (primary ? s.opacity(0.88) : s.bg(t.hover)))
+        .when(!disabled, (el) => el.cursor_pointer().hover((s) => (primary ? s.opacity(0.88) : s.bg(t.hover))))
         .on_mouse_down("left", stop)
-        .when(!busy, (el) => el.on_click(onClick))
+        .when(!busy && !disabled, (el) => el.on_click(onClick))
         .when(busy, (el) => el.child(svg("mods/workspace-chrome/spinner.svg").size(13).spin(900)))
         .child(label);
 }
