@@ -7,12 +7,13 @@ ones. From Jig (https://github.com/ClawdBuilder/jig). No Jig required.
 
 **What you see:**
 
-A header whose title is the worktree count (`15 worktrees`, `1 worktree`, or `Worktrees` before the first read; the full
-repo · count is the tooltip), **Prune merged (N)** when N ready rows exist; repository groups, each with worktree rows:
-name, branch, head, base, last commit, status, and a **Ready to remove** / **In progress** label plus the reason (`merged
-into base`, `remote branch deleted`, uncommitted changes, locked, an agent working). The main checkout is labelled. A row's
-`⋯` menu offers Remove, and Remove asks inline first; the prune banner asks once for all ready rows. Empty and no-git
-states are one line.
+A 42 px header titled with the worktree count (`15 worktrees`, `1 worktree`, or `Worktrees` before the first read; the
+full repo · count is the tooltip), **Prune merged (N)** when N ready rows exist, and Refresh. A 32 px context card under
+it names the folder, toggles **Terminal**/**Space**, and carries the machine name. Rows are grouped **Ready to remove**,
+**In progress**, and **Main checkout** last, each with its count: name, branch, head, base, last commit, status, and the
+reason (`merged into base`, `remote branch deleted`, uncommitted changes, locked, an agent working). A row's `⋯` menu
+offers Remove, and Remove asks inline first; the prune banner asks once for all ready rows. A 40 px footer counts the
+worktrees and ready ones. Empty and no-git states are one line.
 
 **How it behaves:**
 

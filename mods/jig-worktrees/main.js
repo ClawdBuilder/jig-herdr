@@ -25,6 +25,7 @@ import { location, readFollow, writeFollow } from "./follow.js";
 import {
     cancelPrune,
     dangerousIgnored,
+    groupWorktrees,
     isOnScreen,
     liveReady,
     nameOf,
@@ -43,6 +44,7 @@ import {
     worktreeTitle,
 } from "./lib.js";
 import { panelError, panelHeader } from "./panel-header.js";
+import { contextCard, footer, groupHeader, statusLine } from "./panel-kit.js";
 import {
     focusRegained,
     friendlyError,
@@ -516,32 +518,22 @@ export default class RepoWorktrees extends View {
             );
     }
 
-    /** One line per repository, then its worktrees. */
+    /** Ready, in progress, then main: one kit header per group. */
     groupRows(t, rows) {
-        const names = new Map(rows.map((row) => [row.main, nameOf(row.main)]));
-        const groups = [...names]
-            .sort((a, b) => a[1].localeCompare(b[1]))
-            .map(([main, name]) => ({ name, rows: rows.filter((row) => row.main === main) }));
-        return groups.flatMap((group) => {
-            const ready = group.rows.filter((row) => row.ready).length;
-            const heading = h_flex()
-                .flex_none()
-                .px(8)
-                .pt(10)
-                .pb(4)
-                .gap(6)
-                .items_center()
-                .text_size(10.5)
-                .font_semibold()
-                .text_color(t.dim)
-                .child(div().child(group.name))
-                .child(
-                    div()
-                        .font_normal()
-                        .child(ready ? `${group.rows.length} · ${ready} ready` : `${group.rows.length}`),
-                );
-            return [...(this.single ? [] : [heading]), ...group.rows.map((row) => this.row(t, row))];
-        });
+        const groups = groupWorktrees(rows);
+        const sections = [
+            ["ready", "Ready to remove", t.ansi2],
+            ["progress", "In progress", t.accent],
+            ["main", "Main checkout", t.muted],
+        ];
+        return sections.flatMap(([key, label, color]) =>
+            groups[key].length
+                ? [
+                      groupHeader(t, `wt-${key}`, label, groups[key].length, color),
+                      ...groups[key].map((row) => this.row(t, row)),
+                  ]
+                : [],
+        );
     }
 
     render(_cx) {
@@ -556,11 +548,6 @@ export default class RepoWorktrees extends View {
         const header = panelHeader(t, {
             title: worktreeTitle(rows.length),
             titleTooltip: `${title} · ${count}`,
-            follow,
-            onFollow: (cx) => {
-                writeFollow(space?.id, !follow);
-                this.load(cx, true);
-            },
             readAt: this.loadedAt,
             busy: this.refreshState.busy,
             onRefresh: (cx) => this.load(cx, true),
@@ -660,6 +647,19 @@ export default class RepoWorktrees extends View {
             .text_color(t.foreground)
             .text_size(13)
             .child(header)
+            .child(
+                contextCard(t, {
+                    name: this.where?.root
+                        ? (this.where.root.split(/[\\/]/).filter(Boolean).pop() ?? "No folder")
+                        : "No folder",
+                    follow,
+                    onFollow: (cx) => {
+                        writeFollow(space?.id, !follow);
+                        this.load(cx, true);
+                    },
+                    machine: this.where?.on ?? null,
+                }),
+            )
             .when(Boolean(pruneBanner), (el) => el.child(pruneBanner))
             .child(
                 v_flex()
@@ -683,6 +683,8 @@ export default class RepoWorktrees extends View {
                         ),
                     )
                     .children(this.groupRows(t, rows)),
-            );
+            )
+            .when(Boolean(this.error), (el) => el.child(statusLine(t, { text: this.error, tone: "error" })))
+            .child(footer(t, { summary: `${rows.length} worktree${rows.length === 1 ? "" : "s"} · ${ready} ready` }));
     }
 }
