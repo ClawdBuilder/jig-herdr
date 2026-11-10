@@ -162,6 +162,34 @@ export function row(t, { id, color, title, detail, chips = [], open = false, act
         .when(Boolean(details), (el) => el.child(details));
 }
 
+/** The repository chooser's one row: folder, `name · branch`, a dirty dot, and a chevron. */
+export function chooserRow(t, { id = "repo-pick", label, dirty = false, color, open = false, onClick }) {
+    return h_flex()
+        .id(id)
+        .h(26)
+        .flex_none()
+        .px(8)
+        .gap(6)
+        .items_center()
+        .rounded(7)
+        .border_1()
+        .border_color(t.border)
+        .bg(t.surface)
+        .cursor_pointer()
+        .hover((s) => s.bg(t.hover))
+        .tooltip("Choose the repo")
+        .on_click((_e, cx) => onClick(cx))
+        .child(svg("mods/workspace-chrome/folder.svg").size(13).flex_none().text_color(t.muted))
+        .child(div().flex_1().min_w(0).truncate().font_semibold().child(label))
+        .when(Boolean(dirty), (el) => el.child(div().flex_none().w(8).h(8).rounded(8).bg(color)))
+        .child(
+            svg(`mods/workspace-chrome/chevron-${open ? "down" : "right"}.svg`)
+                .size(12)
+                .flex_none()
+                .text_color(t.dim),
+        );
+}
+
 export function contextCard(t, { name, follow, onFollow, machine }) {
     return h_flex()
         .id("panel-context")

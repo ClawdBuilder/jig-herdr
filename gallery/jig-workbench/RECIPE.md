@@ -34,7 +34,7 @@ control in this layout; its key is `Ctrl+Shift+Alt+K` (cycle Off / On / While ag
 zero-height block. Each panel's own refresh triggers, clicks and controls are those in its recipe below.
 
 Panels refresh when shown and on focus, and when a terminal in the panel's folder finishes a command, with their configured backstop (Git, History, Worktrees and
-Files default 60 s; PR & CI defaults 180 s, never below 15 s). A first load, or a changed machine/folder/follow mode, draws Git, PR & CI and History as a skeleton until their read
+Files default 60 s; PR & CI defaults 180 s, never below 15 s). A first load, or a changed machine/folder/follow mode, draws all five follow panels (Git, Worktrees, Review, PR & CI and History) as a skeleton until their read
 lands; a same-key refresh keeps the last rows. A click-started refresh shows
 busy after 400 ms, and automatic refreshes stay silent.
 

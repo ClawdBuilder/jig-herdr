@@ -54,6 +54,7 @@ import {
     chooseRepo,
     commentsInFile,
     commentsKey,
+    contextKeyOf,
     diffRows,
     discardFile,
     discardKind,
@@ -78,15 +79,18 @@ import {
     splitPath,
     stageFile,
     unstageFile,
+    viewForContext,
 } from "./lib.js";
 import { panelError, panelHeader } from "./panel-header.js";
 import {
+    chooserRow,
     contextCard,
     dangerButton,
     emptyLine,
     primaryButton,
     secondaryButton,
     sizes,
+    skeleton,
     statusLine,
 } from "./panel-kit.js";
 import { friendlyError, GIT_READ, run as runCommand } from "./refresh.js";
@@ -164,6 +168,9 @@ export default class RepoReview extends View {
         this.repos = null;
         this.reposAt = 0;
         this.loadingRepos = false;
+        this.loadedContext = this.fixed ? JSON.stringify(["fixed", this.repo, this.on]) : null;
+        this.contextKey = this.fixed ? this.loadedContext : contextKeyOf(this.where);
+        this.contextAt = Date.now();
         this.repoError = null;
         this.picking = false;
         this.width = 0;
@@ -223,7 +230,13 @@ export default class RepoReview extends View {
     // Cheap check twice a second: a new "open this file" request, and the 5 s re-list while shown.
     // Not from render: both notify, and render may not.
     tick(cx) {
-        if (!this.fixed) this.followTick(cx);
+        if (!this.fixed) {
+            this.followTick(cx);
+            if (this.contextKey !== this.loadedContext && Date.now() - (this.contextAt ?? 0) > 1000) {
+                this.loadingRepos = false;
+                this.loadRepos(cx, true);
+            }
+        }
         const open = shared("jig-review.open");
         if (open && open.repo === this.repo && open.at > this.handled) {
             this.handled = open.at;
@@ -261,12 +274,25 @@ export default class RepoReview extends View {
     /** The followed folder or machine changed, or its repositories need a fresh list. */
     followTick(cx) {
         const where = whereToLook();
-        if (JSON.stringify([where.root, where.on]) !== JSON.stringify([this.where?.root, this.where?.on])) {
+        if (contextKeyOf(where) !== this.contextKey) {
             this.where = where;
             this.on = where.on;
+            this.contextKey = contextKeyOf(where);
+            this.contextAt = Date.now();
+            this.loadedContext = null;
+            this.refreshState?.cancel();
+            this.readGeneration = (this.readGeneration ?? 0) + 1;
+            this.loading = false;
+            this.loadingRepos = false;
+            this.loadedContext = null;
             this.repo = "";
             this.repos = null;
             this.reposAt = 0;
+            try {
+                localStorage.removeItem("jig-review.repo");
+            } catch {
+                // storage unavailable: the dirty/first repo is still a fine default
+            }
             this.resetRepo();
             this.loadRepos(cx, true);
             return;
@@ -279,16 +305,17 @@ export default class RepoReview extends View {
         if (this.loadingRepos || !this.where?.root) return;
         this.loadingRepos = true;
         this.reposAt = Date.now();
-        const context = JSON.stringify([this.where.root, this.where.on]);
+        const context = this.contextKey;
         cx.spawn(async (cx) => {
             try {
                 const found = await runCommand(exec, "sh", ["-c", REPO_SCRIPT, "sh", this.where.root], {
                     on: this.where.on,
                 });
-                if (context !== JSON.stringify([this.where?.root, this.where?.on])) return;
+                if (context !== this.contextKey) return;
                 if (found.code !== 0) throw new Error((found.stderr || `exit ${found.code}`).trim().split("\n")[0]);
                 const { repos } = parseRepoList(found.stdout);
                 this.repos = repos;
+                this.loadedContext = context;
                 this.reposAt = Date.now();
                 this.repoError = null;
                 let remembered = null;
@@ -297,7 +324,7 @@ export default class RepoReview extends View {
                 } catch {
                     // storage unavailable: the first repository is a fine default
                 }
-                const choice = chooseRepo(repos, this.repo, remembered);
+                const choice = initial ? chooseRepo(repos, "", null) : chooseRepo(repos, this.repo, remembered);
                 if (choice !== this.repo) {
                     this.repo = choice ?? "";
                     this.name = repoName(this.repo);
@@ -315,6 +342,9 @@ export default class RepoReview extends View {
 
     /** A new repository: forget the old rows and diff, keep the view choice. */
     resetRepo() {
+        this.readGeneration = (this.readGeneration ?? 0) + 1;
+        this.loading = false;
+        this.again = false;
         this.loaded = false;
         this.error = null;
         this.files = [];
@@ -334,6 +364,7 @@ export default class RepoReview extends View {
         this.comments = [];
         this.commentsAt = null;
         this.draft = null;
+        this.name = this.fixed ? this.name : "Review";
         this.syncComments();
     }
 
@@ -362,6 +393,9 @@ export default class RepoReview extends View {
             return;
         }
         this.loading = true;
+        const run = ++this.readGeneration;
+        const repo = this.repo;
+        const context = this.contextKey;
         cx.spawn(async (cx) => {
             try {
                 const r = await runCommand(
@@ -370,6 +404,7 @@ export default class RepoReview extends View {
                     [...READ, "-c", "core.quotePath=false", "status", "--porcelain=v1", "-b", "--no-renames"],
                     { cwd: this.repo, on: this.on },
                 );
+                if (run !== this.readGeneration || repo !== this.repo || context !== this.contextKey) return;
                 if (r.code !== 0) throw Object.assign(new Error(r.stderr || `exit ${r.code}`), r);
                 const s = parseStatus(r.stdout);
                 // The base costs a dozen git calls: find it again only when HEAD moves, or after a minute (a fetch).
@@ -399,6 +434,7 @@ export default class RepoReview extends View {
                     );
                     if (d.code === 0) committed = parseNameStatus(d.stdout);
                 }
+                if (run !== this.readGeneration || repo !== this.repo || context !== this.contextKey) return;
                 Object.assign(this, {
                     branch: s.branch,
                     ahead: s.ahead,
@@ -412,15 +448,21 @@ export default class RepoReview extends View {
                 this.applyMode();
                 this.error = null;
                 this.loaded = true;
+                this.loadedContext = this.contextKey;
                 this.syncComments();
                 this.fixSelection();
                 await this.loadDiff();
             } catch (e) {
-                this.error = friendlyError(e, { what: "Reading" });
+                if (run === this.readGeneration && repo === this.repo && context === this.contextKey)
+                    this.error = friendlyError(e, { what: "Reading" });
             } finally {
-                this.loading = false;
-                this.last = this.again ? 0 : Date.now();
-                this.again = false;
+                if (run === this.readGeneration) {
+                    this.loading = false;
+                    this.last = this.again ? 0 : Date.now();
+                    const again = this.again;
+                    this.again = false;
+                    if (again) this.refresh(cx);
+                }
                 cx.notify();
             }
         });
@@ -867,7 +909,7 @@ export default class RepoReview extends View {
 
     header(t) {
         return panelHeader(t, {
-            title: this.name,
+            title: "Review",
             readAt: this.last,
             busy: this.loading,
             onRefresh: (cx) => this.refresh(cx),
@@ -879,38 +921,25 @@ export default class RepoReview extends View {
     repoChooser(t) {
         if ((this.repos?.length ?? 0) < 2) return null;
         const current = this.repos.find((r) => r.path === this.repo);
+        const branch = current?.branch || this.branch;
         return v_flex()
             .flex_none()
+            .px(12)
+            .py(4)
             .border_b(1)
             .border_color(t.border)
             .child(
-                h_flex()
-                    .id("review-repo-pick")
-                    .h(24)
-                    .px(12)
-                    .gap(6)
-                    .items_center()
-                    .text_size(11)
-                    .text_color(t.muted)
-                    .cursor_pointer()
-                    .hover((s) => s.bg(t.hover).text_color(t.foreground))
-                    .on_click((_e, cx) => {
+                chooserRow(t, {
+                    id: "review-repo-pick",
+                    label: `${repoName(current?.path ?? this.repo)} · ${branch}`,
+                    dirty: Boolean(current?.dirty),
+                    color: t.ansi3,
+                    open: this.picking,
+                    onClick: (cx) => {
                         this.picking = !this.picking;
                         cx.notify();
-                    })
-                    .child(svg(ICON("folder")).size(11).flex_none())
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w(0)
-                            .truncate()
-                            .child(repoName(current?.path ?? this.repo)),
-                    )
-                    .child(
-                        div()
-                            .flex_none()
-                            .child(this.picking ? "▴" : "▾"),
-                    ),
+                    },
+                }),
             )
             .when(this.picking, (el) =>
                 el.child(
@@ -967,7 +996,7 @@ export default class RepoReview extends View {
             .when(!this.fixed, (el) =>
                 el.child(
                     contextCard(t, {
-                        name: this.repo.split("/").pop() || "Review",
+                        name: (this.where?.root ?? "").split("/").filter(Boolean).pop() || "Review",
                         follow: this.follow,
                         onFollow: (cx) => this.toggleFollow(cx),
                         machine: this.on ?? null,
@@ -986,8 +1015,7 @@ export default class RepoReview extends View {
                     .text_color(t.muted)
                     .border_b(1)
                     .border_color(t.border)
-                    .child(svg(ICON("branch")).size(11).flex_none())
-                    .child(div().min_w(0).truncate().child(this.branch))
+                    .child(div().flex_1())
                     .when(this.ahead > 0, (el) =>
                         el.child(div().flex_none().text_color(t.foreground).child(`↑${this.ahead}`)),
                     )
@@ -1604,6 +1632,25 @@ export default class RepoReview extends View {
 
     render(_cx) {
         const t = theme();
+        const context = viewForContext(this.contextKey, this.loadedContext, this.files, {
+            error: this.error,
+            noFolder: !this.repo || !this.where?.root,
+        });
+        if (!this.fixed && context.pending)
+            return v_flex()
+                .id("jig-review")
+                .size_full()
+                .bg(t.background)
+                .child(this.header(t))
+                .child(
+                    contextCard(t, {
+                        name: (this.where?.root ?? "").split("/").filter(Boolean).pop() || "Review",
+                        follow: this.follow,
+                        onFollow: (cx) => this.toggleFollow(cx),
+                        machine: this.on ?? null,
+                    }),
+                )
+                .child(skeleton(t));
         if (!this.fixed && !this.repo) return this.noRepo(t);
         return h_flex()
             .id("jig-review")

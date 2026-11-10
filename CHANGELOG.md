@@ -4,6 +4,18 @@
 
 ### Changed
 
+- Worktrees and Review use the kit context card and chooser row; a folder/mode switch shows the skeleton, cancels the old
+  read and starts the new one at once. Added the strict context-switch test.
+
+
+### Fixed
+
+- Worktrees and Review now key reads by machine, folder and follow mode: a switch cancels the old read, shows the kit
+  skeleton, and starts the new one at once, while a same-context refresh keeps its rows.
+
+
+### Changed
+
 - Git shows a four-row skeleton while a new machine/folder/follow mode is read, and keeps last-good rows only for a
   same-key refresh. A read that lands for an older context key is discarded.
 

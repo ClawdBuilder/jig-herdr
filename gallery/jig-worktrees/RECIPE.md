@@ -35,6 +35,9 @@ Programs: `git worktree list`, `git status`, `git rev-list`, `git reflog`, `git 
 `git branch -d`, `sh` for the script, `timeout`/`gtimeout` when present (20 s). Network: none. Files read: the repository's
 `.git` metadata and the worktree folders; the only write is the explicit Remove.
 
+A machine, folder or follow-mode switch cancels the old read, shows the kit skeleton while the new one lands, and keeps
+the previous rows only for a same-context refresh.
+
 **Header:** all git panels use one 42 px shared header: title and Refresh, whose tooltip says `Refresh · read N ago`
 (`Refresh` before the first read, `Reading…` while busy). Git, History, PR & CI, Worktrees and Review's side panel put
 the Terminal/Space switch in a 32 px context card under the header; a Review tab has title and Refresh only. An error

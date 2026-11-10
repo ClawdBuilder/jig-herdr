@@ -464,3 +464,16 @@ export function reviewLayout(width) {
         listHeight: 240,
     };
 }
+
+/** The context key: machine, folder and follow mode a read belongs to. */
+export function contextKeyOf(loc) {
+    return JSON.stringify([loc?.root ?? null, loc?.on ?? null, loc?.follow === true]);
+}
+
+/** What to draw for the shown context: rows only when the landed read belongs to that same context. */
+export function viewForContext(shownKey, readKey, rows, { error = null, noFolder = false } = {}) {
+    if (noFolder) return { rows: [], pending: false, noFolder: true };
+    if (error) return { rows: shownKey === readKey ? (rows ?? []) : [], pending: false, error: true };
+    if (shownKey !== readKey) return { rows: [], pending: true };
+    return { rows: rows ?? [], pending: false };
+}

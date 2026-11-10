@@ -9,8 +9,8 @@ focused terminal's repository, or the space's folder, with a repository chooser 
 **What you see:**
 
 A 42 px header with the repository name and Refresh. In the side panel, a 32 px context card under it names the folder,
-toggles **Terminal**/**Space**, and carries the machine; a Review tab has no card. A draggable divider
-(width remembered in the mod's localStorage) separates the file list from the right side; below 640 px the list stacks
+toggles **Terminal**/**Space**, and carries the machine; a Review tab has no card. A repository/branch chooser row (`billing-web · feature/PROJ-124`) sits under the context card when the folder holds
+several repositories. A draggable divider (width remembered in the mod's localStorage) separates the file list from the right side; below 640 px the list stacks
 above the diff in a fixed 240 px band, keeping both usable in a 380 px panel. Below 480 px the diff toolbar becomes two
 rows: the path, Diff | File | Patch switch and counts above Copy, Stage and the other file actions. The right side's own row carries the file path, the
 **Diff | File | Patch** switch, **Copy file** and **Copy path**. The left side has two mode
