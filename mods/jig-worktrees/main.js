@@ -286,7 +286,6 @@ export default class RepoWorktrees extends View {
                 }
             }
         });
-        cx.notify();
     }
 
     /** The loaded worktrees with who is at each and whether it is ready, newest commit first. Worked out on every call, so a
