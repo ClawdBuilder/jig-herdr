@@ -926,8 +926,8 @@ export default class RepoPullRequests extends View {
         const data = this.data.main;
         if (!data) return "";
         const withPr = data.repos.filter((r) => r.pr).length;
-        const onBranch = data.repos.filter((r) => ["pr", "nopr", "error", "loading"].includes(r.status)).length;
-        return `${data.repos.length} repos · ${onBranch} on branches · ${withPr} PRs`;
+        const onBranch = data.repos.filter((r) => !r.onDefault).length;
+        return `${data.repos.length} repos · ${onBranch} non-default branches · ${withPr} PRs`;
     }
 
     pickTab(id, cx) {
