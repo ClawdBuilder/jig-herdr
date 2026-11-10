@@ -1589,7 +1589,7 @@ export default class RepoChanges extends View {
             const rows = states[key];
             if (!rows.length) continue;
             const visibleGroups = specs.filter(([id]) => states[id].length).length;
-            const folded = key === "clean" && !groupOpen(this.cleanOpen, visibleGroups);
+            const folded = key === "clean" && !groupOpen(this.cleanOpen, visibleGroups - 1);
             const one = key === "changed" && groups.length === 1;
             const action =
                 key === "changed" && one

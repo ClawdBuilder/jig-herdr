@@ -36,16 +36,13 @@ import {
     prGroups,
     prRowDetail,
     REVIEW,
-    relName,
     remember,
     SCRIPT,
     shapePr,
-    shapeRuns,
     since,
     viewForContext,
     watchdog,
     workspaceRowsFor,
-    workspaceSplit,
 } from "./lib.js";
 import { panelError, panelHeader } from "./panel-header.js";
 import {
@@ -177,6 +174,7 @@ export default class RepoPullRequests extends View {
         this.showDefaults = false;
         this.showNoPr = false;
         this.showParked = false;
+        this.showMerged = false;
         this.opened = new Set();
         this.activePr = null;
         this.keys = cx.focus_handle();
@@ -344,7 +342,7 @@ export default class RepoPullRequests extends View {
     /** The pull request of one branch: `{ pr }`, `{ none }` or `{ err, auth, net }`. */
     async lookup(slug, branch, on) {
         const reply = await gh(
-            ["pr", "list", "--repo", slug, "--head", branch, "--state", "open", "--limit", "1", "--json", JSON_FIELDS],
+            ["pr", "list", "--repo", slug, "--head", branch, "--state", "all", "--limit", "1", "--json", JSON_FIELDS],
             on,
         );
         if (reply.data) return reply.data[0] ? { pr: shapePr(reply.data[0], slug) } : { none: true };
@@ -370,7 +368,15 @@ export default class RepoPullRequests extends View {
             if ((found.auth || found.net) && !fatal) fatal = found.err;
             for (const repo of repos) {
                 if (repo.slug !== job.slug || repo.branch !== job.branch) continue;
-                repo.status = found.pr ? "pr" : found.none ? "nopr" : found.notgithub ? "notgithub" : "error";
+                repo.status = found.pr
+                    ? found.pr.state === "OPEN"
+                        ? "pr"
+                        : "merged"
+                    : found.none
+                      ? "nopr"
+                      : found.notgithub
+                        ? "notgithub"
+                        : "error";
                 repo.pr = found.pr ?? null;
                 repo.err = found.err ?? null;
             }
@@ -737,14 +743,19 @@ export default class RepoPullRequests extends View {
         if (!data) return [this.note(t, this.error ? "" : "Looking for repos…")];
         const groups = prGroups(data.repos);
         const items = [];
-        const groupsShown = [groups.needs, groups.waiting, groups.ready, groups.noPr, groups.parked].filter(
-            (list) => list.length,
-        ).length;
+        const openedGroups = [
+            groups.needs,
+            groups.waiting,
+            groups.ready,
+            this.showMerged ? groups.merged : [],
+            this.showNoPr ? groups.noPr : [],
+            this.showParked ? groups.parked : [],
+        ].filter((list) => list.length).length;
         const section = (key, label, color, rows, shown, toggle) => {
             if (!rows.length) return;
-            const open = groupOpen(shown, groupsShown);
+            const open = groupOpen(shown, openedGroups);
             const action =
-                rows.length && groupsShown > 1 && key !== "needs" && key !== "waiting" && key !== "ready"
+                rows.length && openedGroups > 0 && key !== "needs" && key !== "waiting" && key !== "ready"
                     ? secondaryButton(
                           t,
                           `toggle-${key}`,
@@ -762,6 +773,10 @@ export default class RepoPullRequests extends View {
         section("needs", "Needs fixing", t.ansi1, groups.needs, true, () => {});
         section("waiting", "Waiting", t.blocked, groups.waiting, true, () => {});
         section("ready", "Ready", t.ansi2, groups.ready, true, () => {});
+        section("merged", "Merged or closed", t.muted, groups.merged, this.showMerged, (cx) => {
+            this.showMerged = !this.showMerged;
+            cx.notify();
+        });
         section("noPr", "No PR", t.muted, groups.noPr, this.showNoPr, (cx) => {
             this.showNoPr = !this.showNoPr;
             cx.notify();
@@ -781,11 +796,16 @@ export default class RepoPullRequests extends View {
         const title = pr?.title ?? repo.name;
         const detail = prRowDetail(repo);
         const chips = pr
-            ? [
-                  pill(checkSummary(pr.checks ?? []), t),
-                  pr.review ? pill(pr.review, t) : null,
-                  pr.additions || pr.deletions ? pill(`+${pr.additions} −${pr.deletions}`, t) : null,
-              ].filter(Boolean)
+            ? pr.state === "MERGED" || pr.state === "CLOSED"
+                ? [
+                      pill(pr.state === "MERGED" ? "merged" : "closed", t),
+                      pr.updated ? pill(since(pr.updated), t) : null,
+                  ].filter(Boolean)
+                : [
+                      pill(checkSummary(pr.checks ?? []), t),
+                      pr.review ? pill(pr.review, t) : null,
+                      pr.additions || pr.deletions ? pill(`+${pr.additions} −${pr.deletions}`, t) : null,
+                  ].filter(Boolean)
             : [];
         const fails = (pr?.checks ?? []).filter((c) => c.bucket === "fail");
         const details = v_flex()
@@ -816,13 +836,15 @@ export default class RepoPullRequests extends View {
             color:
                 repo.status === "error"
                     ? t.ansi1
-                    : pr
-                      ? countOf(pr, "fail")
-                          ? t.ansi1
-                          : countOf(pr, "pending")
-                            ? t.blocked
-                            : t.ansi2
-                      : t.muted,
+                    : repo.status === "merged"
+                      ? t.muted
+                      : pr
+                        ? countOf(pr, "fail")
+                            ? t.ansi1
+                            : countOf(pr, "pending")
+                              ? t.blocked
+                              : t.ansi2
+                        : t.muted,
             title,
             detail,
             chips,

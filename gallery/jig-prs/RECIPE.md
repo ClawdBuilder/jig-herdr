@@ -10,7 +10,9 @@ Pull requests and their checks for the space's folder, read through `gh`. The **
 
 A 42 px header titled **PR & CI** with Refresh. A 32 px context card under it names the folder, shows **follows the focused terminal** or **uses the space's folder**, and carries the machine pill. A full-width segmented control reads **Workspace n** and **Mine n**; a grey line counts `N repos · N non-default branches · N PRs`.
 
-Workspace groups are **Needs fixing** (`ansi1`), **Waiting** (`blocked`), **Ready** (`ansi2`), **No PR** (`muted`) and **No remote / not on GitHub** (`muted`). A foldable group has a 26 px right-aligned **Show**/**Hide** button; a lone group is open. A row is 48 px with a dot in the group colour, the PR title, and `repo · #482 · branch`; chips show `✓/×/•` check counts, the review state and `+41 −12`. A row with no PR uses the repo name as its title and just the branch in its detail (`detached` or `no upstream` where they apply). Opening a PR row lists its failing check names, then **Open on GitHub** (primary) and **Copy link** (secondary).
+Workspace groups are **Needs fixing** (`ansi1`), **Waiting** (`blocked`), **Ready** (`ansi2`), **Merged or closed**
+(`muted`), **No PR** (`muted`) and **No remote / not on GitHub** (`muted`). A merged or closed row keeps its title,
+`#34`, a `merged`/`closed` chip and its age. A default branch with no PR is a **No PR** row. A foldable group has a 26 px right-aligned **Show**/**Hide** button; a lone group is open. A row is 48 px with a dot in the group colour, the PR title, and `repo · #482 · branch`; chips show `✓/×/•` check counts, the review state and `+41 −12`. A row with no PR uses the repo name as its title and just the branch in its detail (`detached` or `no upstream` where they apply). Opening a PR row lists its failing check names, then **Open on GitHub** (primary) and **Copy link** (secondary).
 
 The 40 px footer counts open PRs and failing ones. Empty, no-git, `gh` missing, signed-out and rate-limit states are one line. `↑`/`↓` move the active row, Enter/Space opens it, Esc closes rows. While a new folder or follow mode is read, the list is a four-row skeleton.
 

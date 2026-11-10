@@ -25,22 +25,6 @@ for (const global of [
 const sleep = saved.get("setTimeout");
 
 const methods = JSON.parse(readFileSync(new URL("./element-methods.json", import.meta.url), "utf8"));
-/** A fluent chain that only knows the methods Herdr really exposes on elements. */
-function chainFor(allowed) {
-    const names = new Set(allowed);
-    const chain = new Proxy(() => chain, {
-        get: (_target, key) => {
-            if (key === "then") return undefined;
-            if (typeof key !== "string") return undefined;
-            if (!names.has(key)) throw new TypeError(`${key} is not a function`);
-            return chain;
-        },
-        apply: () => chain,
-    });
-    return chain;
-}
-const chain = chainFor(methods.NativeElement);
-
 const source = `
 const allowedElements = new Set(${JSON.stringify(methods.NativeElement)});
 const chain = new Proxy(function () {}, {

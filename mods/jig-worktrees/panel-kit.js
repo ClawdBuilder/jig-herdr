@@ -98,9 +98,9 @@ export function segmented(t, id, options, value, onPick) {
         );
 }
 
-/** A foldable group stays open when it is the only group with rows. */
-export function groupOpen(open, groupCount) {
-    return groupCount <= 1 || open;
+/** Folded groups open when no group is unfolded; otherwise only the chosen opened ones are open. */
+export function groupOpen(open, unfoldedGroups) {
+    return open || unfoldedGroups === 0;
 }
 
 export function groupHeader(t, id, label, count, color, action) {
@@ -200,7 +200,7 @@ export function contextCard(t, { name, follow, onFollow, machine }) {
         .items_center()
         .text_size(size().secondary)
         .child(svg("mods/workspace-chrome/folder.svg").size(13).flex_none().text_color(t.muted))
-        .child(div().min_w(0).truncate().font_semibold().child(name))
+        .child(div().flex_1().min_w(0).truncate().font_semibold().child(name))
         .child(
             div()
                 .id("panel-follow")
@@ -214,7 +214,7 @@ export function contextCard(t, { name, follow, onFollow, machine }) {
                 })
                 .child(follow ? "follows the focused terminal" : "uses the space's folder"),
         )
-        .when(Boolean(machine), (el) => el.child(div().flex_1().justify_end().child(pill(machine, t))));
+        .when(Boolean(machine), (el) => el.child(div().flex_none().justify_end().child(pill(machine, t))));
 }
 
 export function footer(t, { summary, color, action }) {
