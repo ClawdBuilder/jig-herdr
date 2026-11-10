@@ -222,7 +222,9 @@ export function readAgo(now, at) {
 /** One sentence for a failed git/gh read. `follow` adds the folder-panel switch hint. */
 export function friendlyError(result, { what = "Reading", follow = false } = {}) {
     const text = String(result?.stderr ?? result?.stdout ?? result?.message ?? result ?? "").trim();
-    const first = text.split("\n").find(Boolean) ?? "";
+    const lines = text.split("\n").filter(Boolean);
+    const first =
+        lines.find((line) => /^(?:! \[rejected\]|error:|fatal:|remote:)/i.test(line.trim())) ?? lines[0] ?? "";
     const seconds = Number(result?.seconds) || 20;
     const cmd = result?.cmd;
     if (result?.timedOut || result?.code === 124)
