@@ -141,9 +141,40 @@ test("History: A to B drops A and reads B", async () => {
     runKick(view, cx, timers);
     await flush();
     assert.equal(view.repo?.startsWith(a), false);
+    assert.equal(view.commits, null, "A's commits are dropped before B lands");
     assert.ok(bLog, "History asked for B");
     bLog!({ code: 0, stdout: histLog("B commit"), stderr: "" });
     await flush();
     assert.equal(JSON.stringify(view.commits).includes("A commit"), false);
     assert.equal(JSON.stringify(view.commits).includes("B commit"), true);
+});
+
+const prDiscovery = (root: string) =>
+    `@single\n${root}/repo\tfeat/${root.includes("pr-b") ? "b" : "a"}\thttps://github.com/o/r.git\tmain\t`;
+const prReply = (title: string) =>
+    JSON.stringify([{ number: 1, title, url: "https://github.com/o/r/pull/1", state: "OPEN", headRefName: "feat/x" }]);
+test("PR & CI: A to B drops A and reads B", async () => {
+    const a = "/tmp/pr-a";
+    const b = "/tmp/pr-b";
+    const ctx = context(a);
+    let resolveB: ((value: any) => void) | null = null;
+    ctx.exec = async (cmd: string, args: string[]) => {
+        if (cmd === "sh" && args[3] === "gh") {
+            if (args.includes("feat/b")) return new Promise((resolve) => (resolveB = resolve));
+            return { code: 0, stdout: prReply("A PR"), stderr: "" };
+        }
+        return { code: 0, stdout: prDiscovery(args[3] ?? a), stderr: "" };
+    };
+    const { view, cx, timers } = await load("jig-prs");
+    await flush();
+    switchTo(ctx, b);
+    view.render(cx);
+    runKick(view, cx, timers);
+    await flush();
+    assert.equal(JSON.stringify(view.data).includes("A PR"), false);
+    assert.ok(resolveB, "PR & CI asked for B");
+    resolveB!({ code: 0, stdout: prReply("B PR"), stderr: "" });
+    await flush();
+    assert.equal(JSON.stringify(view.data).includes("B PR"), true);
+    assert.equal(JSON.stringify(view.data).includes("A PR"), false);
 });
