@@ -1,4 +1,4 @@
-import { execBudget, friendlyError, parseRefreshConfig } from "./refresh.js";
+import { execBudget, friendlyError, parseRefreshConfig, reasonLine } from "./refresh.js";
 
 export { execBudget };
 
@@ -595,7 +595,7 @@ export function busyAgents(checkout, panes, others = []) {
 // Each takes `exec(cmd, args, { cwd })` (Herdr's exec, or child_process in the tests) and returns { ok, message }.
 // None of them uses --force, -D, reset, --discard-changes, --amend, --no-verify or push; a refusal runs no write.
 
-const firstLine = (r) => (r.stderr || r.stdout || `git exited with ${r.code}`).trim().split("\n")[0];
+const firstLine = (r) => reasonLine(r) || `git exited with ${r.code}`;
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const git = (exec, cwd, extra) => (args) => exec("git", args, { cwd, ...extra });
 /** File names are never patterns: `*.ts` names the file called `*.ts`. */

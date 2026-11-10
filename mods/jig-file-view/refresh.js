@@ -219,12 +219,18 @@ export function readAgo(now, at) {
     return `${Math.round(hours / 24)}d`;
 }
 
+/** The line worth showing from git/gh output: a real reason before the first line, never a `hint:` when another exists. */
+export function reasonLine(result) {
+    const text = String(result?.stderr ?? result?.stdout ?? result?.message ?? result ?? "").trim();
+    const lines = text.split("\n").filter(Boolean);
+    const said = lines.find((line) => /^(?:! \[rejected\]|error:|fatal:|remote:)/i.test(line.trim()));
+    return (said ?? lines.find((line) => !/^hint:/i.test(line.trim())) ?? lines[0] ?? "").trim();
+}
+
 /** One sentence for a failed git/gh read. `follow` adds the folder-panel switch hint. */
 export function friendlyError(result, { what = "Reading", follow = false } = {}) {
     const text = String(result?.stderr ?? result?.stdout ?? result?.message ?? result ?? "").trim();
-    const lines = text.split("\n").filter(Boolean);
-    const first =
-        lines.find((line) => /^(?:! \[rejected\]|error:|fatal:|remote:)/i.test(line.trim())) ?? lines[0] ?? "";
+    const first = reasonLine(result);
     const seconds = Number(result?.seconds) || 20;
     const cmd = result?.cmd;
     if (result?.timedOut || result?.code === 124)
