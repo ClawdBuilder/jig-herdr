@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- Review comments on selected diff lines, kept per repository and scope and sent as one message to the focused or
+  last-focused agent when it is idle; the app never uses `--force` and keeps a failed review.
+
+
 ### Fixed
 
 - PR & CI no longer asks GitHub about local-path remotes or known non-GitHub hosts: those repositories are parked as

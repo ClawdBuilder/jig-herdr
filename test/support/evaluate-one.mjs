@@ -32,6 +32,8 @@ export const h_flex = chain, v_flex = chain, h_resizable = chain, resizable_pane
 export const div = chain, svg = chain, image = chain;
 export class View { constructor() {} }
 export class Input {}
+export class Textarea {}
+export class TextareaState { static new() { return { on() {}, value() { return ""; }, set_value() {}, focus() {}, blur() {} }; } }
 export class InputState { static new() { return { on() {}, value() { return ""; }, focus() {}, blur() {} }; } }
 export class Editor {}
 export class EditorState { static new() { return { on() {} }; } }
@@ -46,7 +48,7 @@ export const exec = async (_cmd, _args, options = {}) => {
     globalThis.__jigExecOptions = options;
     return { code: 0, stdout: "", stderr: "" };
 };
-export const focused = () => ({ cwd: "/tmp/jig-eval" }), home = "/tmp", layout = () => ({ children: [] });
+export const hc = async () => ({ code: 0, stdout: "", stderr: "" }), focused = () => ({ cwd: "/tmp/jig-eval" }), home = "/tmp", layout = () => ({ children: [] });
 export const nextCommand = () => new Promise(() => {});
 export const notify = noop, openOverlay = noop, panes = empty, props = () => ({}), readTextFile = async () => null;
 export const run = async () => ({}), setShared = noop, settings = () => ({}), shared = () => undefined;

@@ -58,7 +58,8 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
 - **Review.** A 280 px list of the repository's changed files on the left, and on the right a 32 px header (path,
   `+added`, `−removed`, `Stage` or `Unstage`, `Discard…`, `‹` `›`) over the diff. Opened as a tab it has a fixed repository;
   dropped into the side panel with no `repo` prop it follows the focused terminal's repository, with the Terminal/Space
-  switch and a chooser when the folder holds several; below 640 px the list stacks over the diff: 20 px rows, a hunk header row on `surface` in `ansi6`, a 3 px bar at the left
+  switch and a chooser when the folder holds several. Comments on selected lines are kept per repository and scope and
+  sent as one message to an idle agent; below 640 px the list stacks over the diff: 20 px rows, a hunk header row on `surface` in `ansi6`, a 3 px bar at the left
   edge of each changed line, added lines tinted with `ansi2` at 16 % and removed lines with `ansi1` at 22 %.
 - **Colours.** The theme `jig-lime`, from the palette: window `#0A0A0A`, bars `#000000`, text `#E4E8DD`, accent `#C4F36B`.
   Fonts and sizes are Herdr's.

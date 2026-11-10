@@ -363,3 +363,44 @@ export function chooseRepo(repos, current, remembered) {
 
 /** A tab keeps the repository it was opened for; the side panel uses the followed one. */
 export const repositoryFor = (props, followed) => props?.repo || followed || "";
+
+/** The localStorage key for comments in one repository and review scope. */
+export const commentsKey = (repo, scope) => `review.comments|${repo}|${scope}`;
+
+/** Parse a stored comment list; anything malformed is ignored so a bad entry cannot break the panel. */
+export function parseComments(raw) {
+    try {
+        const list = JSON.parse(raw ?? "[]");
+        if (!Array.isArray(list)) return [];
+        return list.filter(
+            (c) =>
+                c &&
+                typeof c === "object" &&
+                typeof c.file === "string" &&
+                Number.isInteger(c.rowStart) &&
+                Number.isInteger(c.rowEnd) &&
+                typeof c.note === "string",
+        );
+    } catch {
+        return [];
+    }
+}
+
+export const addComment = (comments, comment) => [...comments, comment];
+export const removeComment = (comments, id) => comments.filter((comment) => comment.id !== id);
+
+/** The comments under one file, in row order. */
+export const commentsInFile = (comments, file) => comments.filter((comment) => comment.file === file);
+
+/** One message for the agent: repository, scope, then each file, range, quoted lines and note. */
+export function buildReviewMessage({ repo, scope, comments }) {
+    const lines = [`Review comments for ${repo}`, `Scope: ${scope}`];
+    for (const comment of comments) {
+        const range =
+            comment.startLine === comment.endLine
+                ? `${comment.file}:${comment.startLine}`
+                : `${comment.file}:${comment.startLine}–${comment.endLine}`;
+        lines.push("", range, ...comment.quote.map((line) => `> ${line}`), `Note: ${comment.note.trim()}`);
+    }
+    return lines.join("\n");
+}

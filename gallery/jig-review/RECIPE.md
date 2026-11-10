@@ -16,6 +16,12 @@ above the diff instead, keeping both usable in a 380 px panel. The right side's 
 buttons, **Working changes** and **Branch vs <base>**, shown when both have something to show. The right side is tinted diff
 rows, the whole file, or the raw patch in a read-only code editor; the footer says how many lines are selected.
 
+Click a diff line, Shift-click to extend, then **Comment** for an inline note. Notes are kept per repository and scope
+in localStorage, count in the header (`Comments 3`), and sit above the diff until sent. **Send review (3)** sends one
+message to the focused agent of the space, else the last-focused one: the repository, scope, then each file and line
+range with the quoted lines and the note. A working agent makes the button **Send when idle**; it waits for idle and never
+passes `--force`. A failed send keeps the comments and shows the error.
+
 **How it behaves:**
 
 Click a file to show its diff, click a line to select it, Shift-click to extend, Escape to clear. `Ctrl+C`/`Cmd+C` or **Copy
