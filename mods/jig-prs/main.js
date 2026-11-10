@@ -51,6 +51,7 @@ import {
     contextCard,
     footer,
     groupHeader,
+    groupOpen,
     moveActive,
     pill,
     primaryButton,
@@ -735,23 +736,26 @@ export default class RepoPullRequests extends View {
         if (!data) return [this.note(t, this.error ? "" : "Looking for repos…")];
         const groups = prGroups(data.repos);
         const items = [];
+        const groupsShown = [groups.needs, groups.waiting, groups.ready, groups.noPr, groups.parked].filter(
+            (list) => list.length,
+        ).length;
         const section = (key, label, color, rows, shown, toggle) => {
             if (!rows.length) return;
-            items.push(groupHeader(t, key, label, rows.length, color, null));
-            if (shown === false) {
-                items.push(
-                    secondaryButton(
-                        t,
-                        `toggle-${key}`,
-                        "Show",
-                        (cx) => {
-                            toggle(cx);
-                        },
-                        { h: 26 },
-                    ),
-                );
-                return;
-            }
+            const open = groupOpen(shown, groupsShown);
+            const action =
+                rows.length && groupsShown > 1 && key !== "needs" && key !== "waiting" && key !== "ready"
+                    ? secondaryButton(
+                          t,
+                          `toggle-${key}`,
+                          open ? "Hide" : "Show",
+                          (cx) => {
+                              toggle(cx);
+                          },
+                          { h: 26 },
+                      )
+                    : null;
+            items.push(groupHeader(t, key, label, rows.length, color, action));
+            if (!open) return;
             for (const repo of rows) items.push(this.prKitRow(t, repo));
         };
         section("needs", "Needs fixing", t.ansi1, groups.needs, true, () => {});

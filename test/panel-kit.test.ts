@@ -166,3 +166,9 @@ test("PR workspace with local or non-GitHub remotes lands parked, never loading"
         ["orders-api", "gitlab-web"],
     );
 });
+
+test("the kit's group rule opens a lone folded group", () => {
+    const kit = readFileSync(path.join(mods, "jig-git/panel-kit.js"), "utf8");
+    assert.match(kit, /export function groupOpen\(open, groupCount\) \{\s*return groupCount <= 1 \|\| open;/);
+    assert.match(readFileSync(path.join(mods, "jig-prs/main.js"), "utf8"), /groupOpen\(shown, groupsShown\)/);
+});

@@ -858,7 +858,11 @@ export default class RepoHistory extends View {
                     .min_w(0)
                     .truncate()
                     .font_semibold()
-                    .child(current ? relName(current.path, this.where.root) : (this.reposError ?? "No repo")),
+                    .child(
+                        current
+                            ? `${relName(current.path, this.where.root)}${current.branch ? ` · ${current.branch}` : ""}`
+                            : (this.reposError ?? "No repo"),
+                    ),
             )
             .when(Boolean(current?.dirty), (el) => el.child(div().flex_none().w(8).h(8).rounded(8).bg(hue(3))))
             .child(
@@ -958,9 +962,9 @@ export default class RepoHistory extends View {
             )
             .child(
                 contextCard(t, {
-                    name: `${this.repo ? (this.repo.split(/[\\/]/).filter(Boolean).pop() ?? "History") : "History"}${
-                        (this.branchFilter ?? headBranch) ? ` · ${this.branchFilter ?? headBranch}` : ""
-                    }`,
+                    name: this.where?.root
+                        ? (this.where.root.split(/[\\/]/).filter(Boolean).pop() ?? "History")
+                        : "History",
                     follow,
                     onFollow: (cx) => {
                         writeFollow(spaceId, !follow);
@@ -1101,7 +1105,7 @@ export default class RepoHistory extends View {
         const hue = (i) => (i === null ? t.muted : palette[i % palette.length]);
         const query = this.filterBox.value();
         const width = laneColumns(Math.max(1, ...(this.rows ?? []).map((r) => r.width)));
-        const hasChooser = !this.single && (this.repos?.length ?? 0) > 0;
+        const hasChooser = !this.single && (this.repos?.length ?? 0) > 1;
         const choosing = hasChooser && this.picking;
         const state = viewForContext(this.contextKey, this.loadedContext, this.commits ?? [], {
             error: this.error,
