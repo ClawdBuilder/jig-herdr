@@ -87,6 +87,7 @@ import {
     emptyLine,
     footer,
     groupHeader,
+    moveActive,
     primaryButton,
     row,
     secondaryButton,
@@ -225,6 +226,7 @@ export default class RepoChanges extends View {
         this.folds = foldMap(shared(FOLD_KEY));
         this.cleanOpen = false;
         this.hover = null; // the checkout row under the pointer
+        this.activeRepo = null; // the keyboard-active checkout
         this.hoverFile = null; // the file row under the pointer
         this.confirm = null; // { key, repo, file, kind }: a discard waiting for its second click
         this.fetching = false; // the header's Fetch every repo
@@ -1494,6 +1496,7 @@ export default class RepoChanges extends View {
         return row(t, {
             id: repo.path,
             color,
+            active: this.activeRepo === repo.path,
             title: `${"  ".repeat(nested ? 1 : 0)}${rowName(repo, { main: nested ? group.main : null, dir }).name}`,
             detail,
             open,
@@ -1776,6 +1779,27 @@ export default class RepoChanges extends View {
                     .min_h(0)
                     .p(6)
                     .overflow_y_scrollbar()
+                    .track_focus(this.keys)
+                    .on_key_down((e, cx) => {
+                        const ids = Object.values(groupCheckouts(this.repos))
+                            .flat()
+                            .map((r) => r.path);
+                        if (e.key === "up" || e.key === "down") {
+                            this.activeRepo = moveActive(ids, this.activeRepo, e.key === "up" ? -1 : 1);
+                            cx.stop_propagation();
+                            cx.notify();
+                        } else if ((e.key === "enter" || e.key === "space") && this.activeRepo) {
+                            if (this.opened.has(this.activeRepo)) this.opened.delete(this.activeRepo);
+                            else this.opened.add(this.activeRepo);
+                            cx.stop_propagation();
+                            cx.notify();
+                        } else if (e.key === "escape") {
+                            this.opened.clear();
+                            this.activeRepo = null;
+                            cx.stop_propagation();
+                            cx.notify();
+                        }
+                    })
                     .when(Boolean(empty), (el) =>
                         el.child(
                             v_flex()
