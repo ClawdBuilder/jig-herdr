@@ -35,8 +35,13 @@ test("Worktrees: A to B drops A and reads B", async () => {
     const b = "/tmp/wt-b";
     const ctx = context(a);
     const calls: string[][] = [];
+    let resolveB: ((value: any) => void) | null = null;
     ctx.exec = async (cmd: string, args: string[]) => {
         calls.push(args);
+        if (cmd === "sh" && args[3] === b)
+            return new Promise((resolve) => {
+                resolveB = resolve;
+            });
         return { code: 0, stdout: cmd === "sh" ? worktrees(args[3] ?? ctx.folder) : "", stderr: "" };
     };
     const { view, cx, timers } = await load("jig-worktrees");
@@ -44,6 +49,9 @@ test("Worktrees: A to B drops A and reads B", async () => {
     switchTo(ctx, b);
     view.render(cx);
     runKick(view, cx, timers);
+    await flush();
+    assert.equal(view.trees, null, "the old rows are dropped before B lands");
+    resolveB!({ code: 0, stdout: worktrees(b), stderr: "" });
     await flush();
     assert.equal(view.loadedContext, view.contextKey);
     assert.equal(
@@ -107,4 +115,35 @@ test("Worktrees: five renders start one read and identical reads do not notify",
     view.load(cx);
     await flush();
     assert.equal(notifies.count, before);
+});
+
+const histLog = (subject: string) => `aaaa\x1f\x1fAnn\x1f2026-01-01T00:00:00Z\x1f\x1f${subject}\n`;
+const histRepo = (root: string) => `${root}\tmain\tmain\t0`;
+test("History: A to B drops A and reads B", async () => {
+    const a = "/tmp/hist-a";
+    const b = "/tmp/hist-b";
+    const ctx = context(a);
+    const calls: string[][] = [];
+    let bLog: ((value: any) => void) | null = null;
+    ctx.exec = async (cmd: string, args: string[], options: any = {}) => {
+        calls.push(args);
+        if (cmd === "sh") return { code: 0, stdout: `@single\n${histRepo(args[3] ?? a)}`, stderr: "" };
+        if (args.includes("log")) {
+            if ((options.cwd ?? "").includes("hist-b")) return new Promise((resolve) => (bLog = resolve));
+            return { code: 0, stdout: histLog("A commit"), stderr: "" };
+        }
+        return { code: 0, stdout: "", stderr: "" };
+    };
+    const { view, cx, timers } = await load("jig-history");
+    await flush();
+    switchTo(ctx, b);
+    view.render(cx);
+    runKick(view, cx, timers);
+    await flush();
+    assert.equal(view.repo?.startsWith(a), false);
+    assert.ok(bLog, "History asked for B");
+    bLog!({ code: 0, stdout: histLog("B commit"), stderr: "" });
+    await flush();
+    assert.equal(JSON.stringify(view.commits).includes("A commit"), false);
+    assert.equal(JSON.stringify(view.commits).includes("B commit"), true);
 });
