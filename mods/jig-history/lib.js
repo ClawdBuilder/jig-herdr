@@ -349,3 +349,8 @@ export function moveBranch(rows, active, delta) {
 
 /** The branch header's click: open the list, or close it. Kept pure so the handler has a test. */
 export const toggleBranchPicker = (open) => !open;
+
+/** The context key: machine, folder and follow mode a read belongs to. */
+export function contextKeyOf(where) {
+    return JSON.stringify([where?.root ?? null, where?.on ?? null, where?.follow === true]);
+}

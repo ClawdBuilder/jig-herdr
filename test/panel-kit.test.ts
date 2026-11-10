@@ -145,3 +145,24 @@ test("PR groups put failures first, pending next, green+approved ready and non-P
         parked: ["parked"],
     });
 });
+
+test("PR workspace with local or non-GitHub remotes lands parked, never loading", async () => {
+    const { parseRepos } = await load<Record<string, any>>("mods/jig-prs/lib.js");
+    const { prGroups, workspaceRowsFor } = await load<Record<string, any>>("mods/jig-prs/lib.js");
+    const discovery = parseRepos(`@single
+/tmp/demo/orders-api	feature/X	/tmp/demo/origins/orders-api.git	main
+/tmp/demo/gitlab-web	main	https://gitlab.com/acme/web.git	main`);
+    const rows = workspaceRowsFor(discovery, "/tmp/demo");
+    assert.deepEqual(
+        rows.map((r: any) => r.status),
+        ["noremote", "noremote"],
+    );
+    assert.equal(
+        rows.some((r: any) => r.status === "loading"),
+        false,
+    );
+    assert.deepEqual(
+        prGroups(rows).parked.map((r: any) => r.name),
+        ["orders-api", "gitlab-web"],
+    );
+});

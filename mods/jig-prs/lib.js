@@ -334,3 +334,18 @@ export function watchdog(after, timeout) {
 
 /** A stale load may not write: only the current generation wins. */
 export const currentGeneration = (started, current) => started === current;
+
+/** The context key: machine, folder and follow mode a read belongs to. */
+export function contextKeyOf(where) {
+    return JSON.stringify([where?.root ?? null, where?.on ?? null, where?.follow === true]);
+}
+
+/** The Workspace rows a discovery starts with: a repo with no GitHub slug is parked, never left loading. */
+export function workspaceRowsFor(discovery, root) {
+    return (discovery?.repos ?? []).map((repo) => {
+        let status = "loading";
+        if (!repo.slug) status = "noremote";
+        else if (repo.onDefault) status = "default";
+        return { ...repo, name: relName(repo.path, root), status, pr: null, err: null };
+    });
+}

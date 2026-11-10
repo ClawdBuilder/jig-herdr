@@ -27,6 +27,7 @@ import {
     branchKey,
     colourSeed,
     commitMatches,
+    contextKeyOf,
     FORMAT,
     hiddenOriginCount,
     initialsOf,
@@ -47,7 +48,7 @@ import {
     visibleBranches,
 } from "./lib.js";
 import { panelError, panelHeader, ROW_FONT } from "./panel-header.js";
-import { contextCard, segmented } from "./panel-kit.js";
+import { contextCard, segmented, skeleton } from "./panel-kit.js";
 import {
     focusRegained,
     friendlyError,
@@ -208,7 +209,8 @@ export default class RepoHistory extends View {
     /** A new folder or machine: forget what was shown. */
     enter(where) {
         this.where = where;
-        this.contextKey = JSON.stringify([where.root, where.on]);
+        this.contextKey = contextKeyOf(where);
+        this.loadedContext = null;
         this.generation = (this.generation ?? 0) + 1;
         this.repos = null;
         this.single = false;
@@ -498,6 +500,7 @@ export default class RepoHistory extends View {
         const cwd = this.repo;
         const on = this.where.on;
         const key = this.logKey();
+        const contextKey = this.contextKey;
         const logArgs = [
             "--no-optional-locks",
             "log",
@@ -520,7 +523,7 @@ export default class RepoHistory extends View {
                     runCommand(exec, "git", logArgs, { cwd, on }),
                     runCommand(exec, "git", statusArgs, { cwd, on }),
                 ]);
-                if (run !== this.logGeneration) return;
+                if (run !== this.logGeneration || contextKey !== this.contextKey) return;
                 if (key !== this.logKey()) return;
                 if (log.code !== 0) {
                     this.error = friendlyError(log, { what: "Reading", follow: true }) || "git log failed.";
@@ -532,6 +535,7 @@ export default class RepoHistory extends View {
                 this.uncommitted = status.code === 0 ? status.stdout.split("\n").filter(Boolean).length : 0;
                 this.logAt = Date.now();
                 this.logFor = key;
+                this.loadedContext = contextKey;
             } catch (e) {
                 if (run === this.logGeneration) {
                     this.error = String(e?.message ?? e);
@@ -1077,6 +1081,21 @@ export default class RepoHistory extends View {
         const width = laneColumns(Math.max(1, ...(this.rows ?? []).map((r) => r.width)));
         const hasChooser = !this.single && (this.repos?.length ?? 0) > 0;
         const choosing = hasChooser && this.picking;
+        if (this.loadedContext !== this.contextKey) {
+            return v_flex()
+                .id("history")
+                .size_full()
+                .min_h(0)
+                .rounded(10)
+                .overflow_hidden()
+                .bg(t.background)
+                .border_1()
+                .border_color(t.border)
+                .text_color(t.foreground)
+                .text_size(13)
+                .child(this.header(t, hue, hasChooser))
+                .child(skeleton(t));
+        }
         const banner = h_flex()
             .flex_none()
             .h(28)

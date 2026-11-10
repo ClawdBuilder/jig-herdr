@@ -24,6 +24,7 @@ import {
     checkCount,
     checkSummary,
     checksOf,
+    contextKeyOf,
     countOf,
     currentGeneration,
     ghError,
@@ -41,6 +42,7 @@ import {
     shapeRuns,
     since,
     watchdog,
+    workspaceRowsFor,
     workspaceSplit,
 } from "./lib.js";
 import { panelError, panelHeader } from "./panel-header.js";
@@ -54,6 +56,7 @@ import {
     row,
     secondaryButton,
     segmented,
+    skeleton,
 } from "./panel-kit.js";
 import {
     focusRegained,
@@ -199,7 +202,8 @@ export default class RepoPullRequests extends View {
     /** A new folder or machine: forget what was shown and take what the cache has for it. */
     enter(where) {
         this.where = where;
-        this.contextKey = JSON.stringify([where.root, where.on]);
+        this.contextKey = contextKeyOf(where);
+        this.loadedContext = null;
         this.error = null;
         this.data = {};
         this.loadedAt = {};
@@ -213,6 +217,7 @@ export default class RepoPullRequests extends View {
                 this.loadedAt[tab] = cached.at;
             }
         }
+        if (Object.keys(this.data).length) this.loadedContext = this.contextKey;
     }
 
     cacheKey(tab) {
@@ -304,6 +309,7 @@ export default class RepoPullRequests extends View {
                     this.error = null;
                     if (!currentGeneration(generation, this.generation)) return;
                     this.data[tab] = data;
+                    this.loadedContext = contextKey;
                     this.loadedAt[tab] = Date.now();
                     saveCache(remember(this.cache, this.cacheKey(tab), data));
                 })();
@@ -340,12 +346,7 @@ export default class RepoPullRequests extends View {
     /** Workspace tab: each repository on a feature branch gets its branch's pull request and checks. The rows appear at
      * once as "Looking up…" and fill in as the calls return. */
     async loadWorkspace(cx, discovery, root, contextKey) {
-        const repos = discovery.repos.map((repo) => {
-            let status = "loading";
-            if (!repo.slug) status = "noremote";
-            else if (repo.onDefault) status = "default";
-            return { ...repo, name: relName(repo.path, root), status, pr: null, err: null };
-        });
+        const repos = workspaceRowsFor(discovery, root);
         const data = { repos };
         this.data.main = data;
         cx.notify();
@@ -926,7 +927,8 @@ export default class RepoPullRequests extends View {
     render(_cx) {
         const t = theme();
         let rows;
-        if (!this.where.root) rows = [this.note(t, "No folder.")];
+        if (this.loadedContext !== this.contextKey) rows = [skeleton(t)];
+        else if (!this.where.root) rows = [this.note(t, "No folder.")];
         else if (this.single) rows = this.oneRepoRows(t);
         else rows = this.tab === "mine" ? this.mineRows(t) : this.workspaceRows(t);
 
