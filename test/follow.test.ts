@@ -16,7 +16,7 @@ import { readFileSync } from "node:fs";
 test("every panel carries the same checked copy of the follow helper", () => {
     const root = new URL("../mods/", import.meta.url);
     const source = readFileSync(new URL("jig-git/follow.js", root), "utf8");
-    for (const mod of ["jig-history", "jig-prs", "jig-worktrees"])
+    for (const mod of ["jig-history", "jig-prs", "jig-worktrees", "jig-review"])
         assert.equal(
             readFileSync(new URL(`${mod}/follow.js`, root), "utf8"),
             source,

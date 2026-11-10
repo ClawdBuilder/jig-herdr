@@ -55,8 +55,10 @@ Left to right, top to bottom, in a window with no system title bar (`titlebar: n
   checkbox (ticked on `accent` when staged, `–` when partly), a letter (`M` in `blocked`, `A` and `??` in `ansi2`, `D` and `U`
   in `ansi1`, `R` in `ansi5`) and the path with its folders dimmed; then, when some are staged, a `Commit message` box,
   `Commit N` and `Commit & Push`. Last, a `Clean (N)` group, folded.
-- **Review tab.** A 280 px list of the repository's changed files on the left, and on the right a 32 px header (path,
-  `+added`, `−removed`, `Stage` or `Unstage`, `Discard…`, `‹` `›`) over the diff: 20 px rows, a hunk header row on `surface` in `ansi6`, a 3 px bar at the left
+- **Review.** A 280 px list of the repository's changed files on the left, and on the right a 32 px header (path,
+  `+added`, `−removed`, `Stage` or `Unstage`, `Discard…`, `‹` `›`) over the diff. Opened as a tab it has a fixed repository;
+  dropped into the side panel with no `repo` prop it follows the focused terminal's repository, with the Terminal/Space
+  switch and a chooser when the folder holds several; below 640 px the list stacks over the diff: 20 px rows, a hunk header row on `surface` in `ansi6`, a 3 px bar at the left
   edge of each changed line, added lines tinted with `ansi2` at 16 % and removed lines with `ansi1` at 22 %.
 - **Colours.** The theme `jig-lime`, from the palette: window `#0A0A0A`, bars `#000000`, text `#E4E8DD`, accent `#C4F36B`.
   Fonts and sizes are Herdr's.
@@ -194,7 +196,8 @@ The mods, all in `mods/`, each with `mod.json` `{ "place": "none", "title": "...
   `follow-state.js`, the SVG icons and `config.json`.
 - **`jig-review`** (props `{ on, repo, name, file? }` from `tab.new`; read them with `props()`). `exec("git", ...)` and
   `readTextFile` with `{ on }`; `v_virtual_list` and `Scrollbar` from `gpui-base`. Its `lib.js` copies the stage, unstage
-  and discard functions of `jig-git`. Files: `main.js`, `lib.js`, `refresh.js`, `panel-header.js`.
+  and discard functions of `jig-git`. Files: `main.js`, `lib.js`, `refresh.js`, `panel-header.js`, `follow.js`,
+  `follow-state.js`.
 - **`jig-history`** (props: none). `exec("sh", ["-c", SCRIPT, "sh", root], { on })` for the repositories, `exec("git", ...,
   { cwd, on })` for `log`, `status` and `show`, `run("terminal.open", ...)` for a diff. `InputState` and `Input` from
   `gpui-base` for the filter and the picker. Files: `main.js`, `lib.js`, `refresh.js`, `panel-header.js`, `follow.js`,

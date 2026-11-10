@@ -6,6 +6,8 @@
 
 - PR & CI no longer asks GitHub about local-path remotes or known non-GitHub hosts: those repositories are parked as
   "no remote". A GraphQL "Could not resolve to a Repository" answer parks as "not on GitHub" instead of the red error line.
+- Review in the side panel now follows the focused terminal's repository, offers the Terminal/Space switch and a repository
+  chooser, says where to start when no repository exists, and stacks the file list over the diff below 640 px.
 
 - Listing recipes now match the built panels: Review's header is title and Refresh (Copy and Diff/File/Patch are body
   controls), History's title is the chosen branch under its repository chooser, and keep-awake separates its shared

@@ -304,3 +304,62 @@ export function branchFiles(committed, working) {
     const seen = new Set(committed.map((f) => f.path));
     return [...committed, ...working.filter((f) => f.fresh && !seen.has(f.path))].slice(0, CAP);
 }
+
+/** Finds git repositories under a folder, and their branch, for the side panel's repository chooser. */
+export const REPO_SCRIPT = `root=$1
+top=$(git -C "$root" rev-parse --show-toplevel 2>/dev/null)
+find_repos() {
+  for a in "$root"/*/; do
+    case $a in */node_modules/) continue;; esac
+    if [ -e "$a.git" ]; then echo "$a"; continue; fi
+    for b in "$a"*/; do
+      case $b in */node_modules/) continue;; esac
+      if [ -e "$b.git" ]; then echo "$b"; continue; fi
+      for c in "$b"*/; do
+        case $c in */node_modules/) continue;; esac
+        [ -e "$c.git" ] && echo "$c"
+      done
+    done
+  done
+}
+info() {
+  br=$(git -C "$1" symbolic-ref --short -q HEAD 2>/dev/null || echo "(detached)")
+  if [ -d "$1/.git" ]; then kind=m; else kind=w; fi
+  if [ -n "$(git -C "$1" --no-optional-locks -c core.fsmonitor=false status --porcelain 2>/dev/null | head -n1)" ]; then dirty=1; else dirty=0; fi
+  printf '%s\\t%s\\t%s\\t%s\\n' "$1" "$kind" "$br" "$dirty"
+}
+tmp=$(mktemp -d) || exit 1
+trap 'rm -rf "$tmp"' EXIT
+if [ -n "$top" ]; then echo "$top" > "$tmp/list"; echo "@single"; else find_repos > "$tmp/list"; fi
+n=0
+while IFS= read -r repo; do
+  repo=\${repo%/}
+  info "$repo" > "$tmp/$n.out" &
+  n=$((n + 1))
+  [ $((n % 8)) -eq 0 ] && wait
+done < "$tmp/list"
+wait
+i=0
+while [ $i -lt $n ]; do cat "$tmp/$i.out"; i=$((i + 1)); done`;
+
+/** `REPO_SCRIPT` output as `{ single, repos: [{ path, linked, branch, dirty }] }`. */
+export function parseRepoList(stdout) {
+    const lines = stdout.split("\n").filter(Boolean);
+    const repos = lines
+        .filter((line) => !line.startsWith("@"))
+        .map((line) => {
+            const [path, kind, branch, dirty] = line.split("\t");
+            return { path, linked: kind === "w", branch, dirty: dirty === "1" };
+        });
+    repos.sort((a, b) => Number(a.linked) - Number(b.linked));
+    return { single: lines[0] === "@single", repos };
+}
+
+/** Keep the repository on screen, else the remembered one, else one with changes, else the first. */
+export function chooseRepo(repos, current, remembered) {
+    const known = (path) => repos.find((repo) => repo.path === path)?.path;
+    return known(current) ?? known(remembered) ?? repos.find((repo) => repo.dirty)?.path ?? repos[0]?.path ?? null;
+}
+
+/** A tab keeps the repository it was opened for; the side panel uses the followed one. */
+export const repositoryFor = (props, followed) => props?.repo || followed || "";
