@@ -11,7 +11,8 @@ focused terminal's repository, or the space's folder, with a repository chooser 
 A 42 px header with the repository name and Refresh. In the side panel, a 32 px context card under it names the folder,
 toggles **Terminal**/**Space**, and carries the machine; a Review tab has no card. A draggable divider
 (width remembered in the mod's localStorage) separates the file list from the right side; below 640 px the list stacks
-above the diff instead, keeping both usable in a 380 px panel. The right side's own row carries the file path, the
+above the diff in a fixed 240 px band, keeping both usable in a 380 px panel. Below 480 px the diff toolbar becomes two
+rows: the path, Diff | File | Patch switch and counts above Copy, Stage and the other file actions. The right side's own row carries the file path, the
 **Diff | File | Patch** switch, **Copy file** and **Copy path**. The left side has two mode
 buttons, **Working changes** and **Branch vs <base>**, shown when both have something to show. The right side is tinted diff
 rows, the whole file, or the raw patch in a read-only code editor; the footer says how many lines are selected.

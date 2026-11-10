@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Review fits a 380 px side panel: the file list keeps its 240 px band when stacked, and below 480 px the diff toolbar
+  splits into two rows so counts, copy and stage actions are not clipped.
+
+
 ### Added
 
 - Review comments on selected diff lines, kept per repository and scope and sent as one message to the focused or

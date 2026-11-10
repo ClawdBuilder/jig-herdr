@@ -71,6 +71,7 @@ import {
     placeComments,
     REPO_SCRIPT,
     removeComment,
+    reviewLayout,
     reviewPane,
     selectionCopy,
     selectLine,
@@ -1338,6 +1339,94 @@ export default class RepoReview extends View {
             .child(this.editorNote ?? "Reading…");
     }
 
+    /** The diff toolbar: one row wide, two rows at side-panel width so nothing is clipped. */
+    toolbar(t, file, i, add, del, copy) {
+        const { dir, name } = splitPath(file.path);
+        const narrow = reviewLayout(this.width).toolbarRows;
+        const path = h_flex()
+            .flex_1()
+            .min_w(0)
+            .truncate()
+            .tooltip(file.path)
+            .child(div().min_w(0).truncate().text_color(t.dim).child(dir))
+            .child(div().flex_none().font_semibold().child(name));
+        const counts = [
+            div().flex_none().text_size(11).text_color(t.ansi2).child(`+${add}`),
+            div().flex_none().text_size(11).text_color(t.ansi1).child(`−${del}`),
+            ...(this.comments.length > 0
+                ? [div().flex_none().text_size(11).text_color(t.accent).child(`Comments ${this.comments.length}`)]
+                : []),
+        ];
+        const actions = [
+            ...(Boolean(copy) && this.pane === "diff"
+                ? [
+                      this.textButton(t, "review-comment", "Comment", false, (_e, cx) => this.openComment(cx), true),
+                      this.textButton(
+                          t,
+                          "review-copy-lines",
+                          narrow ? `Copy ${copy.lines}` : `Copy ${copy.lines} line${copy.lines === 1 ? "" : "s"}`,
+                          false,
+                          (_e, cx) => this.copyLines(cx),
+                          true,
+                      ),
+                  ]
+                : []),
+            this.textButton(
+                t,
+                "review-copy-file",
+                narrow ? "File" : "Copy file",
+                false,
+                (_e, cx) => this.copyFile(cx, file),
+                true,
+            ),
+            this.textButton(
+                t,
+                "review-copy-path",
+                narrow ? "Path" : "Copy path",
+                false,
+                (_e, cx) => {
+                    cx.write_to_clipboard(file.path);
+                    this.flash(cx, true, `Copied ${file.path}`);
+                },
+                true,
+            ),
+            ...this.fileActions(t, file),
+        ];
+        const rows = [path, this.paneSwitch(t), ...counts];
+        if (!narrow)
+            return h_flex()
+                .h(32)
+                .flex_none()
+                .px(12)
+                .gap(10)
+                .items_center()
+                .border_b(1)
+                .border_color(t.border)
+                .text_size(12)
+                .children(rows)
+                .children(actions);
+        return v_flex()
+            .flex_none()
+            .border_b(1)
+            .border_color(t.border)
+            .child(h_flex().h(32).px(12).gap(8).items_center().text_size(12).children(rows))
+            .child(
+                h_flex()
+                    .h(30)
+                    .px(12)
+                    .gap(6)
+                    .items_center()
+                    .overflow_x_scrollbar()
+                    .children(actions)
+                    .child(this.headerButton(t, "review-prev", "‹", i > 0, (_e, cx) => this.step(-1, cx)))
+                    .child(
+                        this.headerButton(t, "review-next", "›", i < this.files.length - 1, (_e, cx) =>
+                            this.step(1, cx),
+                        ),
+                    ),
+            );
+    }
+
     // Right side: a 32 px header (path, +added −removed, prev/next), then the diff at full size.
     diffPanel(t) {
         const file = this.files.find((f) => f.path === this.sel);
@@ -1358,90 +1447,7 @@ export default class RepoReview extends View {
         return v_flex()
             .size_full()
             .min_w(0)
-            .child(
-                h_flex()
-                    .h(32)
-                    .flex_none()
-                    .px(12)
-                    .gap(10)
-                    .items_center()
-                    .border_b(1)
-                    .border_color(t.border)
-                    .text_size(12)
-                    .child(
-                        h_flex()
-                            .flex_1()
-                            .min_w(0)
-                            .child(div().min_w(0).truncate().text_color(t.dim).child(dir))
-                            .child(div().flex_none().font_semibold().child(name)),
-                    )
-                    .child(this.paneSwitch(t))
-                    .child(div().flex_none().text_size(11).text_color(t.ansi2).child(`+${add}`))
-                    .child(div().flex_none().text_size(11).text_color(t.ansi1).child(`−${del}`))
-                    .when(this.comments.length > 0, (el) =>
-                        el.child(
-                            div()
-                                .flex_none()
-                                .text_size(11)
-                                .text_color(t.accent)
-                                .child(`Comments ${this.comments.length}`),
-                        ),
-                    )
-                    .when(Boolean(copy) && this.pane === "diff", (el) =>
-                        el.child(
-                            this.textButton(
-                                t,
-                                "review-comment",
-                                "Comment",
-                                false,
-                                (_e, cx) => this.openComment(cx),
-                                true,
-                            ),
-                        ),
-                    )
-                    .when(Boolean(copy) && this.pane === "diff", (el) =>
-                        el.child(
-                            this.textButton(
-                                t,
-                                "review-copy-lines",
-                                `Copy ${copy.lines} line${copy.lines === 1 ? "" : "s"}`,
-                                false,
-                                (_e, cx) => this.copyLines(cx),
-                                true,
-                            ),
-                        ),
-                    )
-                    .child(
-                        this.textButton(
-                            t,
-                            "review-copy-file",
-                            "Copy file",
-                            false,
-                            (_e, cx) => this.copyFile(cx, file),
-                            true,
-                        ),
-                    )
-                    .child(
-                        this.textButton(
-                            t,
-                            "review-copy-path",
-                            "Copy path",
-                            false,
-                            (_e, cx) => {
-                                cx.write_to_clipboard(file.path);
-                                this.flash(cx, true, `Copied ${file.path}`);
-                            },
-                            true,
-                        ),
-                    )
-                    .children(this.fileActions(t, file))
-                    .child(this.headerButton(t, "review-prev", "‹", i > 0, (_e, cx) => this.step(-1, cx)))
-                    .child(
-                        this.headerButton(t, "review-next", "›", i < this.files.length - 1, (_e, cx) =>
-                            this.step(1, cx),
-                        ),
-                    ),
-            )
+            .child(this.toolbar(t, file, i, add, del, copy))
             .when(Boolean(this.note), (el) =>
                 el.child(
                     div()
@@ -1677,7 +1683,7 @@ export default class RepoReview extends View {
                     ? v_flex()
                           .size_full()
                           .min_h(0)
-                          .child(v_flex().flex_none().max_h(240).child(this.sidebar(t)))
+                          .child(v_flex().flex_none().h(reviewLayout(this.width).listHeight).child(this.sidebar(t)))
                           .child(v_flex().flex_1().min_h(0).child(this.diffPanel(t)))
                     : h_resizable("review-split")
                           .size_full()

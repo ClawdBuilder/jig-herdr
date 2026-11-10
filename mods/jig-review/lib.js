@@ -455,3 +455,12 @@ export function buildReviewMessage({ repo, scope, comments }) {
     }
     return lines.join("\n");
 }
+
+/** Side-panel layout: stack the list, and split the diff toolbar, when the panel is narrow. */
+export function reviewLayout(width) {
+    return {
+        stacked: width > 0 && width < 640,
+        toolbarRows: width > 0 && width < 480,
+        listHeight: 240,
+    };
+}
