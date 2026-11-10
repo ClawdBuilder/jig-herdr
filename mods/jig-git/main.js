@@ -81,6 +81,7 @@ import {
     withFold,
     withLock,
     withoutLock,
+    shouldFoldClean,
     worktreeSignal,
 } from "./lib.js";
 import { panelError, panelHeader } from "./panel-header.js";
@@ -1581,13 +1582,13 @@ export default class RepoChanges extends View {
         const specs = [
             ["needs", "Needs you", t.ansi1],
             ["changed", "Changed", t.accent],
-            ["ahead", "Ahead or behind", t.blocked],
+            ["ahead", "Ahead or behind", t.ansi3],
             ["clean", "Clean", t.muted],
         ];
         for (const [key, label, color] of specs) {
             const rows = states[key];
             if (!rows.length) continue;
-            const folded = key === "clean" && !this.cleanOpen;
+            const folded = key === "clean" && shouldFoldClean(this.repos.length, this.cleanOpen);
             const one = key === "changed" && groups.length === 1;
             const action =
                 key === "changed" && one
@@ -1603,7 +1604,7 @@ export default class RepoChanges extends View {
                       )
                     : key === "ahead"
                       ? secondaryButton(t, "fetch-group", "Fetch", (cx) => this.fetchAll(cx), { h: 26 })
-                      : key === "clean"
+                      : key === "clean" && this.repos.length > 1
                         ? secondaryButton(
                               t,
                               "toggle-clean",

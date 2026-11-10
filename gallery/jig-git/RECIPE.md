@@ -9,7 +9,9 @@ Git for every repo in the focused space's folder: stage, commit, push, fetch and
 A 42 px header titled **Git**, with fold-all (when more than one repo group exists),
 fetch-all (when a checkout has a remote) and Refresh. A 32 px context card under it names the folder, toggles
 **Terminal**/**Space**, and carries the machine name. A muted body line carries the repo count and changed-file summary.
-The list is grouped **Needs you**, **Changed**, **Ahead or behind** and **Clean**, each with its count and batch action;
+The list is grouped **Needs you** (`ansi1`), **Changed** (`accent`), **Ahead or behind** (`ansi3`) and **Clean**
+(`muted`), each with its count and batch action; a single repo's Clean is always open. Clean folds only with two or more
+repos;
 an open checkout shows its files, commit box and action buttons. The footer repeats the focused repo's branch, ahead and
 uncommitted count, and a transient status line sits above it after an action. A commit message box with **Commit**
 and **Commit & Push**;
