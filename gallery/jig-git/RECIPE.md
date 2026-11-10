@@ -16,7 +16,7 @@ The list is grouped **Needs you** (`ansi1`), **Changed** (`accent`), **Ahead or 
 
 Opening a row puts it on `raised` with 24 px file rows (status letter, checkbox, path), then the commit box, then **Commit** (primary), **Pull** when behind, **Push**/Publish when ahead or unpublished, **Fetch**, **Branch**, and **Discard all…** (danger, inline confirm); the buttons wrap at narrow widths. A file row opens Review on click; its ↺ button discards that file after an inline confirm. The 40 px footer repeats the focused repo's branch, ahead/behind and uncommitted count; a transient status line sits above it. `↑`/`↓` move the active row, Enter/Space opens it, Esc closes rows.
 
-The branch picker is an overlay with a search field. Before typing it lists local branches, plus `Type to search N more on origin`; typing ranks exact, prefix, last-segment and substring matches, locals first. The row Enter would pick has a 2 px `accent` left edge. Empty, no-git, detached-HEAD, busy and problem states each show one short line.
+The branch picker is an overlay with a search field. Before typing it lists local branches, plus `Type to search N more on origin`; typing ranks exact, prefix, last-segment and substring matches, locals first, and draws at most 50 rows (`N more: keep typing`). The row Enter would pick has a 2 px `accent` left edge. Empty, no-git, detached-HEAD, busy and problem states each show one short line.
 
 **How it behaves:**
 

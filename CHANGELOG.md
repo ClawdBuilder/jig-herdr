@@ -4,6 +4,13 @@
 
 ### Fixed
 
+- The branch picker reads its branches, base, dirty state and name check in one exec instead of seven (switch precheck
+  one instead of three), and caps drawn rows at 50 with `N more: keep typing`, and the push dialog checks the shared lock immediately
+  instead of running `sleep 0.15` through exec: one fewer exec (about 67 ms on a WSL machine) per push.
+
+
+### Fixed
+
 - Removed the unreachable PR & CI, History and Worktrees helpers, and restored Review's comment relocation after every
   diff read, so comments stay under their quoted lines.
 

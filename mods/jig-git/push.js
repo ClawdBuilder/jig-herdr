@@ -78,7 +78,6 @@ export class PushConfirm {
         if (lockOf(locks, this.on, this.path)) return null;
         const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
         setShared(RUNNING_KEY, withLock(locks, this.on, this.path, this.actionName(), Date.now(), token));
-        await exec("sh", ["-c", "sleep 0.15"], { on: this.on }).catch(() => null);
         return holdsLock(shared(RUNNING_KEY) ?? {}, this.on, this.path, token) ? token : null;
     }
 
