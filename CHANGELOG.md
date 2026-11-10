@@ -50,6 +50,11 @@
 
 ### Changed
 
+- PR & CI now uses the kit's segmented Workspace/Mine switch, groups by Needs fixing, Waiting, Ready, No PR and
+  No remote/not on GitHub, with two-line PR rows, failing-check details and a footer. History uses Branch/All segmented
+  counts, a context card with its repository chooser, and commit details on `raised` with full hash, parents, message
+  and changed files. Both recipes describe the kit anatomy.
+
 - A shared `panel-kit.js` now gives Git, Worktrees and Review's side panel one type scale, status dot, buttons, pills, segmented controls,
   group headers, rows, context cards, footer and status line. Git groups checkouts as Needs you, Changed, Ahead or
   behind and Clean; Worktrees groups Ready, In progress and Main checkout. The Terminal/Space switch moves to a context
