@@ -288,6 +288,7 @@ export default class RepoChanges extends View {
             this.context = context;
             this.readGeneration++;
             this.refreshState.cancel();
+            this.lastRead = null;
             this.loading = false;
             this.loadedContext = null;
             this.view = null;
@@ -397,7 +398,7 @@ export default class RepoChanges extends View {
 
     /** The main checkouts on screen and the worktrees that are unfolded; folded worktrees wait for the backstop. */
     visibleTargets() {
-        if (!this.loaded || !this.repos) return "";
+        if (!this.repos) return "";
         return groupRepos(this.repos)
             .flatMap((group) => [group.main, ...(this.foldedGroup(group) ? [] : group.worktrees)])
             .map((repo) => repo.path)
@@ -416,6 +417,9 @@ export default class RepoChanges extends View {
         if (!this.refreshState.start({ user, first: !this.repos, notify: () => cx.notify() })) return;
         this.refreshScheduler.sweep();
         this.loading = true;
+        const pendingBefore = this.loadedContext !== context;
+        const errorBefore = Boolean(this.error);
+        const busyBefore = this.refreshState.busy || this.switching;
         this.changedThisRead = false;
         const run = ++this.readGeneration;
         const targets = only ?? (full ? "" : this.visibleTargets());
@@ -424,17 +428,21 @@ export default class RepoChanges extends View {
                 const r = await runCommand(exec, "sh", ["-c", SCRIPT, "sh", root, targets], { on });
                 if (run !== this.readGeneration || context !== this.context) return;
                 if (r.code !== 0) throw Object.assign(new Error(r.stderr || `exit ${r.code}`), r);
-                const scanned = parseRepos(r.stdout, root);
                 const whole = targets === "";
-                const same = whole && r.stdout === this.lastScan;
+                const same = only === null && this.lastRead?.targets === targets && this.lastRead.stdout === r.stdout;
                 if (same) {
+                    this.loadedContext = context;
+                    this.loaded = true;
+                    this.error = null;
                     this.switching = false;
                     this.last = Date.now();
+                    if (pendingBefore || errorBefore || busyBefore) this.changedThisRead = true;
                     return;
                 }
+                const scanned = parseRepos(r.stdout, root);
+                this.lastRead = { targets: whole ? this.visibleTargets() : targets, stdout: r.stdout };
                 this.changedThisRead = true;
                 this.repos = whole ? scanned : mergeScan(this.repos, scanned);
-                if (whole) this.lastScan = r.stdout;
                 if (this.previewOpen?.length) {
                     const wanted = new Set(this.previewOpen);
                     for (const repo of this.repos)
@@ -456,10 +464,11 @@ export default class RepoChanges extends View {
             } finally {
                 if (run === this.readGeneration) {
                     this.loading = false;
+                    const wasBusy = this.refreshState.busy || this.switching;
                     const again = this.refreshState.finish();
                     this.last = again ? 0 : Date.now();
                     if (again) this.refreshScheduler.trigger();
-                    if (this.changedThisRead || this.refreshState.busy) cx.notify();
+                    if (this.changedThisRead || wasBusy) cx.notify();
                     this.changedThisRead = false;
                 }
             }

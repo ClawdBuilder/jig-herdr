@@ -178,23 +178,60 @@ test("Git starts a context read from render without waiting for tick", async () 
     ctx.folder = "/tmp/git-harness-b";
     ctx.focused = { pane: "p", cwd: ctx.folder, terminal: "t", space: "s" };
     ctx.panes = [{ pane: "p", cwd: ctx.folder }];
-    view.render(cx);
-    const kick = timers.find((t: any) => t.ms === 0);
-    assert.ok(kick, "render scheduled the new context read");
-    kick.fn(cx);
+    for (let i = 0; i < 5; i++) view.render(cx);
+    const kicks = timers.filter((t: any) => t.ms === 0);
+    assert.equal(kicks.length, 1, "five renders before the timer fire schedule one read");
+    kicks[0].fn(cx);
     await flush();
-    assert.ok(reads >= 1, "the new context read started without a tick");
+    assert.equal(reads, 1, "exactly one context read starts without a tick");
 });
 
-test("an identical scan output does not notify", async () => {
+test("two trigger refreshes with identical output do not notify", async () => {
     const root = "/tmp/git-harness-same";
     const ctx = context(root);
     ctx.exec = async (cmd: string) => ({ code: 0, stdout: cmd === "sh" ? scan(root) : "", stderr: "" });
     const { view, cx, notifies } = await load("jig-git");
+    view.refresh(cx, false, false);
     await flush();
-    view.lastScan = scan(root);
-    const before = notifies.count;
+    for (let i = 0; i < 100 && !view.loaded; i++) await flush(1);
+    assert.equal(view.loaded, true);
+    view.lastRead = { targets: view.visibleTargets(), stdout: scan(root) };
+    notifies.count = 0;
+    view.refresh(cx, false, false);
+    await flush();
+    assert.equal(notifies.count, 0, "first identical trigger read does not notify");
+    notifies.count = 0;
+    view.refresh(cx, false, false);
+    await flush();
+    assert.equal(notifies.count, 0, "second identical trigger read does not notify");
+});
+
+test("a same-output read after an error clears it", async () => {
+    const root = "/tmp/git-harness-error-same";
+    const ctx = context(root);
+    ctx.exec = async (cmd: string) => ({ code: 0, stdout: cmd === "sh" ? scan(root) : "", stderr: "" });
+    const { view, cx } = await load("jig-git");
+    await flush();
+    view.error = "old error";
+    view.lastRead = { targets: "", stdout: scan(root) };
     view.refresh(cx, false, true);
     await flush();
-    assert.equal(notifies.count, before);
+    assert.equal(view.error, null);
+    assert.equal(view.loaded, true);
+});
+
+test("follow toggle with the same root ends the skeleton", async () => {
+    const root = "/tmp/git-harness-follow";
+    const ctx = context(root);
+    ctx.exec = async (cmd: string) => ({ code: 0, stdout: cmd === "sh" ? scan(root) : "", stderr: "" });
+    const { view, cx, timers } = await load("jig-git");
+    await flush();
+    view.setFollow(false, cx);
+    view.render(cx);
+    const kick = timers.find((t: any) => t.ms === 0);
+    assert.ok(kick);
+    kick.fn(cx);
+    await flush();
+    assert.equal(view.loadedContext, view.context);
+    assert.equal(view.loaded, true);
 });
