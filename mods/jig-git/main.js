@@ -420,6 +420,7 @@ export default class RepoChanges extends View {
                 if (run !== this.readGeneration || context !== this.context) return;
                 if (r.code !== 0) throw Object.assign(new Error(r.stderr || `exit ${r.code}`), r);
                 this.repos = parseRepos(r.stdout, root);
+                this.loadedRoot = root;
                 this.error = null;
                 this.loaded = true;
                 this.switching = false;
