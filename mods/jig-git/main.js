@@ -104,7 +104,6 @@ import {
 // (an agent finishing a turn, a command ending): that's when files change.
 const NOTE_MS = 12000; // how long an action's result stays under its checkout
 const CONFIG_MS = 60000; // how long config.json is trusted before it is read again
-const _SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const visible = () => shown(layout(), "jig-git");
 const ICON = (name) => `mods/workspace-chrome/${name}.svg`;
 const OWN = (name) => `mods/jig-git/${name}.svg`;
@@ -200,7 +199,7 @@ function textButton(t, id, label, onClick, danger = false, disabled = false, tip
 
 export default class RepoChanges extends View {
     init(_props, cx) {
-        const p = modProps() ?? {};
+        const p = { ...(modProps() ?? {}), ...(_props ?? {}) };
         if (p.picker) {
             // This copy is the branch picker popup, not the panel.
             this.picker = new BranchPicker(p, cx);
@@ -215,7 +214,8 @@ export default class RepoChanges extends View {
         this.error = null;
         this.loaded = false;
         this.last = 0;
-        this.filter = "";
+        this.filter = typeof p.filter === "string" ? p.filter : "";
+        this.previewOpen = Array.isArray(p.open) ? p.open : [];
         this.opened = new Set(); // checkouts whose files are shown; files start folded, so every row is one line
         this.folds = foldMap(shared(FOLD_KEY));
         this.cleanOpen = false;
@@ -242,6 +242,7 @@ export default class RepoChanges extends View {
         this.done = Number(shared(DONE)?.at ?? 0);
         this.view = null;
         this.input = InputState.new({ placeholder: "Filter repos and files" });
+        if (this.filter) this.input.set_value(this.filter);
         this.input.on("change", (_e, cx) => {
             this.filter = this.input.value();
             this.rebuildView();
@@ -421,6 +422,12 @@ export default class RepoChanges extends View {
                 if (run !== this.readGeneration || context !== this.context) return;
                 if (r.code !== 0) throw Object.assign(new Error(r.stderr || `exit ${r.code}`), r);
                 this.repos = parseRepos(r.stdout, root);
+                if (this.previewOpen?.length) {
+                    const wanted = new Set(this.previewOpen);
+                    for (const repo of this.repos)
+                        if (wanted.has(repo.name) || wanted.has(repo.path)) this.opened.add(repo.path);
+                    this.previewOpen = null;
+                }
                 this.loadedRoot = root;
                 this.loadedContext = context;
                 this.rebuildView();
@@ -531,7 +538,7 @@ export default class RepoChanges extends View {
                     this.notes[repo.path] = { ...r, at: Date.now() };
                     if (r.ok) {
                         const at = this.notes[repo.path].at;
-                        cx.timer.after(4000, () => {
+                        cx.timer.after(4000, (cx) => {
                             if (this.notes[repo.path]?.at === at) {
                                 delete this.notes[repo.path];
                                 cx.notify();
@@ -913,7 +920,6 @@ export default class RepoChanges extends View {
     /** A repo as the kit's 48 px row; opening it shows files, commit box and actions. */
     kitCheckout(t, repo, color, nested, group, dir) {
         const open = this.opened.has(repo.path),
-            _focus = repo.files.length > 0,
             detail = checkoutDetail(repo);
         const locked = this.lock(repo);
         const actions = repoActions(repo);
@@ -1224,7 +1230,6 @@ export default class RepoChanges extends View {
         // Space mode's folder: the other place to look when following a terminal lands nowhere.
         const there = location(false).root;
         const empty = items.length ? null : this.emptyState(there);
-        const _narrow = this.width > 0 && this.width < 380;
         const latest = Object.entries(this.notes).sort((a, b) => b[1].at - a[1].at)[0];
         const note = latest
             ? {

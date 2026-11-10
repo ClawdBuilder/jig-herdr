@@ -76,7 +76,7 @@ test("Git renders a failed action and clears a passing one", async () => {
     assert.equal(view.notes[repo.path].message, "Staged.");
     const clear = timers.find((t: any) => t.ms === 4000);
     assert.ok(clear);
-    clear.fn();
+    clear.fn(cx);
     assert.equal(view.notes[repo.path], undefined);
 });
 
@@ -90,6 +90,11 @@ test("Git repoActions covers behind, ahead, diverged, unpublished and detached",
         "fetch",
     ]);
     assert.deepEqual(repoActions({ ahead: 0, upstream: null, remote: "origin" }), ["publish", "fetch"]);
+    assert.deepEqual(repoActions({ ahead: 2, upstream: "origin/x", gone: true, remote: "origin" }), [
+        "publish",
+        "fetch",
+    ]);
+    assert.deepEqual(repoActions({ ahead: 0, upstream: null, remote: null }), []);
     assert.deepEqual(repoActions({ detached: true, remote: "origin" }), ["fetch"]);
 });
 
@@ -98,17 +103,36 @@ test("Git idle loaded panel makes only backstop reads", async () => {
     const ctx = context(root);
     let reads = 0;
     ctx.exec = async (cmd: string) => {
-        if (cmd === "sh") reads++;
+        reads++;
         return { code: 0, stdout: cmd === "sh" ? scan(root) : "", stderr: "" };
     };
-    const { view, cx, timers } = await load("jig-git");
-    await flush();
-    reads = 0;
-    const ticks = timers.filter((t: any) => t.ms === 1000);
-    for (let i = 0; i < 120; i++) {
-        view.now = i;
-        for (const tick of ticks) tick.fn(cx);
-        await flush(2);
+    const realNow = Date.now;
+    let clock = 1_700_000_000_000;
+    Date.now = () => clock;
+    try {
+        const { view, cx, timers } = await load("jig-git");
+        await flush();
+        reads = 0;
+        const ticks = timers.filter((t: any) => t.ms === 1000);
+        for (let i = 0; i < 120; i++) {
+            clock += 1000;
+            for (const tick of ticks) tick.fn(cx);
+            await flush(2);
+        }
+        assert.equal(reads, 2, `120 s idle should make only the 60 s and 120 s backstop reads, made ${reads}`);
+    } finally {
+        Date.now = realNow;
     }
-    assert.ok(reads <= 3, `120 s idle made ${reads} scans`);
+});
+
+test("Git preview props pre-open a repo and pre-fill the filter", async () => {
+    const root = "/tmp/git-harness-props";
+    const ctx = context(root);
+    ctx.exec = async (cmd: string) => ({ code: 0, stdout: cmd === "sh" ? scan(root) : "", stderr: "" });
+    const { view, cx } = await load("jig-git", { open: ["orders-api"], filter: "billing" });
+    await flush();
+    assert.equal(view.filter, "billing");
+    assert.equal(view.opened.has(`${root}/orders-api`), true);
+    assert.equal(view.view.states.changed[0].name, "billing-web");
+    view.render(cx);
 });

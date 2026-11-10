@@ -1358,8 +1358,9 @@ export function repoActions(repo) {
     const actions = [];
     if (repo.detached) return repo.remote ? ["fetch"] : [];
     if (repo.behind > 0 || isDiverged(repo)) actions.push("pull");
-    if (repo.ahead > 0) actions.push("push");
-    else if (!repo.upstream) actions.push("publish");
+    const unpublished = Boolean(repo.remote) && (!repo.upstream || repo.gone);
+    if (repo.ahead > 0 && !unpublished) actions.push("push");
+    else if (unpublished) actions.push("publish");
     if (repo.remote) actions.push("fetch");
     return actions;
 }
