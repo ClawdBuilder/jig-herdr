@@ -35,7 +35,7 @@ function classText(text: string) {
 function methods(text: string) {
     const names = new Set<string>();
     for (const line of classText(text).split("\n")) {
-        const found = /^    (?:async )?([A-Za-z_][A-Za-z0-9_]*)\s*\(/.exec(line);
+        const found = /^ {4}(?:async )?([A-Za-z_][A-Za-z0-9_]*)\s*\(/.exec(line);
         if (found && found[1] !== "constructor" && !BUILTINS.has(found[1])) names.add(found[1]);
     }
     return names;
@@ -59,17 +59,9 @@ function unreachable(text: string) {
     return [...names].filter((name) => !seen.has(name)).sort();
 }
 
-test("Git has no unreachable View methods", () => {
-    const text = readFileSync(path.join(ROOT, "mods", "jig-git", "main.js"), "utf8");
-    assert.deepEqual(unreachable(text), []);
-});
-
-test("the other panels' reachability report", () => {
-    const report = Object.fromEntries(
-        MODS.filter((mod) => mod !== "jig-git").map((mod) => {
-            const text = readFileSync(path.join(ROOT, "mods", mod, "main.js"), "utf8");
-            return [mod, unreachable(text)];
-        }),
-    );
-    console.log(JSON.stringify(report));
+test("every panel has no unreachable View methods", () => {
+    for (const mod of MODS) {
+        const text = readFileSync(path.join(ROOT, "mods", mod, "main.js"), "utf8");
+        assert.deepEqual(unreachable(text), [], mod);
+    }
 });

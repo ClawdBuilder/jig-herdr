@@ -162,9 +162,10 @@ const BUCKET_OF = {
 };
 export const bucketOf = (result) => BUCKET_OF[result] ?? "pending";
 /** The order checks are listed in. */
-export const BUCKETS = ["fail", "pending", "pass", "skip"];
 
 /** The checks of a `statusCheckRollup` (check runs and commit statuses alike) as `{ name, bucket, url }`, failures first. */
+const BUCKETS = ["fail", "pending", "pass", "skip"];
+
 export function checksOf(rollup) {
     const checks = (rollup ?? []).map((entry) => ({
         name:

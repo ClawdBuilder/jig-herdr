@@ -4,24 +4,8 @@
 // `git status` on the space's machine (`on`).
 
 import { h_flex, Input, InputState, v_flex } from "gpui-base";
-import { div, svg, View } from "gpui-kit";
-import {
-    appHome,
-    exec,
-    focused,
-    layout,
-    openOverlay,
-    panes,
-    readTextFile,
-    run,
-    setShared,
-    settings,
-    shared,
-    spaces,
-    terminals,
-    theme,
-    window,
-} from "herdr";
+import { div, View } from "gpui-kit";
+import { appHome, exec, layout, readTextFile, run, settings, shared, spaces, terminals, theme, window } from "herdr";
 import { location, readFollow, writeFollow } from "./follow.js";
 import {
     branchKey,
@@ -67,7 +51,7 @@ const PAGE = 100; // commits per page
 const ROW_H = 24;
 const MID = ROW_H / 2;
 const LANE_W = 14;
-const MAX_LANES = 8;
+const _MAX_LANES = 8;
 const STROKE = 2;
 const DOT = 10;
 const FILES_SHOWN = 12;
@@ -102,7 +86,7 @@ const storage = {
 };
 
 /** Git's raw failures as a line a person can act on. */
-function friendly(text) {
+function _friendly(text) {
     const line = String(text ?? "")
         .trim()
         .split("\n")[0];
@@ -454,35 +438,6 @@ export default class RepoHistory extends View {
             );
     }
 
-    /** Fallback cycle, kept for a branch list that is already loaded. */
-    cycleBranch(cx) {
-        if (this.branches) {
-            const names = this.branches.map((b) => b.name);
-            const at = this.branchFilter ? names.indexOf(this.branchFilter) : -1;
-            this.branchFilter = at + 1 >= names.length ? null : names[at + 1];
-            this.clearLog();
-            this.loadLog(cx, true);
-            return;
-        }
-        cx.spawn(async (cx) => {
-            const result = await runCommand(
-                exec,
-                "git",
-                [
-                    "--no-optional-locks",
-                    "for-each-ref",
-                    "--format=%(refname:short)%09%(refname)",
-                    "refs/heads",
-                    "refs/remotes",
-                ],
-                { cwd: this.repo, on: this.where.on },
-            );
-            this.branches = parseBranches(result.stdout ?? "");
-            cx.notify();
-        });
-        cx.notify();
-    }
-
     loadConfig(cx) {
         if (this.configAt && Date.now() - this.configAt < 60000) return;
         this.configAt = Date.now();
@@ -524,7 +479,7 @@ export default class RepoHistory extends View {
         if (!this.refreshState.start({ user, first: this.commits === null, notify: () => cx.notify() })) return;
         this.refreshScheduler.sweep();
         this.loading = true;
-        const generation = ++this.generation;
+        const _generation = ++this.generation;
         const run = ++this.logGeneration;
         cx.spawn(async (cx) => {
             try {

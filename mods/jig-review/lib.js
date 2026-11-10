@@ -128,7 +128,7 @@ export const capText = (text, max) => (text.length > max ? `${text.slice(0, max)
 // A selection is null or { anchor, end }: row indexes into diffRows' result, in click order (end may be before anchor).
 
 /** A line of code, as opposed to a hunk header or a note. */
-export const isCodeRow = (row) => row?.kind === "+" || row?.kind === "-" || row?.kind === " ";
+const isCodeRow = (row) => row?.kind === "+" || row?.kind === "-" || row?.kind === " ";
 
 /** The selection after a click on row `index`: a plain click selects that line, or clears the selection when that line is
  * all that was selected; with `extend` (shift) the range runs from the old anchor to `index`. A header row changes nothing. */
@@ -268,7 +268,7 @@ export async function findBase(exec, cwd, limit = 8) {
         const count = Number(n.stdout.trim()) || 0;
         if (!best || count < best.count) best = { ref, mergeBase, count };
     }
-    if (!best || !best.count) return null;
+    if (!best?.count) return null;
     const log = await run(["log", "--oneline", "--no-decorate", `--max-count=${limit}`, `${best.mergeBase}..HEAD`]);
     const commits = log.stdout.split("\n").filter(Boolean);
     return {
@@ -365,7 +365,7 @@ export function chooseRepo(repos, current, remembered) {
 export const repositoryFor = (props, followed) => props?.repo || followed || "";
 
 /** The side a diff row belongs to: deleted rows are old, everything else new. */
-export const rowSide = (row) => (row?.kind === "-" ? "old" : "new");
+const rowSide = (row) => (row?.kind === "-" ? "old" : "new");
 
 /** Put one comment on the current rows: find its quote near the anchored line on the same side. */
 export function placeComment(comment, rows) {
@@ -379,8 +379,8 @@ export function placeComment(comment, rows) {
         return quote.length > 0 && quote.every((text, n) => usable[at + n]?.row.text === text);
     };
     const near = first >= 0 ? first : usable.findIndex(({ row }) => row.number >= comment.startLine);
-    const from = Math.max(0, (near >= 0 ? near : 0) - 50),
-        to = Math.min(usable.length - 1, (near >= 0 ? near : 0) + 50);
+    const from = Math.max(0, Math.max(near, 0) - 50),
+        to = Math.min(usable.length - 1, Math.max(near, 0) + 50);
     for (let at = from; at <= to; at++)
         if (matches(at))
             return {

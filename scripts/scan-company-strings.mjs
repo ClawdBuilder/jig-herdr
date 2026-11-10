@@ -28,7 +28,7 @@ function walk(dir) {
         if (entry.isDirectory()) walk(file);
         else if (/\.(ts|js|md|json|mjs|yml|yaml|txt)$/.test(entry.name)) {
             const text = readFileSync(file, "utf8");
-            if (SECRET.test(text) || (BANNED && BANNED.test(text))) {
+            if (SECRET.test(text) || BANNED?.test(text)) {
                 console.log(path.relative(ROOT, file));
                 bad++;
             }

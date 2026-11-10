@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Removed the unreachable PR & CI, History and Worktrees helpers, and restored Review's comment relocation after every
+  diff read, so comments stay under their quoted lines.
+
+
 ### Changed
 
 - The git scan starts up to 4 × CPU jobs per wave (32 on a 4-CPU machine) instead of fixed 8-job waves, so 17–20 repos

@@ -11,7 +11,7 @@
 
 import { h_flex, v_flex } from "gpui-base";
 import { div, svg, View } from "gpui-kit";
-import { appHome, exec, focused, layout, readTextFile, spaces, terminals, theme, window } from "herdr";
+import { appHome, exec, focused, readTextFile, spaces, terminals, theme, window } from "herdr";
 
 import {
     addressOf,

@@ -5,20 +5,7 @@
 
 import { h_flex, v_flex } from "gpui-base";
 import { div, svg, View } from "gpui-kit";
-import {
-    appHome,
-    exec,
-    focused,
-    layout,
-    panes,
-    readTextFile,
-    setShared,
-    shared,
-    spaces,
-    terminals,
-    theme,
-    window,
-} from "herdr";
+import { appHome, exec, layout, readTextFile, setShared, shared, spaces, terminals, theme, window } from "herdr";
 import { location, readFollow, writeFollow } from "./follow.js";
 import {
     checkCount,
@@ -42,7 +29,6 @@ import {
     shapePr,
     since,
     viewForContext,
-    watchdog,
     workspaceRowsFor,
 } from "./lib.js";
 import { panelError, panelHeader } from "./panel-header.js";
@@ -97,7 +83,7 @@ function saveCache(cache) {
 }
 
 /** Git's raw failures as a line a person can act on. */
-function friendly(text) {
+function _friendly(text) {
     const line = String(text ?? "")
         .trim()
         .split("\n")[0];
@@ -154,7 +140,7 @@ function publishBadge(count) {
 }
 
 /** A small clickable text link, like "Refresh". */
-const link = (t, id, label, onClick) =>
+const _link = (t, id, label, onClick) =>
     div()
         .id(id)
         .flex_none()
@@ -675,33 +661,6 @@ export default class RepoPullRequests extends View {
                 cx.notify();
             }
         });
-    }
-
-    /** A repository's name, with the folders above it dimmed after it. */
-    repoName(t, repo) {
-        const name = lastSegment(repo.name);
-        const above = repo.name.slice(0, repo.name.length - name.length).replace(/\/$/, "");
-        return h_flex()
-            .flex_1()
-            .min_w(0)
-            .gap(6)
-            .items_baseline()
-            .child(div().flex_none().max_w(190).truncate().font_semibold().child(name))
-            .when(Boolean(above), (el) =>
-                el.child(div().min_w(0).truncate().text_size(11).text_color(t.dim).child(above)),
-            );
-    }
-
-    branchTag(t, branch) {
-        return h_flex()
-            .flex_none()
-            .max_w(150)
-            .gap(4)
-            .items_center()
-            .text_size(11)
-            .text_color(t.dim)
-            .child(svg(icon("branch")).size(11).flex_none())
-            .child(div().min_w(0).truncate().child(branch));
     }
 
     /** A heading row; with `onClick` it also folds a group. */

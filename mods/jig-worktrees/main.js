@@ -9,7 +9,6 @@ import { div, View } from "gpui-kit";
 import {
     appHome,
     exec,
-    focused,
     layout,
     panes,
     readTextFile,
@@ -33,7 +32,6 @@ import {
     parseTrees,
     parseWorktreeListZ,
     pruneAll,
-    prunePlan,
     REASON,
     readiness,
     relName,
@@ -43,7 +41,6 @@ import {
     since,
     terminalsInsideWorktree,
     viewForContext,
-    worktreeTitle,
 } from "./lib.js";
 import { panelError, panelHeader } from "./panel-header.js";
 import {
@@ -74,7 +71,7 @@ const onScreen = () => isOnScreen(layout(), "jig-worktrees");
 const WORKING = new Set(["working", "blocked"]);
 
 /** Git's raw failures as a line a person can act on. */
-function friendly(text) {
+function _friendly(text) {
     const line = String(text ?? "")
         .trim()
         .split("\n")[0];
@@ -240,7 +237,7 @@ export default class RepoWorktrees extends View {
         const { root, on } = this.where;
         const contextKey = this.contextKey;
         const started = Date.now();
-        const generation = ++this.generation;
+        const _generation = ++this.generation;
         if (!this.refreshState.start({ user, first: this.trees === null, notify: () => cx.notify() })) return;
         this.refreshScheduler.sweep();
         this.loading = true;
@@ -389,21 +386,6 @@ export default class RepoWorktrees extends View {
             }
         });
         cx.notify();
-    }
-
-    /** The facts under a row's name, as small coloured fragments. */
-    facts(t, tree) {
-        const facts = [];
-        if (tree.locked) facts.push(div().text_color(t.blocked).child("locked"));
-        if (tree.ahead) facts.push(div().text_color(t.foreground).child(`↑${tree.ahead}`));
-        if (tree.behind) facts.push(div().child(`↓${tree.behind}`));
-        if (tree.dirty === null) facts.push(div().text_color(t.dim).child("status unknown"));
-        else if (tree.dirty > 0) facts.push(div().text_color(t.done).child(`±${tree.dirty}`));
-        if (tree.unpushed && tree.upstream) facts.push(div().text_color(t.blocked).child(`${tree.unpushed} unpushed`));
-        if (tree.gone) facts.push(div().text_color(t.dim).child("remote gone"));
-        if (!tree.upstream && !tree.gone) facts.push(div().text_color(t.dim).child("no upstream"));
-        if (tree.date) facts.push(div().text_color(t.dim).child(since(tree.date)));
-        return facts;
     }
 
     openTab(tree) {
