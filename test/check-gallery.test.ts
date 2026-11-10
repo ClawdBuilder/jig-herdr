@@ -1,7 +1,7 @@
 // A focused check of the gallery validator's stray-file and recipe rules.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -37,6 +37,7 @@ test("check-gallery lets placeholders pass in development and refuses them with 
     const out = mkdtempSync(path.join(tmpdir(), "jig-gallery-placeholder-"));
     try {
         buildShare(out);
+        copyFileSync(path.join(root, "test", "support", "placeholder.png"), path.join(out, "jig-git", "preview.png"));
         execFileSync(process.execPath, [path.join(root, "scripts", "check-gallery.mjs"), out], {
             timeout: 30_000,
             stdio: "pipe",

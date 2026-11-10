@@ -4,6 +4,8 @@ Pull requests and their checks for the space's folder, read through `gh`. The **
 
 ![PR & CI](preview.png)
 
+Preview: the public ClawdBuilder/jig-herdr repository with a real open pull request.
+
 **Install:** add the listing from herdr.dev, or copy the repository's `mods/jig-prs` into your Herdr config folder's `mods/`. Put a layout block with `content.mod = "jig-prs"` where the panel should sit; without an activity bar there is no badge.
 
 **What you see:**
