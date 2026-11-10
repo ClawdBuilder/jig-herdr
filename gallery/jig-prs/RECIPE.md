@@ -1,40 +1,28 @@
 # PR & CI
 
-Pull requests and their checks for the space's folder, read through `gh`. Inside one repository it lists that repository's
-PRs; on a folder of many repositories it lists the open PR of each feature branch, and a second tab lists all of yours.
-Read-only. From Jig (https://github.com/ClawdBuilder/jig). No Jig required.
+Pull requests and their checks for the space's folder, read through `gh`. The **Workspace** tab covers the folder's repositories; **Mine** lists your open PRs across GitHub. Read-only, with no merge, approve, comment or rerun. From Jig (https://github.com/ClawdBuilder/jig). No Jig required.
 
 ![PR & CI](preview.png)
 
+**Install:** add the listing from herdr.dev, or copy the repository's `mods/jig-prs` into your Herdr config folder's `mods/`. Put a layout block with `content.mod = "jig-prs"` where the panel should sit; without an activity bar there is no badge.
+
 **What you see:**
 
-A header with the **Open**/**Workspace** and **Mine** tabs on the left where the title would be, plus the Terminal/Space
-switch and Refresh; rows with number, title,
-branch, author, review state, age, and a check summary (`✓` pass, `×` fail, `•` pending, `–` skip, with counts). Expanding a
-PR shows checks grouped by name and the latest run, with a link that opens in the browser. The panel marks a failing check
-on the activity bar with a count and `blocked` tone. Empty, no-git, `gh` missing, signed-out and rate-limit states are one
-line. A 40 px footer counts open PRs and failing ones.
+A 42 px header titled **PR & CI** with Refresh. A 32 px context card under it names the folder, shows **follows the focused terminal** or **uses the space's folder**, and carries the machine pill. A full-width segmented control reads **Workspace n** and **Mine n**; a grey line counts `N repos · N non-default branches · N PRs`.
+
+Workspace groups are **Needs fixing** (`ansi1`), **Waiting** (`blocked`), **Ready** (`ansi2`), **No PR** (`muted`) and **No remote / not on GitHub** (`muted`). A foldable group has a 26 px right-aligned **Show**/**Hide** button; a lone group is open. A row is 48 px with a dot in the group colour, the PR title, and `repo · #482 · branch`; chips show `✓/×/•` check counts, the review state and `+41 −12`. A row with no PR uses the repo name as its title and just the branch in its detail (`detached` or `no upstream` where they apply). Opening a PR row lists its failing check names, then **Open on GitHub** (primary) and **Copy link** (secondary).
+
+The 40 px footer counts open PRs and failing ones. Empty, no-git, `gh` missing, signed-out and rate-limit states are one line. `↑`/`↓` move the active row, Enter/Space opens it, Esc closes rows. While a new folder or follow mode is read, the list is a four-row skeleton.
 
 **How it behaves:**
 
-Click a PR row to expand its checks; click a check/run link to open the GitHub URL in this computer's browser. **Mine**
-shows PRs authored by the signed-in `gh` user. Refresh on mount/shown/focus/a terminal in the panel's folder finishing a command, and on the backstop
-(default 180 s for this panel, never below 15 s). A user refresh shows busy after 400 ms; automatic refreshes are silent.
-Opening a link uses `explorer.exe`, `open` or `xdg-open` and never fetches the page itself. A PR with no
-checks says so; a cancelled run is shown as skipped, not failed.
+**Workspace** finds each repository in the folder and asks for the open PR of its feature branch; **Mine** uses `gh search prs --author=@me` across GitHub, not only this folder. Opening a PR row shows the failing checks; **Open on GitHub** uses `explorer.exe`, `open` or `xdg-open`; **Copy link** writes the URL. No action writes to GitHub. A local-path remote, or one on a known other host (`gitlab.com`, `bitbucket.org`, Azure DevOps), is parked as no remote; a GitHub "Could not resolve to a Repository" answer parks as not on GitHub. Refresh on mount, when shown, on focus, when a terminal in the folder finishes, and on the backstop (default 180 s, never below 15 s). A click-started run shows busy after 400 ms. A same-key refresh keeps rows; a context change shows the skeleton, and a stale read is discarded.
 
 **Built from:**
 
-`main.js` + `lib.js` + `refresh.js`; no props. Herdr: `focused`, `panes`, `spaces`, `exec`, `appHome`, `readTextFile`,
-`shared`/`setShared`, `theme`, `layout`, `terminals`; network URLs opened through the workspace opener. Shared keys
-`badge.jig-prs` and the tab's own state. Config `${appHome()}/mods/jig-prs/config.json` (refresh settings).
+`main.js` + `lib.js` + `panel-kit.js` + `panel-header.js` + `refresh.js` + `follow.js`; no props. Herdr: `focused`, `panes`, `spaces`, `exec`, `appHome`, `readTextFile`, `settings`, `shared`/`setShared`, `theme`, `layout`, `terminals`. Shared keys `badge.jig-prs` and the tab state. Config `${appHome()}/mods/jig-prs/config.json` (refresh settings).
 
-Programs: `gh` (`pr list`, `pr view`, `run list`/`run view`; **Mine** runs `gh search prs --author=@me` across GitHub), `sh` for the script,
-`timeout`/`gtimeout` when present (20 s). Network: `gh` to GitHub (read-only API); no `git fetch`. Files read: the repository's git metadata for the workspace listing and `config.json`; nothing is written to the repository.
-
-The standalone listing has `"place": "none"`, so a layout block with `content.mod = "jig-prs"` is required; with no
-activity bar there is no badge. The panel has the **Terminal/Space** switch (per space): Terminal follows the focused
-terminal's folder, Space uses the space's folder. Built from Herdr's `mods/workspace-chrome/*.svg` icons.
+Programs: `gh` (`pr list`, `pr view`, `run list`/`run view`; **Mine** runs `gh search prs`), `sh` for the scan, `timeout`/`gtimeout` when present. Network: `gh` to GitHub (read-only). Files read: the folder's git metadata and `config.json`; nothing in the repository is written. Icons come from Herdr's `mods/workspace-chrome/*.svg`.
 
 **Header:** all git panels use one 42 px shared header: title and Refresh, whose tooltip says `Refresh · read N ago`
 (`Refresh` before the first read, `Reading…` while busy). Git, History, PR & CI, Worktrees and Review's side panel put
@@ -43,18 +31,8 @@ line sits under the header, above the kept rows.
 
 **Watch out:**
 
-Local-path remotes and remotes on known other hosts (`gitlab.com`, `bitbucket.org`, Azure DevOps) are parked as **no
-remote**; a GitHub lookup that answers "Could not resolve to a Repository" parks as **not on GitHub**, not an error.
-
-Requires `gh` on PATH and signed in; missing auth/rate limits are reported, not retried. **Mine** searches all of GitHub for
-PRs authored by `@me`, not only the demo folder, so the standalone preview is demo data; it makes a network call to GitHub's
-search API. Discovery reads pass a 20 s timeout and `gh` calls 60 s; Herdr's deadline is 5 s later (600 s at most on 0.1.14+), while 0.1.13 or older cuts at 30 s default. A slow
-GitHub call. No write actions: no comment, approve, merge or rerun. A Windows-local space without WSL has no POSIX `sh`.
-The API's own limits apply; a very large PR list is capped and says so. Link opening depends on the desktop opener.
+Requires `gh` on PATH and signed in. **Mine** searches all of GitHub for `@me`, so its results are broader than the folder. A slow GitHub call can hit the 60 s network budget; Herdr 0.1.13 or older cuts at 30 s. Discovery reads use a 20 s timeout. A Windows-local space without WSL has no POSIX `sh`. It never merges, approves, comments, reruns or writes checks.
 
 **Done when:**
 
-`herdr-app check mods/jig-prs` passes; make the demo repo with `git init orders-api && git -C orders-api commit --allow-empty -m 'first'`; a folder with a GitHub
-remote shows PRs and checks (the repo preview uses recorded demo data); **Mine** switches; the first tab is **Open** in one repository and **Workspace** on many; a
-failure count appears on the activity bar; a missing `gh`, signed-out and rate-limit response each show one line; a check
-link opens in the browser; refresh twice leaves the rows stable.
+`herdr-app check mods/jig-prs` passes; a folder with a GitHub remote shows Workspace rows and checks; **Mine** switches and counts; a folder with only local or non-GitHub remotes settles on **No remote / not on GitHub** and never stays on “Reading…”; switching terminals shows the skeleton then the new rows within ~2 s; a missing `gh`, signed-out and rate-limit response each show one line.
