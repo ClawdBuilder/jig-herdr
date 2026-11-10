@@ -44,7 +44,7 @@ export function parseConfig(text) {
 
 // The address Herdr gives the session's terminal: "t7" here, "<machine>/t7" on another machine; only herdr-core's names.
 
-const updated = (s) => Date.parse(s.status.updatedAt ?? "") || 0;
+const _updated = (s) => Date.parse(s.status.updatedAt ?? "") || 0;
 
 // The session to show: the focused terminal's (or the agent shown), else the one updated last. Live ones only.
 

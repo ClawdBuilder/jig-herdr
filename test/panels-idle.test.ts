@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { load } from "./support/context-harness.mjs";
 
+// TODO(harness): spaces() has no tabs and layout() is empty, so onScreen() is false here and only the hidden idle path is
+// covered. Once B's harness can mark a panel shown, assert the documented backstops over 180 s: Review 36, History 3,
+// Worktrees 3, PR & CI 1.
+
 const flush = async (n = 8) => {
     for (let i = 0; i < n; i++) await new Promise((r) => setImmediate(r));
 };

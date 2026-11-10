@@ -344,7 +344,7 @@ export function terminalInside(realTree, cwds, canonical = (p) => p) {
 }
 
 /** Resolve each path with `pwd -P` through the injected exec; a failure keeps the original path. */
-export async function canonicalPaths(exec, paths) {
+async function canonicalPaths(exec, paths) {
     const out = {};
     await Promise.all(
         [...new Set(paths.filter(Boolean))].map(async (path) => {

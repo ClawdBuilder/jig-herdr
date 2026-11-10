@@ -106,7 +106,7 @@ export function groupOpen(open, unfoldedGroups) {
     return open || unfoldedGroups === 0;
 }
 
-export function groupHeader(t, id, label, count, color, action) {
+export function groupHeader(_t, id, label, count, color, action) {
     return h_flex()
         .id(`group-${id}`)
         .min_h(28)

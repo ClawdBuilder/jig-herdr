@@ -5,20 +5,7 @@
 
 import { h_flex, v_flex } from "gpui-base";
 import { div, svg, View } from "gpui-kit";
-import {
-    appHome,
-    exec,
-    focused,
-    layout,
-    panes,
-    readTextFile,
-    setShared,
-    shared,
-    spaces,
-    terminals,
-    theme,
-    window,
-} from "herdr";
+import { appHome, exec, layout, readTextFile, setShared, shared, spaces, terminals, theme, window } from "herdr";
 import { location, readFollow, writeFollow } from "./follow.js";
 import {
     checkCount,
@@ -42,7 +29,6 @@ import {
     shapePr,
     since,
     viewForContext,
-    watchdog,
     workspaceRowsFor,
 } from "./lib.js";
 import { panelError, panelHeader } from "./panel-header.js";
@@ -97,7 +83,7 @@ function saveCache(cache) {
 }
 
 /** Git's raw failures as a line a person can act on. */
-function friendly(text) {
+function _friendly(text) {
     const line = String(text ?? "")
         .trim()
         .split("\n")[0];
@@ -154,7 +140,7 @@ function publishBadge(count) {
 }
 
 /** A small clickable text link, like "Refresh". */
-const link = (t, id, label, onClick) =>
+const _link = (t, id, label, onClick) =>
     div()
         .id(id)
         .flex_none()

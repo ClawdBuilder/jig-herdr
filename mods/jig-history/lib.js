@@ -84,9 +84,9 @@ export function repoOf(repos, path) {
 /** What `git log` is asked to print for each commit, fields split by the unit separator \x1f. */
 export const FORMAT = ["%H", "%P", "%an", "%aI", "%D", "%s"].join("%x1f");
 
-/** One decoration of `git log --decorate=full`, as `{ name, kind }`: kind is local, remote or tag. The full ref names are
- * what tell a local branch called `a/b` from the remote branch `a`'s `b`. */
-export function readRef(text) {
+/** The output of `git log --decorate=full --format=FORMAT`, one commit per line. A subject that holds the separator keeps it. */
+/** One full-ref decoration as `{ name, kind }`; not exported, used by `parseLog`. */
+function readRef(text) {
     const bare = text.startsWith("HEAD -> ") ? text.slice("HEAD -> ".length) : text;
     if (bare.startsWith("refs/heads/")) return { name: bare.slice("refs/heads/".length), kind: "local" };
     if (text.startsWith("refs/remotes/")) return { name: text.slice("refs/remotes/".length), kind: "remote" };
@@ -94,7 +94,6 @@ export function readRef(text) {
     return null;
 }
 
-/** The output of `git log --decorate=full --format=FORMAT`, one commit per line. A subject that holds the separator keeps it. */
 export function parseLog(stdout) {
     const commits = [];
     for (const line of stdout.split("\n")) {

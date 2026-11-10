@@ -16,7 +16,6 @@ import {
     appHome,
     exec,
     focused,
-    layout,
     notify,
     panes,
     readTextFile,
@@ -33,7 +32,6 @@ import {
     addressOf,
     changedSince,
     clock,
-    decisionText,
     detailsNote,
     folderName,
     MTIMES,
@@ -474,7 +472,7 @@ export default class JigWork extends View {
     }
 
     // The pinned 42 px header: title left; state, session picker and Refresh right.
-    topBar(t, cx, s, live, by) {
+    topBar(t, _cx, s, live, _by) {
         const st = s?.status ?? null,
             busy = st?.state === "busy",
             narrow = this.width > 0 && this.width < 380;

@@ -1,7 +1,7 @@
 // Writes one Herdr theme for each built-in Jig palette into herdr/themes/: `node herdr/scripts/build-themes.ts`.
 // The files are committed. A test compares them with what this makes, so a change to a palette or to the conversion
 // that was not followed by a run of this script fails there.
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 

@@ -28,7 +28,7 @@ import {
     v_flex,
     v_virtual_list,
 } from "gpui-base";
-import { div, svg, View } from "gpui-kit";
+import { div, View } from "gpui-kit";
 import {
     agents,
     exec,
@@ -41,7 +41,6 @@ import {
     settings,
     shared,
     spaces,
-    terminals,
     theme,
 } from "herdr";
 import { location, readFollow, writeFollow } from "./follow.js";
@@ -103,7 +102,7 @@ const SIDE_MIN = 160;
 const SIDE_MAX = 720;
 const MAX = 400000; // most characters the File and Patch editors show; more is cut with a note
 const PANE_LABEL = { diff: "Diff", file: "File", patch: "Patch" };
-const ICON = (name) => `mods/workspace-chrome/${name}.svg`;
+const _ICON = (name) => `mods/workspace-chrome/${name}.svg`;
 // Reads write nothing under .git (same flags as jig-git).
 const READ = [...GIT_READ, "-c", "diff.autoRefreshIndex=false"];
 
@@ -1467,8 +1466,7 @@ export default class RepoReview extends View {
                 .child(this.loaded ? "No changes" : "Reading…");
         const add = this.rows.filter((r) => r.kind === "+").length,
             del = this.rows.filter((r) => r.kind === "-").length;
-        const { dir, name } = splitPath(file.path),
-            i = this.files.indexOf(file),
+        const i = this.files.indexOf(file),
             list = `review-diff-${this.listId}`;
         const copy = selectionCopy(this.rows, this.range);
         return v_flex()

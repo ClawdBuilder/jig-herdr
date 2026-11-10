@@ -65,7 +65,7 @@ export function parseConfig(text) {
 // The address Herdr gives the session's terminal: "t7" here, "<machine>/t7" on another machine. Only a terminal named by
 // herdr-core (`terminalFrom` HC_TERMINAL_ID) has one; a tmux pane inside it does not.
 
-const updated = (s) => Date.parse(s.status.updatedAt ?? "") || 0;
+const _updated = (s) => Date.parse(s.status.updatedAt ?? "") || 0;
 
 // The session to show: the one whose terminal is focused (or is the agent shown), else the one picked before while it
 // lives, else the one updated last. `live` sessions only; returns { session, by } with by "focus", "picked" or "recent".

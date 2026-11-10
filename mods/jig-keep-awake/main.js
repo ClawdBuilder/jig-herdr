@@ -586,7 +586,7 @@ export default class KeepAwake extends View {
         });
         const r = await this.execIn(cx, command);
         const pid = parsePid(r?.stdout);
-        if (!r || r.code !== 0 || !pid) {
+        if (r?.code !== 0 || !pid) {
             await this.clearClaim(claim, cx);
             this.warn(
                 `The jig-keep-awake helper did not start: ${(r?.stderr || r?.stdout || "no answer").trim().split("\n")[0]}`,

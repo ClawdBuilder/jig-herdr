@@ -35,7 +35,7 @@ function classText(text: string) {
 function methods(text: string) {
     const names = new Set<string>();
     for (const line of classText(text).split("\n")) {
-        const found = /^    (?:async )?([A-Za-z_][A-Za-z0-9_]*)\s*\(/.exec(line);
+        const found = /^ {4}(?:async )?([A-Za-z_][A-Za-z0-9_]*)\s*\(/.exec(line);
         if (found && found[1] !== "constructor" && !BUILTINS.has(found[1])) names.add(found[1]);
     }
     return names;

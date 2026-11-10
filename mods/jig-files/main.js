@@ -13,7 +13,6 @@ import {
     appHome,
     exec,
     focused,
-    layout,
     panes,
     readTextFile,
     run,

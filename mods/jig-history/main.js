@@ -4,24 +4,8 @@
 // `git status` on the space's machine (`on`).
 
 import { h_flex, Input, InputState, v_flex } from "gpui-base";
-import { div, svg, View } from "gpui-kit";
-import {
-    appHome,
-    exec,
-    focused,
-    layout,
-    openOverlay,
-    panes,
-    readTextFile,
-    run,
-    setShared,
-    settings,
-    shared,
-    spaces,
-    terminals,
-    theme,
-    window,
-} from "herdr";
+import { div, View } from "gpui-kit";
+import { appHome, exec, layout, readTextFile, run, settings, shared, spaces, terminals, theme, window } from "herdr";
 import { location, readFollow, writeFollow } from "./follow.js";
 import {
     branchKey,
@@ -67,7 +51,7 @@ const PAGE = 100; // commits per page
 const ROW_H = 24;
 const MID = ROW_H / 2;
 const LANE_W = 14;
-const MAX_LANES = 8;
+const _MAX_LANES = 8;
 const STROKE = 2;
 const DOT = 10;
 const FILES_SHOWN = 12;
@@ -102,7 +86,7 @@ const storage = {
 };
 
 /** Git's raw failures as a line a person can act on. */
-function friendly(text) {
+function _friendly(text) {
     const line = String(text ?? "")
         .trim()
         .split("\n")[0];
@@ -495,7 +479,7 @@ export default class RepoHistory extends View {
         if (!this.refreshState.start({ user, first: this.commits === null, notify: () => cx.notify() })) return;
         this.refreshScheduler.sweep();
         this.loading = true;
-        const generation = ++this.generation;
+        const _generation = ++this.generation;
         const run = ++this.logGeneration;
         cx.spawn(async (cx) => {
             try {
