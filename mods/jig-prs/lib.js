@@ -349,3 +349,11 @@ export function workspaceRowsFor(discovery, root) {
         return { ...repo, name: relName(repo.path, root), status, pr: null, err: null };
     });
 }
+
+/** What to draw for a context: rows only when its read landed; a failed or folder-less context never keeps the skeleton. */
+export function viewForContext(shownKey, readKey, repos, { error = null, noFolder = false } = {}) {
+    if (noFolder) return { rows: [], pending: false, noFolder: true };
+    if (error) return { rows: shownKey === readKey ? (repos ?? []) : [], pending: false, error: true };
+    if (shownKey !== readKey) return { rows: [], pending: true };
+    return { rows: repos ?? [], pending: false };
+}

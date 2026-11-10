@@ -354,3 +354,11 @@ export const toggleBranchPicker = (open) => !open;
 export function contextKeyOf(where) {
     return JSON.stringify([where?.root ?? null, where?.on ?? null, where?.follow === true]);
 }
+
+/** What to draw for a context: rows only when its read landed; a failed or folder-less context never keeps the skeleton. */
+export function viewForContext(shownKey, readKey, repos, { error = null, noFolder = false } = {}) {
+    if (noFolder) return { rows: [], pending: false, noFolder: true };
+    if (error) return { rows: shownKey === readKey ? (repos ?? []) : [], pending: false, error: true };
+    if (shownKey !== readKey) return { rows: [], pending: true };
+    return { rows: repos ?? [], pending: false };
+}

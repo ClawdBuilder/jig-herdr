@@ -41,6 +41,7 @@ import {
     shapePr,
     shapeRuns,
     since,
+    viewForContext,
     watchdog,
     workspaceRowsFor,
     workspaceSplit,
@@ -927,8 +928,13 @@ export default class RepoPullRequests extends View {
     render(_cx) {
         const t = theme();
         let rows;
-        if (this.loadedContext !== this.contextKey) rows = [skeleton(t)];
+        const state = viewForContext(this.contextKey, this.loadedContext, this.data[this.tab]?.repos ?? [], {
+            error: this.error,
+            noFolder: !this.where.root,
+        });
+        if (state.pending) rows = [skeleton(t)];
         else if (!this.where.root) rows = [this.note(t, "No folder.")];
+        else if (state.error && state.rows.length === 0) rows = [];
         else if (this.single) rows = this.oneRepoRows(t);
         else rows = this.tab === "mine" ? this.mineRows(t) : this.workspaceRows(t);
 

@@ -45,6 +45,7 @@ import {
     SCRIPT,
     since,
     toggleBranchPicker,
+    viewForContext,
     visibleBranches,
 } from "./lib.js";
 import { panelError, panelHeader, ROW_FONT } from "./panel-header.js";
@@ -1081,7 +1082,11 @@ export default class RepoHistory extends View {
         const width = laneColumns(Math.max(1, ...(this.rows ?? []).map((r) => r.width)));
         const hasChooser = !this.single && (this.repos?.length ?? 0) > 0;
         const choosing = hasChooser && this.picking;
-        if (this.loadedContext !== this.contextKey) {
+        const state = viewForContext(this.contextKey, this.loadedContext, this.commits ?? [], {
+            error: this.error,
+            noFolder: !this.where?.root,
+        });
+        if (state.pending) {
             return v_flex()
                 .id("history")
                 .size_full()
