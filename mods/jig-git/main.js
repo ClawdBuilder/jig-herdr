@@ -41,6 +41,7 @@ import {
     commit,
     commitRowStacked,
     commitsToPush,
+    checkoutDetail,
     disambiguators,
     discardFile,
     discardKind,
@@ -1411,14 +1412,7 @@ export default class RepoChanges extends View {
     kitCheckout(t, repo, color, nested, group, dir) {
         const open = this.opened.has(repo.path),
             focus = repo.files.length > 0,
-            detail = [
-                repo.worktreeOf ? `worktree of ${repo.worktreeOf.split(/[\\/]/).filter(Boolean).pop()}` : null,
-                repo.branch || (repo.detached ? "detached" : "?"),
-                badgeText(repo),
-                repo.total ? `${repo.total} file${repo.total === 1 ? "" : "s"}` : null,
-            ]
-                .filter(Boolean)
-                .join(" · ");
+            detail = checkoutDetail(repo);
         const details = () =>
             v_flex()
                 .p(8)
@@ -1504,7 +1498,11 @@ export default class RepoChanges extends View {
             id: repo.path,
             color,
             active: this.activeRepo === repo.path,
-            title: `${"  ".repeat(nested ? 1 : 0)}${rowName(repo, { main: nested ? group.main : null, dir }).name}`,
+            title: `${"  ".repeat(nested ? 1 : 0)}${
+                dir
+                    ? `${dir}/${rowName(repo, { main: nested ? group.main : null }).name}`
+                    : rowName(repo, { main: nested ? group.main : null }).name
+            }`,
             detail,
             open,
             onToggle: (cx) => {
@@ -1554,6 +1552,9 @@ export default class RepoChanges extends View {
         if (!this.view) this.rebuildView();
         const groups = this.view.groups,
             states = this.view.states,
+            tags = disambiguators(
+                this.repos.map((repo) => ({ path: repo.path, name: rowName(repo, { main: null }).name })),
+            ),
             items = [];
         const specs = [
             ["needs", "Needs you", t.ansi1],
@@ -1598,7 +1599,14 @@ export default class RepoChanges extends View {
                 const main = this.view.mains.get(repo.main);
                 const parent = repo.linked ? (main ?? null) : null;
                 items.push(
-                    this.kitCheckout(t, repo, color, Boolean(parent), parent ?? { main: repo, worktrees: [] }, null),
+                    this.kitCheckout(
+                        t,
+                        repo,
+                        color,
+                        Boolean(parent),
+                        parent ?? { main: repo, worktrees: [] },
+                        tags.get(repo.path) ?? null,
+                    ),
                 );
             }
         }

@@ -65,3 +65,35 @@ test("Git render maps the cached view and does not regroup", () => {
     assert.match(source, /rebuildView\(\)/);
     assert.match(source, /this\.view\.states/);
 });
+
+test("detail reasons match the ahead group: only arrows or not published", async () => {
+    const { checkoutDetail, groupCheckouts } = await load<Record<string, any>>("mods/jig-git/lib.js");
+    const repo = (extra: any) => ({ path: "/w/r", name: "r", branch: "feature/X", files: [], total: 0, ...extra });
+    const ahead = repo({ upstream: "origin/X", ahead: 2 });
+    assert.equal(checkoutDetail(ahead), "feature/X · ↑2");
+    assert.deepEqual(
+        groupCheckouts([ahead]).ahead.map((r: any) => r.path),
+        ["/w/r"],
+    );
+    assert.equal(checkoutDetail(repo({ upstream: "origin/X", behind: 3 })), "feature/X · ↓3");
+    assert.equal(checkoutDetail(repo({ upstream: "origin/X", ahead: 1, behind: 2 })), "feature/X · ↑1 ↓2");
+    const unpublished = repo({ upstream: null, base: { count: 2 } });
+    assert.equal(checkoutDetail(unpublished), "feature/X · not published");
+    assert.equal(groupCheckouts([unpublished]).ahead.length, 1);
+    const quiet = repo({ upstream: null, base: null });
+    assert.equal(checkoutDetail(quiet), "feature/X · no upstream");
+    assert.equal(groupCheckouts([quiet]).clean.length, 1);
+    const detached = repo({ detached: true, branch: "(detached)", upstream: null, base: { count: 2 } });
+    assert.equal(checkoutDetail(detached), "detached");
+    assert.equal(groupCheckouts([detached]).clean.length, 1);
+});
+
+test("two same-named repositories get their shortest parent tag", async () => {
+    const { disambiguators } = await load<Record<string, any>>("mods/jig-git/lib.js");
+    const tags = disambiguators([
+        { path: "/w/apps/orders-web", name: "orders-web" },
+        { path: "/w/old/orders-web", name: "orders-web" },
+    ]);
+    assert.equal(tags.get("/w/apps/orders-web"), "apps");
+    assert.equal(tags.get("/w/old/orders-web"), "old");
+});

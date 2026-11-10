@@ -251,17 +251,32 @@ export function groupCheckouts(repos) {
     const groups = { needs: [], changed: [], ahead: [], clean: [] };
     for (const repo of repos ?? []) {
         const conflict = (repo.files ?? []).some((file) => file.status === "U" || file.conflict);
+        const unpublishedNew = !repo.upstream && (repo.base?.count ?? 0) > 0;
         const key =
             repo.error || conflict || isDiverged(repo)
                 ? "needs"
                 : repo.files?.length
                   ? "changed"
-                  : !repo.detached && (repo.ahead || repo.behind || repo.base)
+                  : !repo.detached && (repo.ahead || repo.behind || unpublishedNew)
                     ? "ahead"
                     : "clean";
         groups[key].push(repo);
     }
     return groups;
+}
+
+/** The row's detail line: why it is in its group, then the file count. */
+export function checkoutDetail(repo) {
+    const hasNew = Boolean(repo.ahead || repo.behind || (repo.base?.count ?? 0) > 0);
+    return [
+        repo.worktreeOf ? `worktree of ${repo.worktreeOf.split(/[\\/]/).filter(Boolean).pop()}` : null,
+        repo.detached ? "detached" : repo.branch || "?",
+        badgeText(repo),
+        !repo.detached && !repo.upstream ? (hasNew ? "not published" : "no upstream") : null,
+        repo.total ? `${repo.total} file${repo.total === 1 ? "" : "s"}` : null,
+    ]
+        .filter(Boolean)
+        .join(" · ");
 }
 
 /** A group is clean when its main checkout and every worktree has no change, no error and no commit over its base branch. */
