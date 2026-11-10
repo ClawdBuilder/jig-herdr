@@ -34,6 +34,7 @@ import {
     loadRuns,
     parseRepos,
     prGroups,
+    prRowDetail,
     REVIEW,
     relName,
     remember,
@@ -778,7 +779,7 @@ export default class RepoPullRequests extends View {
         const pr = repo.pr;
         const open = this.opened.has(repo.path);
         const title = pr?.title ?? repo.name;
-        const detail = [repo.name, pr ? `#${pr.n}` : null, pr?.branch ?? repo.branch].filter(Boolean).join(" · ");
+        const detail = prRowDetail(repo);
         const chips = pr
             ? [
                   pill(checkSummary(pr.checks ?? []), t),

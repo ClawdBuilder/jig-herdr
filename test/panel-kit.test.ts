@@ -172,3 +172,16 @@ test("the kit's group rule opens a lone folded group", () => {
     assert.match(kit, /export function groupOpen\(open, groupCount\) \{\s*return groupCount <= 1 \|\| open;/);
     assert.match(readFileSync(path.join(mods, "jig-prs/main.js"), "utf8"), /groupOpen\(shown, groupsShown\)/);
 });
+
+test("a no-PR row's detail does not repeat the repo title", async () => {
+    const { prRowDetail } = await load<Record<string, any>>("mods/jig-prs/lib.js");
+    assert.equal(
+        prRowDetail({ name: "billing-web", branch: "feature/PROJ-124", pr: { n: 482, branch: "feature/PROJ-124" } }),
+        "billing-web · #482 · feature/PROJ-124",
+    );
+    assert.equal(
+        prRowDetail({ name: "billing-web", branch: "feature/PROJ-124", upstream: "origin/x" }),
+        "feature/PROJ-124",
+    );
+    assert.equal(prRowDetail({ name: "w", branch: "x", upstream: null }), "x · no upstream");
+});

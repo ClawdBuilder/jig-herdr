@@ -941,7 +941,7 @@ export default class RepoHistory extends View {
         return v_flex()
             .flex_none()
             .px(10)
-            .py(8)
+            .pb(8)
             .gap(8)
             .border_b(1)
             .border_color(t.border)

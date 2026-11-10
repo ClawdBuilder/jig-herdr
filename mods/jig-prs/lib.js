@@ -357,3 +357,12 @@ export function viewForContext(shownKey, readKey, repos, { error = null, noFolde
     if (shownKey !== readKey) return { rows: [], pending: true };
     return { rows: repos ?? [], pending: false };
 }
+
+/** The row's detail: PR rows name the repo, number and branch; a row with no PR drops the repeated title. */
+export function prRowDetail(repo) {
+    const pr = repo?.pr;
+    if (pr) return [repo.name, `#${pr.n}`, pr.branch].filter(Boolean).join(" · ");
+    return [repo.branch, repo.detached ? "detached" : null, !repo.detached && !repo.upstream ? "no upstream" : null]
+        .filter(Boolean)
+        .join(" · ");
+}
