@@ -26,6 +26,11 @@ Programs: `git log`, `git show`, `git status` on the space's machine; `sh` for t
 
 The header's branch control opens **Find a branch**. Before typing it lists local branches, with `Type to search N more on origin`; typing ranks exact, prefix, last-segment and substring matches, locals first, and `↑`/`↓` + Enter select one. The shared header is 42 px: title and Refresh, tooltip `Refresh · read N ago`.
 
+**Header:** all git panels use one 42 px shared header: title and Refresh, whose tooltip says `Refresh · read N ago`
+(`Refresh` before the first read, `Reading…` while busy). Git, History, PR & CI, Worktrees and Review's side panel put
+the Terminal/Space switch in a 32 px context card under the header; a Review tab has title and Refresh only. An error
+line sits under the header, above the kept rows.
+
 **Watch out:**
 
 Requires `git` and a POSIX `sh`; Windows-local without WSL is unsupported. Reads use a 20 s timeout. A very large history is paged, not all loaded; the lane gutter is a compact indication, not a full graph engine. Detached HEAD and unborn branches get a plain notice. No writes, no fetch, no network. The standalone listing has `"place": "none"`, so a layout block is required.

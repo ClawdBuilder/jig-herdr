@@ -28,6 +28,11 @@ Programs: `sh` (one script reads all checkouts without writing), `git`, and `tim
 
 The shared header is 42 px: title and Refresh, whose tooltip says `Refresh · read N ago` (`Refresh` before the first read, `Reading…` while busy). The context card is 32 px. An error line sits under the card, above the kept rows.
 
+**Header:** all git panels use one 42 px shared header: title and Refresh, whose tooltip says `Refresh · read N ago`
+(`Refresh` before the first read, `Reading…` while busy). Git, History, PR & CI, Worktrees and Review's side panel put
+the Terminal/Space switch in a 32 px context card under the header; a Review tab has title and Refresh only. An error
+line sits under the header, above the kept rows.
+
 **Watch out:**
 
 Requires `git` on PATH, a POSIX `sh`, and an `origin` (or configured remote); Windows-local without WSL has no `sh`. The folder walk covers three levels and skips `node_modules`. Discard is permanent and has no undo. Network commands longer than 30 s need Herdr 0.1.14+; `networkTimeoutSeconds` defaults to 60. It never creates a worktree, merges, approves, force-pushes or uses `branch -D`. The standalone listing has `"place": "none"`, so a layout block is required. File and branch clicks need `jig-review`; this listing bundles it.

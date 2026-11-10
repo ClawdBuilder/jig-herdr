@@ -24,6 +24,11 @@ The 40 px footer counts open PRs and failing ones. Empty, no-git, `gh` missing, 
 
 Programs: `gh` (`pr list`, `pr view`, `run list`/`run view`; **Mine** runs `gh search prs`), `sh` for the scan, `timeout`/`gtimeout` when present. Network: `gh` to GitHub (read-only). Files read: the folder's git metadata and `config.json`; nothing in the repository is written. Icons come from Herdr's `mods/workspace-chrome/*.svg`.
 
+**Header:** all git panels use one 42 px shared header: title and Refresh, whose tooltip says `Refresh · read N ago`
+(`Refresh` before the first read, `Reading…` while busy). Git, History, PR & CI, Worktrees and Review's side panel put
+the Terminal/Space switch in a 32 px context card under the header; a Review tab has title and Refresh only. An error
+line sits under the header, above the kept rows.
+
 **Watch out:**
 
 Requires `gh` on PATH and signed in. **Mine** searches all of GitHub for `@me`, so its results are broader than the folder. A slow GitHub call can hit the 60 s network budget; Herdr 0.1.13 or older cuts at 30 s. Discovery reads use a 20 s timeout. A Windows-local space without WSL has no POSIX `sh`. It never merges, approves, comments, reruns or writes checks.
