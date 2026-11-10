@@ -6,6 +6,8 @@
 
 - Review uses the shared panel kit for its buttons, status line and empty state, with the kit's type scale; its narrow
   two-row toolbar and stacked file list remain.
+- The demo repository script now builds richer, deterministic history: ages relative to the run, several authors, fifteen
+  orders-api commits with two merged features and a tag, and a clean merged worktree that Worktrees marks ready.
 
 
 ### Fixed
