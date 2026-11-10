@@ -307,6 +307,7 @@ export default class RepoPullRequests extends View {
                     this.loadedAt[tab] = Date.now();
                     saveCache(remember(this.cache, this.cacheKey(tab), data));
                 })();
+                await work;
             } catch (e) {
                 if (run === this.readGeneration && contextKey === this.contextKey)
                     this.error = friendlyError(e, { what: "Reading", follow: true });
@@ -932,8 +933,8 @@ export default class RepoPullRequests extends View {
         const space = spaces().find((s) => s.active);
         const follow = readFollow(space?.id);
         const header = panelHeader(t, {
-            title: "",
-            titleTooltip: "",
+            title: "PR & CI",
+            titleTooltip: this.where.root || "PR & CI",
             readAt: this.loadedAt[this.tab] ?? 0,
             busy: this.refreshState.busy,
             onRefresh: (cx) => this.load(cx, true),

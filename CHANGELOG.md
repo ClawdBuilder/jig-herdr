@@ -37,6 +37,10 @@
 
 ### Fixed
 
+- PR & CI now awaits its read before clearing the busy state, so Workspace and Mine settle independently; the panel settles
+  at once on local-path remotes. PR & CI and History title themselves in the header instead of leaving it empty or showing
+  the branch; History keeps its branch in the context card.
+
 - PR & CI no longer asks GitHub about local-path remotes or known non-GitHub hosts: those repositories are parked as
   "no remote". A GraphQL "Could not resolve to a Repository" answer parks as "not on GitHub" instead of the red error line.
 - Review in the side panel now follows the focused terminal's repository, offers the Terminal/Space switch in its context

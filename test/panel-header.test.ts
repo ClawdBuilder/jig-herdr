@@ -61,3 +61,11 @@ test("PR & CI uses the kit segmented control for Workspace/Mine", () => {
     assert.match(pr, /Workspace \$\{/);
     assert.match(source(path.join(mods, "jig-prs/panel-kit.js")), /export function segmented/);
 });
+
+test("PR & CI awaits its load and both title the panel", () => {
+    const pr = source(path.join(mods, "jig-prs/main.js"));
+    assert.match(pr, /const work = \(async \(\) => \{[\s\S]*?\}\)\(\);\s*await work;/);
+    assert.match(pr, /title: "PR & CI"/);
+    const history = source(path.join(mods, "jig-history/main.js"));
+    assert.match(history, /title: "History"/);
+});

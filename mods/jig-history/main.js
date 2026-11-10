@@ -917,8 +917,8 @@ export default class RepoHistory extends View {
             .border_color(t.border)
             .child(
                 panelHeader(t, {
-                    title: this.branchFilter ?? headBranch ?? (this.commits ? "Detached HEAD" : ""),
-                    titleTooltip: "Choose a branch",
+                    title: "History",
+                    titleTooltip: this.branchFilter ?? headBranch ?? "History",
                     onTitleClick: (cx) => this.openBranchPicker(cx),
                     readAt: this.logAt,
                     busy: this.refreshState.busy,
@@ -932,7 +932,9 @@ export default class RepoHistory extends View {
             )
             .child(
                 contextCard(t, {
-                    name: this.repo ? (this.repo.split(/[\\/]/).filter(Boolean).pop() ?? "History") : "History",
+                    name: `${this.repo ? (this.repo.split(/[\\/]/).filter(Boolean).pop() ?? "History") : "History"}${
+                        (this.branchFilter ?? headBranch) ? ` · ${this.branchFilter ?? headBranch}` : ""
+                    }`,
                     follow,
                     onFollow: (cx) => {
                         writeFollow(spaceId, !follow);
