@@ -262,7 +262,7 @@ export function groupCheckouts(repos) {
                 ? "needs"
                 : repo.files?.length
                   ? "changed"
-                  : repo.ahead || repo.behind || repo.base
+                  : !repo.detached && (repo.ahead || repo.behind || repo.base)
                     ? "ahead"
                     : "clean";
         groups[key].push(repo);
