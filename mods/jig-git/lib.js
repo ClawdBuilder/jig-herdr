@@ -604,7 +604,7 @@ const READ = ["--no-optional-locks", "-c", "core.fsmonitor=false"];
 
 /** Why a branch name is not acceptable, or null. `git check-ref-format --branch` decides, after a few refusals of
  * our own: an option-looking name, `@{...}` shorthands it would expand, and HEAD. */
-export async function invalidBranchName(exec, cwd, name) {
+async function invalidBranchName(exec, cwd, name) {
     if (!name?.trim()) return "Give the branch a name.";
     if (name.startsWith("-") || name.startsWith("+") || name.includes("@{") || name === "HEAD")
         return `"${name}" is not a valid branch name.`;
@@ -700,6 +700,13 @@ export function filterBranches(branches, text) {
 }
 
 /** What the picker draws: only local branches before the person types; all ranked matches once text is present. */
+export const PICKER_ROW_CAP = 50;
+
+/** The rows the picker draws: visible/ranked branches, capped so 1,000 matches do not build 1,000 elements. */
+export function cappedBranches(branches, text, cap = PICKER_ROW_CAP) {
+    return visibleBranches(branches, text).slice(0, cap);
+}
+
 export function visibleBranches(branches, text) {
     const query = text.trim();
     if (query === "") return branches.filter((branch) => !branch.remote);
@@ -714,7 +721,7 @@ export const hiddenOriginCount = (branches, text) =>
 export const branchKey = (branch) => `${branch.remote ? "r" : "l"}:${branch.name}`;
 
 /** Rows Enter/↑/↓ can choose: not the current branch, and not one checked out in another worktree. */
-export const pickableBranches = (branches) => branches.filter((branch) => !branch.current && !branch.inUse);
+const pickableBranches = (branches) => branches.filter((branch) => !branch.current && !branch.inUse);
 
 /** The active key for a filter: the best pickable row, or null. */
 export function defaultActive(branches, text) {
@@ -907,7 +914,7 @@ export async function commit(exec, { checkout, message }) {
 /** How long a network command may run, unless config.json says otherwise. */
 export const NETWORK_TIMEOUT = 60000;
 /** What a network command needs so it never waits for an answer. */
-export const NETWORK_ENV = { GIT_TERMINAL_PROMPT: "0", GH_PROMPT_DISABLED: "1" };
+const NETWORK_ENV = { GIT_TERMINAL_PROMPT: "0", GH_PROMPT_DISABLED: "1" };
 
 /** The environment of a network command: no terminal prompt, and whatever the caller knows of the person's own (a
  * GIT_SSH_COMMAND here wins). The shell wrapper adds the BatchMode ssh command only when the machine has neither one. */
@@ -990,7 +997,7 @@ const networkFailure = (r, timeout, what) =>
         : friendlyError({ ...r, cmd: "git" }, { what });
 
 /** The reason not to touch a branch now, or null: an agent working or blocked in the checkout, or a detached HEAD. */
-export async function branchRefusal(exec, checkout, busy) {
+async function branchRefusal(exec, checkout, busy) {
     if (busy?.length) {
         const who = busy[0];
         return `${who.name || "An agent"} is ${who.status} in ${who.cwd}: wait until it stops.`;

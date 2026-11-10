@@ -9,11 +9,10 @@ import { appHome, closeOverlay, exec, panes, readTextFile, setShared, spaces, th
 import {
     branchKey,
     busyAgents,
-    defaultActive,
+    cappedBranches,
     defaultBase,
     hiddenOriginCount,
     listBranches,
-    moveActive,
     newBranch,
     panesOn,
     parseConfig,
@@ -153,12 +152,26 @@ export class BranchPicker {
 
     /** The active key is always the row Enter would pick, or null when nothing is pickable. */
     resetActive() {
-        this.active = defaultActive(this.branches ?? [], this.filter);
+        const first = this.rowBranches().find(pickable);
+        this.active = first ? branchKey(first) : null;
+    }
+
+    /** The rows the list draws: at most the library's cap, so 1,000 matches cannot build 1,000 elements. */
+    rowBranches() {
+        return cappedBranches(this.branches ?? [], this.filter);
+    }
+
+    moreRows() {
+        return Math.max(
+            0,
+            visibleBranches(this.branches ?? [], this.filter).length -
+                cappedBranches(this.branches ?? [], this.filter).length,
+        );
     }
 
     /** Rows the filter shows and Enter can pick; resets a stale active before the row is drawn. */
     activeRows() {
-        const rows = visibleBranches(this.branches ?? [], this.filter).filter(pickable);
+        const rows = this.rowBranches().filter(pickable);
         if (this.active !== null && !rows.some((branch) => branchKey(branch) === this.active)) this.resetActive();
         return rows;
     }
@@ -170,7 +183,12 @@ export class BranchPicker {
 
     key(e, cx) {
         if (e.keystroke !== "up" && e.keystroke !== "down") return;
-        this.active = moveActive(this.branches ?? [], this.filter, this.active, e.keystroke === "up" ? -1 : 1);
+        const rows = this.activeRows();
+        if (!rows.length) return;
+        const at = rows.findIndex((branch) => branchKey(branch) === this.active);
+        const delta = e.keystroke === "up" ? -1 : 1;
+        const next = at < 0 ? (delta > 0 ? 0 : rows.length - 1) : Math.min(rows.length - 1, Math.max(0, at + delta));
+        this.active = branchKey(rows[next]);
         cx.stop_propagation();
         cx.notify();
     }
@@ -239,9 +257,10 @@ export class BranchPicker {
                     .child(this.message ? "" : "Reading branches…"),
             ];
         this.activeRows();
-        const shown = visibleBranches(this.branches, this.filter);
+        const shown = this.rowBranches();
         const local = shown.filter((b) => !b.remote),
             remote = shown.filter((b) => b.remote);
+        const more = this.moreRows();
         const heading = (text) =>
             div().flex_none().px(8).pt(8).pb(2).text_size(10.5).font_semibold().text_color(t.dim).child(text);
         return [
@@ -257,6 +276,9 @@ export class BranchPicker {
                           .text_color(t.dim)
                           .child(`Type to search ${hiddenOriginCount(this.branches, this.filter)} more on origin`),
                   ]
+                : []),
+            ...(more > 0
+                ? [div().flex_none().px(8).pt(6).text_size(11).text_color(t.dim).child(`${more} more: keep typing`)]
                 : []),
             ...(shown.length || hiddenOriginCount(this.branches, this.filter)
                 ? []
