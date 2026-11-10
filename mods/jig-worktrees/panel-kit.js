@@ -2,8 +2,14 @@
 // Patterns adapted from runkids/skillshare (MIT); see NOTICE.
 import { h_flex, v_flex } from "gpui-base";
 import { div, svg } from "gpui-kit";
+import { settings } from "herdr";
 
-export const SIZE = { title: 14, body: 13.5, secondary: 12.5, label: 12, button: 12.5 };
+/** Herdr's UI font size, zoomed with the window; call during render. */
+export const sizes = () => {
+    const b = Number(settings().ui_font_size) || 13;
+    return { title: b + 1, body: b + 0.5, secondary: b - 0.5, label: b - 1, button: b - 0.5 };
+};
+const size = () => sizes();
 
 export const dot = (color, hollow = false) =>
     hollow
@@ -25,7 +31,7 @@ function button(t, id, label, onClick, { primary = false, danger = false, busy =
         .when(!primary && !danger, (el) => el.border_1().border_color(t.border).text_color(t.foreground))
         .when(danger, (el) => el.text_color(t.ansi1))
         .when(busy, (el) => el.text_color(t.dim).opacity(0.55))
-        .text_size(SIZE.button)
+        .text_size(size().button)
         .cursor_pointer()
         .hover((s) => (primary ? s.opacity(0.88) : s.bg(t.hover)))
         .on_mouse_down("left", stop)
@@ -49,7 +55,7 @@ export const pill = (text, t) =>
         .items_center()
         .rounded(10)
         .bg(t.selected)
-        .text_size(SIZE.label)
+        .text_size(size().label)
         .text_color(t.muted)
         .child(text);
 
@@ -75,7 +81,7 @@ export function segmented(t, id, options, value, onPick) {
                     .items_center()
                     .rounded(6)
                     .bg(on ? t.raised : t.chrome)
-                    .text_size(SIZE.secondary)
+                    .text_size(size().secondary)
                     .text_color(on ? t.foreground : t.muted)
                     .when(on, (el) => el.font_semibold())
                     .cursor_pointer()
@@ -97,11 +103,11 @@ export function groupHeader(t, id, label, count, color, action) {
         .pb(4)
         .gap(8)
         .items_center()
-        .child(div().flex_1().text_size(SIZE.label).font_semibold().text_color(color).child(`${label} · ${count}`))
+        .child(div().flex_1().text_size(size().label).font_semibold().text_color(color).child(`${label} · ${count}`))
         .when(Boolean(action), (el) => el.child(action));
 }
 
-export function row(t, { id, color, title, detail, chips = [], open = false, onToggle, details }) {
+export function row(t, { id, color, title, detail, chips = [], open = false, active = false, onToggle, details }) {
     const head = h_flex()
         .id(`row-${id}`)
         .min_h(48)
@@ -110,6 +116,7 @@ export function row(t, { id, color, title, detail, chips = [], open = false, onT
         .gap(10)
         .items_center()
         .rounded(8)
+        .when(active, (el) => el.bg(t.raised).border_l(2).border_color(t.accent))
         .cursor_pointer()
         .when(!open, (el) => el.hover((s) => s.bg(t.hover)))
         .on_mouse_down("left", stop)
@@ -123,11 +130,11 @@ export function row(t, { id, color, title, detail, chips = [], open = false, onT
                     h_flex()
                         .gap(6)
                         .items_center()
-                        .child(div().min_w(0).truncate().text_size(SIZE.body).font_medium().child(title))
+                        .child(div().min_w(0).truncate().text_size(size().body).font_medium().child(title))
                         .children(chips),
                 )
                 .when(Boolean(detail), (el) =>
-                    el.child(div().truncate().text_size(SIZE.secondary).text_color(t.muted).child(detail)),
+                    el.child(div().truncate().text_size(size().secondary).text_color(t.muted).child(detail)),
                 ),
         )
         .child(
@@ -153,7 +160,7 @@ export function contextCard(t, { name, follow, onFollow, machine }) {
         .px(12)
         .gap(7)
         .items_center()
-        .text_size(SIZE.secondary)
+        .text_size(size().secondary)
         .child(svg("mods/workspace-chrome/folder.svg").size(13).flex_none().text_color(t.muted))
         .child(div().min_w(0).truncate().font_semibold().child(name))
         .child(
@@ -187,14 +194,14 @@ export function footer(t, { summary, color, action }) {
                 .flex_1()
                 .min_w(0)
                 .truncate()
-                .text_size(SIZE.secondary)
+                .text_size(size().secondary)
                 .text_color(color ?? t.muted)
                 .child(summary),
         )
         .when(Boolean(action), (el) => el.child(action));
 }
 
-export const emptyLine = (text, t) => div().px(14).py(8).text_size(SIZE.secondary).text_color(t.muted).child(text);
+export const emptyLine = (text, t) => div().px(14).py(8).text_size(size().secondary).text_color(t.muted).child(text);
 
 export function statusLine(t, state) {
     if (!state) return null;
@@ -205,7 +212,7 @@ export function statusLine(t, state) {
         .px(12)
         .gap(8)
         .items_center()
-        .text_size(SIZE.secondary)
+        .text_size(size().secondary)
         .text_color(state.tone === "error" ? t.ansi1 : state.tone === "done" ? t.done : t.muted)
         .child(
             state.tone === "working"
@@ -222,3 +229,4 @@ export function moveActive(ids, active, delta) {
     if (at < 0) return ids[delta < 0 ? ids.length - 1 : 0];
     return ids[(at + delta + ids.length) % ids.length];
 }
+
