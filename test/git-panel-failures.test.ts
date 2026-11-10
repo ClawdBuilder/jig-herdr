@@ -69,7 +69,7 @@ test("a diverged per-repo Pull shows a real reason and keeps it", async (t) => {
     view.syncNow(cx, repo, "pull");
     await flush();
     const message = view.notes[repo.path]?.message ?? "";
-    assert.match(message, /fast-forward|diverg/i);
+    assert.match(message, /^Not possible to fast-forward, aborting\. It cannot fast-forward/i);
     assert.doesNotMatch(message, /^From /);
     assert.match(`${repo.name}: ${message}`, new RegExp(`^${repo.name}:`));
     assert.equal(view.notes[repo.path].ok, false);
