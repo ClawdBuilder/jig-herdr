@@ -1352,7 +1352,7 @@ export default class RepoReview extends View {
                 : []),
         ];
         const actions = [
-            ...(Boolean(copy) && this.pane === "diff"
+            ...(copy && this.pane === "diff"
                 ? [
                       this.textButton(t, "review-comment", "Comment", false, (_e, cx) => this.openComment(cx), true),
                       this.textButton(

@@ -8,6 +8,8 @@
   two-row toolbar and stacked file list remain.
 - The demo repository script now builds richer, deterministic history: ages relative to the run, several authors, fifteen
   orders-api commits with two merged features and a tag, and a clean merged worktree that Worktrees marks ready.
+- Added a loose render bench for Worktrees, Review, History, PR & CI and Keep awake, and a gotcha: compute grouping,
+  sorting, summaries and closed-row details when data arrives, not in render.
 
 
 ### Fixed

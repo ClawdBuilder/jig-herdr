@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 
 const name = process.argv[2];
+const bench = process.env.JIG_BENCH === "1";
 const saved = new Map();
 for (const global of [
     "setTimeout",
@@ -87,7 +88,7 @@ export const hc = async () => ({ code: 0, stdout: "", stderr: "" }), focused = (
 export const nextCommand = () => new Promise(() => {});
 export const notify = noop, openOverlay = noop, panes = empty, props = () => ({}), readTextFile = async () => null;
 export const run = async () => ({}), setShared = noop, settings = () => ({}), shared = () => undefined;
-export const spaces = () => [{ active: true, id: "s1", folder: "/tmp/jig-eval", machine: null }];
+export const spaces = () => [{ active: true, id: "s1", folder: "/tmp/jig-eval", machine: null, tabs: [] }];
 export const terminals = empty, theme = () => stub, watchFolder = () => new Promise(() => {});
 export const window = () => ({ active: true, platform: "linux" }), writeTextFile = async () => {};
 `;
@@ -117,6 +118,89 @@ try {
     const view = new module.default({}, cx);
     await view.init({}, cx);
     assert.equal(typeof view.render, "function", `${name}: render`);
+    if (bench) {
+        const date = new Date().toISOString();
+        const commits = Array.from({ length: 500 }, (_, i) => ({
+            hash: String(i).padStart(40, "0"),
+            subject: `Commit ${i}`,
+            author: `Author ${i % 5}`,
+            date,
+            parents: i % 7 ? [String(i - 1).padStart(40, "0")] : [],
+            refs: [],
+            head: i === 0,
+        }));
+        const rows = Array.from({ length: 2000 }, (_, i) => ({
+            kind: i % 9 ? " " : "+",
+            number: i + 1,
+            text: `line ${i}`,
+        }));
+        const trees = Array.from({ length: 30 }, (_, i) => ({
+            main: "/work/main",
+            path: i === 0 ? "/work/main" : `/work/trees/${i}`,
+            branch: `feature/${i}`,
+            head: String(i).padStart(40, "0"),
+            locked: null,
+            dirty: 0,
+            ahead: 0,
+            behind: 0,
+            baseAhead: i % 2,
+            upstream: "origin/main",
+            gone: false,
+            unpushed: 0,
+            base: "main",
+            date,
+            created: null,
+            subject: `Tree ${i}`,
+        }));
+        const files = Array.from({ length: 40 }, (_, i) => ({ path: `src/file-${i}.ts`, xy: " M", staged: false }));
+        if (name === "jig-worktrees") {
+            view.where = { root: "/work", on: null };
+            view.trees = trees;
+            view.single = true;
+            view.loadedAt = Date.now();
+        } else if (name === "jig-review") {
+            view.fixed = true;
+            view.repo = "/work/app";
+            view.name = "app";
+            view.width = 900;
+            view.loaded = true;
+            view.files = files;
+            view.sel = files[0].path;
+            view.rows = rows;
+        } else if (name === "jig-history") {
+            view.where = { root: "/work", on: null };
+            view.repo = "/work/app";
+            view.single = true;
+            view.commits = commits;
+            view.rows = commits.map((c, i) => ({ ...c, width: 1, lane: 0, color: i % 3 }));
+            view.loadedAt = Date.now();
+        } else if (name === "jig-prs") {
+            view.where = { root: "/work", on: null };
+            view.loadedAt.main = Date.now();
+            view.data.main = {
+                repos: Array.from({ length: 40 }, (_, i) => ({
+                    path: `/work/repo-${i}`,
+                    name: `repo-${i}`,
+                    branch: `feature/${i}`,
+                    status: "pr",
+                    pr: {
+                        url: `https://github.com/x/y/pull/${i}`,
+                        number: i,
+                        title: `PR ${i}`,
+                        state: "OPEN",
+                        checks: [{ bucket: i % 2 ? "pending" : "pass", name: "test" }],
+                        additions: 3,
+                        deletions: 1,
+                    },
+                })),
+            };
+        }
+        for (let i = 0; i < 3; i++) view.render(cx);
+        const start = performance.now();
+        for (let i = 0; i < 20; i++) view.render(cx);
+        console.log(`BENCH ${name} ${(performance.now() - start) / 20}`);
+        saved.get("process").exit(0);
+    }
     view.render(cx);
     if (name === "jig-review") {
         view.fixed = true;
