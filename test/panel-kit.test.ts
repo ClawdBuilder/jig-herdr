@@ -97,3 +97,20 @@ test("two same-named repositories get their shortest parent tag", async () => {
     assert.equal(tags.get("/w/apps/orders-web"), "apps");
     assert.equal(tags.get("/w/old/orders-web"), "old");
 });
+
+test("a changed context shows the skeleton; same-key refreshes keep rows and old reads are dropped", async () => {
+    const { viewForContext } = await load<Record<string, any>>("mods/jig-git/lib.js");
+    const rows = [{ path: "/old" }];
+    assert.deepEqual(viewForContext("new", "old", rows), { rows: [], pending: true });
+    assert.deepEqual(viewForContext("same", "same", rows), { rows, pending: false });
+    assert.deepEqual(viewForContext("new", "other", rows), { rows: [], pending: true });
+});
+
+test("the context key includes machine, folder and follow mode", async () => {
+    const { contextKeyOf } = await load<Record<string, any>>("mods/jig-git/lib.js");
+    const base = { root: "/w/a", on: null, follow: true };
+    assert.equal(contextKeyOf(base), contextKeyOf({ ...base }));
+    assert.notEqual(contextKeyOf(base), contextKeyOf({ ...base, root: "/w/b" }));
+    assert.notEqual(contextKeyOf(base), contextKeyOf({ ...base, on: "box" }));
+    assert.notEqual(contextKeyOf(base), contextKeyOf({ ...base, follow: false }));
+});

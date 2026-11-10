@@ -1338,3 +1338,13 @@ export const canRun = (switching, lock) => !switching && !lock;
 
 /** Whether the commit box puts its message above its buttons (a narrow panel) rather than beside them. */
 export const commitRowStacked = (width) => width > 0 && width < 360;
+
+/** The context key: the machine, folder and follow mode a read belongs to. */
+export function contextKeyOf(loc) {
+    return JSON.stringify([loc?.root ?? null, loc?.on ?? null, loc?.follow === true]);
+}
+
+/** What to draw for the shown context: last rows only when the landed read belongs to that same context. */
+export function viewForContext(shownKey, readKey, repos) {
+    return shownKey === readKey ? { rows: repos ?? [], pending: false } : { rows: [], pending: true };
+}

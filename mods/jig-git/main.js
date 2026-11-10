@@ -38,10 +38,11 @@ import {
     busyAgents,
     CAP,
     canRun,
+    checkoutDetail,
     commit,
     commitRowStacked,
     commitsToPush,
-    checkoutDetail,
+    contextKeyOf,
     disambiguators,
     discardFile,
     discardKind,
@@ -75,6 +76,7 @@ import {
     stageFile,
     unstageAll,
     unstageFile,
+    viewForContext,
     withAllFolds,
     withFold,
     withLock,
@@ -92,6 +94,7 @@ import {
     primaryButton,
     row,
     secondaryButton,
+    skeleton,
     statusLine,
 } from "./panel-kit.js";
 import { BranchPicker, DONE } from "./picker.js";
@@ -288,11 +291,12 @@ export default class RepoChanges extends View {
             this.follow = localStorage.getItem(`follow.${space ?? "none"}`) !== "space";
         }
         const loc = location(this.follow),
-            context = JSON.stringify([loc.root, loc.on, loc.follow]);
+            context = contextKeyOf(loc);
         if (context !== this.context) {
             // Another terminal, a `cd`, another space or the other mode. The rows on screen stay until the new ones
             // arrive, so nothing blinks; everything that belongs to the old folder is forgotten now.
             this.context = context;
+            this.view = null;
             this.loaded = false;
             this.error = null;
             this.opened = new Set();
@@ -424,6 +428,7 @@ export default class RepoChanges extends View {
                 if (r.code !== 0) throw Object.assign(new Error(r.stderr || `exit ${r.code}`), r);
                 this.repos = parseRepos(r.stdout, root);
                 this.loadedRoot = root;
+                this.loadedContext = context;
                 this.rebuildView();
                 this.error = null;
                 this.loaded = true;
@@ -1549,6 +1554,7 @@ export default class RepoChanges extends View {
 
     // The list: checkout groups, with a worktree indented under its main row.
     list(t) {
+        if (viewForContext(this.context, this.loadedContext, this.repos).pending) return [skeleton(t)];
         if (!this.view) this.rebuildView();
         const groups = this.view.groups,
             states = this.view.states,

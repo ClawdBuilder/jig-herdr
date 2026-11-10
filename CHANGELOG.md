@@ -4,6 +4,9 @@
 
 ### Changed
 
+- Git shows a four-row skeleton while a new machine/folder/follow mode is read, and keeps last-good rows only for a
+  same-key refresh. A read that lands for an older context key is discarded.
+
 - Git caches its groups, state split, main lookup and summary once per read/filter mode. Closed rows build no file
   details; the Clean Show/Hide toggle only maps the cached view. A 30-repo render bench drops from ~9.29 ms to ~1.5–1.9 ms
   per render.

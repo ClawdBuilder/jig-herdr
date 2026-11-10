@@ -206,6 +206,34 @@ export function footer(t, { summary, color, action }) {
         .when(Boolean(action), (el) => el.child(action));
 }
 
+/** Four 48 px placeholder rows with the same two-line shape as a real row; no text and no timers. */
+export function skeleton(t, rows = 4) {
+    return v_flex()
+        .id("panel-skeleton")
+        .flex_none()
+        .gap(2)
+        .p(8)
+        .children(
+            Array.from({ length: rows }, () =>
+                h_flex()
+                    .h(48)
+                    .px(10)
+                    .gap(10)
+                    .items_center()
+                    .rounded(8)
+                    .bg(t.chrome)
+                    .child(div().w(8).h(8).flex_none().rounded_full().bg(t.raised))
+                    .child(
+                        v_flex()
+                            .flex_1()
+                            .gap(6)
+                            .child(div().h(10).w(150).rounded(4).bg(t.raised))
+                            .child(div().h(8).w(220).rounded(4).bg(t.raised)),
+                    ),
+            ),
+        );
+}
+
 export const emptyLine = (text, t) => div().px(14).py(8).text_size(size().secondary).text_color(t.muted).child(text);
 
 export function statusLine(t, state) {
