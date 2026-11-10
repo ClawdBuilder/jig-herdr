@@ -915,7 +915,7 @@ export default class RepoHistory extends View {
         const follow = readFollow(spaceId);
         return v_flex()
             .flex_none()
-            .px(10)
+            .px(12)
             .pb(8)
             .gap(8)
             .border_b(1)

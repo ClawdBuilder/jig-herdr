@@ -1015,8 +1015,7 @@ export default class RepoReview extends View {
                     .text_color(t.muted)
                     .border_b(1)
                     .border_color(t.border)
-                    .child(svg(ICON("branch")).size(11).flex_none())
-                    .child(div().min_w(0).truncate().child(this.branch))
+                    .child(div().flex_1())
                     .when(this.ahead > 0, (el) =>
                         el.child(div().flex_none().text_color(t.foreground).child(`↑${this.ahead}`)),
                     )
