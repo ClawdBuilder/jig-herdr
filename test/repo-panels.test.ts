@@ -751,7 +751,7 @@ test("PR & CI folds every No PR repository into one group", async () => {
         ["x", "d", "e"],
     );
     const source = readFileSync(new URL("../mods/jig-prs/main.js", import.meta.url), "utf8");
-    assert.match(source, /group\("No PR", "nopr-group"/);
+    assert.match(source, /section\("noPr", "No PR"/);
     assert.match(source, /showNoPr/);
 });
 

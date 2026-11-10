@@ -55,6 +55,22 @@ export function workspaceSplit(repos) {
     };
 }
 
+/** The PR list groups: a PR with a failure needs fixing; pending or unapproved waits; green+approved is ready. */
+export function prGroups(repos) {
+    const groups = { needs: [], waiting: [], ready: [], noPr: [], parked: [] };
+    for (const repo of repos ?? []) {
+        if (repo.status === "nopr") groups.noPr.push(repo);
+        else if (repo.status === "default" || repo.status === "noremote" || repo.status === "notgithub")
+            groups.parked.push(repo);
+        else if (repo.status === "error" || countOf(repo.pr, "fail") || repo.pr?.review === "CHANGES_REQUESTED")
+            groups.needs.push(repo);
+        else if (repo.status === "loading" || countOf(repo.pr, "pending") || repo.pr?.review !== "APPROVED")
+            groups.waiting.push(repo);
+        else groups.ready.push(repo);
+    }
+    return groups;
+}
+
 /** Hosts known not to be GitHub. Everything else is asked, including GitHub Enterprise and scp aliases. */
 const NOT_GITHUB = new Set([
     "gitlab.com",
@@ -180,6 +196,8 @@ export function shapePr(raw, slug) {
         mergeable: raw.mergeable ?? null,
         slug: slug ?? raw.repository?.nameWithOwner ?? null,
         checks: Array.isArray(raw.statusCheckRollup) ? checksOf(raw.statusCheckRollup) : null,
+        additions: Number(raw.additions) || 0,
+        deletions: Number(raw.deletions) || 0,
     };
 }
 
