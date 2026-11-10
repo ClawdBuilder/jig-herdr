@@ -21,6 +21,19 @@ const scan = (root: string) => `@@root ${root}
 ?? notes.txt
 =1
 `;
+function scanFor(root: string, targets: string) {
+    const all = scan(root);
+    if (!targets) return all;
+    const wanted = new Set(targets.split("\n"));
+    const [head, ...blocks] = all.split("@@repo ");
+    return (
+        head +
+        blocks
+            .filter((block) => wanted.has(block.split("\n")[0].trim()))
+            .map((block) => `@@repo ${block}`)
+            .join("")
+    );
+}
 function context(root: string) {
     const ctx: any = (globalThis as any).__CTX ?? {};
     (globalThis as any).__CTX = ctx;
@@ -234,4 +247,36 @@ test("follow toggle with the same root ends the skeleton", async () => {
     await flush();
     assert.equal(view.loadedContext, view.context);
     assert.equal(view.loaded, true);
+});
+
+test("a context switch never passes the old rows' target list", async () => {
+    const a = "/tmp/git-harness-switch-a";
+    const b = "/tmp/git-harness-switch-b";
+    const ctx = context(a);
+    const calls: string[][] = [];
+    ctx.exec = async (cmd: string, args: string[]) => {
+        calls.push(args);
+        return { code: 0, stdout: cmd === "sh" ? scanFor(ctx.folder, args[4] ?? "") : "", stderr: "" };
+    };
+    const { view, cx, timers } = await load("jig-git");
+    for (let i = 0; i < 100 && !view.loaded; i++) await flush(1);
+    assert.equal(view.repos[0].path.startsWith(a), true);
+    ctx.folder = b;
+    ctx.focused = { pane: "p", cwd: b, terminal: "t", space: "s" };
+    ctx.panes = [{ pane: "p", cwd: b }];
+    for (let i = 0; i < 5; i++) view.render(cx);
+    const kick = timers.find((t: any) => t.ms === 0);
+    assert.ok(kick);
+    kick.fn(cx);
+    await flush();
+    assert.equal(
+        view.repos.every((repo: any) => repo.path.startsWith(b)),
+        true,
+    );
+    assert.equal(
+        view.repos.some((repo: any) => repo.path.startsWith(a)),
+        false,
+    );
+    const last = calls.filter((args) => args[1] !== undefined).at(-1);
+    assert.equal(last?.at(-1), "");
 });

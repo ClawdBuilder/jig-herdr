@@ -289,6 +289,7 @@ export default class RepoChanges extends View {
             this.readGeneration++;
             this.refreshState.cancel();
             this.lastRead = null;
+            this.repos = [];
             this.loading = false;
             this.loadedContext = null;
             this.view = null;
@@ -397,12 +398,17 @@ export default class RepoChanges extends View {
     }
 
     /** The main checkouts on screen and the worktrees that are unfolded; folded worktrees wait for the backstop. */
-    visibleTargets() {
-        if (!this.repos) return "";
+    targetList() {
+        if (!this.repos?.length) return "";
         return groupRepos(this.repos)
             .flatMap((group) => [group.main, ...(this.foldedGroup(group) ? [] : group.worktrees)])
             .map((repo) => repo.path)
             .join("\n");
+    }
+
+    visibleTargets() {
+        if (!this.loaded || !this.repos?.length) return "";
+        return this.targetList();
     }
 
     refresh(cx, user = false, full = false, only = null) {
@@ -440,9 +446,9 @@ export default class RepoChanges extends View {
                     return;
                 }
                 const scanned = parseRepos(r.stdout, root);
-                this.lastRead = { targets: whole ? this.visibleTargets() : targets, stdout: r.stdout };
                 this.changedThisRead = true;
                 this.repos = whole ? scanned : mergeScan(this.repos, scanned);
+                this.lastRead = { targets: whole ? this.targetList() : targets, stdout: r.stdout };
                 if (this.previewOpen?.length) {
                     const wanted = new Set(this.previewOpen);
                     for (const repo of this.repos)
