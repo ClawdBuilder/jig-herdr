@@ -67,6 +67,8 @@ import {
     parseNameStatus,
     parseRepoList,
     parseStatus,
+    placeComment,
+    placeComments,
     REPO_SCRIPT,
     removeComment,
     reviewPane,
@@ -1032,6 +1034,15 @@ export default class RepoReview extends View {
             );
     }
 
+    /** Move this file's comments onto the new rows, marking a lost quote outdated. */
+    reanchor() {
+        if (!this.sel) return;
+        this.comments = this.comments.map((comment) =>
+            comment.file === this.sel ? placeComment(comment, this.rows) : comment,
+        );
+        this.saveComments();
+    }
+
     /** The current review scope, also the comment store's second key. */
     scopeKey() {
         return this.view === "branch" && this.base ? `branch:${this.base.name}` : "working";
@@ -1068,11 +1079,12 @@ export default class RepoReview extends View {
             end = Math.max(this.range.anchor, this.range.end),
             rows = this.rows.slice(start, end + 1).filter((row) => row.kind !== "@");
         if (!rows.length) return;
+        const first = rows[0],
+            last = rows[rows.length - 1];
         this.draft = {
-            rowStart: start,
-            rowEnd: end,
-            startLine: rows[0].number ?? 1,
-            endLine: rows[rows.length - 1].number ?? rows[0].number ?? 1,
+            side: first.kind === "-" ? "old" : "new",
+            startLine: first.number,
+            endLine: last.number,
             quote: rows.map((row) => row.text),
             note: "",
         };
@@ -1449,7 +1461,22 @@ export default class RepoReview extends View {
                         .border_b(1)
                         .border_color(t.border)
                         .children(
-                            this.comments.map((comment) => this.commentCard(t, comment)),
+                            (() => {
+                                const placed = placeComments(
+                                    commentsInFile(this.comments, this.sel),
+                                    this.rows,
+                                );
+                                const out = placed.filter((comment) => comment.outdated);
+                                return [
+                                    ...(out.length
+                                        ? [div().px(12).pt(4).text_size(11).text_color(t.dim).child("Outdated")]
+                                        : []),
+                                    ...out.map((comment) => this.commentCard(t, comment)),
+                                    ...placed
+                                        .filter((comment) => !comment.outdated)
+                                        .map((comment) => this.commentCard(t, comment)),
+                                ];
+                            })(),
                         )
                         .when(Boolean(this.draft), (box) =>
                             box.child(
