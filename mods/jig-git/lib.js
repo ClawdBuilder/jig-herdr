@@ -72,13 +72,21 @@ if [ -n "\${2-}" ]; then
 else
   { if [ -n "$top" ]; then echo "$top"; else find_repos; fi; } | awk '!seen[$0]++' > "$tmp/list"
 fi
+cap=\${JIG_SCAN_JOBS:-$((4 * $(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc 2>/dev/null || echo 8)))}
+case $cap in ''|*[!0-9]*) cap=32;; esac
+[ "$cap" -ge 1 ] || cap=32
 n=0
+running=0
 while IFS= read -r repo; do
   [ -d "$repo" ] || continue
   printf '%s' "$repo" > "$tmp/$n.path"
   scan "$repo" > "$tmp/$n.out" &
   n=$((n + 1))
-  [ $((n % 8)) -eq 0 ] && wait
+  running=$((running + 1))
+  if [ "$running" -ge "$cap" ]; then
+    wait
+    running=0
+  fi
 done < "$tmp/list"
 wait
 i=0

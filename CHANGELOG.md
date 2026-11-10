@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- The git scan starts up to 4 × CPU jobs per wave (32 on a 4-CPU machine) instead of fixed 8-job waves, so 17–20 repos
+  finish in one wave. Bench (7 runs, uneven repo sizes): 20 repos 243 → 218 ms; 50 repos 1245 → 522 ms.
+
+
 ### Fixed
 
 - Git shows action results and failures in the kit status line, with Pull, Fetch, Push/Publish, Branch and Discard in an
